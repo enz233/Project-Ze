@@ -9,6 +9,15 @@
   var sleepAnimTimer: ReturnType<typeof setInterval> | null = null;
   var isBlinking = false;
 
+  // 拖拽动画相关
+  var dragAnimTimer: ReturnType<typeof setTimeout> | null = null;
+  var dragAccumX = 0;
+  var dragAccumY = 0;
+  var currentDragDirection: string | null = null;
+  var dragTransitionDone = false;
+  var dragFirstMove = false;
+  var isDragVisualActive = false; // 拖拽视觉是否激活（mousedown到mouseup之间）
+
   var companionEl = document.getElementById('companion')!;
   var spriteEl = document.getElementById('sprite') as HTMLImageElement;
   var bubbleEl = document.getElementById('bubble')!;
@@ -28,12 +37,16 @@
     setupClickThrough();
   }
 
+  var isDraggingGlobal = false;
+
   function setupClickThrough(): void {
     companionEl.addEventListener('mouseenter', function () {
       // @ts-ignore
       window.companion.sendMouseEnter();
     });
     companionEl.addEventListener('mouseleave', function () {
+      // 拖拽期间不切换穿透，否则鼠标离开角色区域后拖拽会断
+      if (isDraggingGlobal) return;
       // @ts-ignore
       window.companion.sendMouseLeave();
     });
@@ -44,6 +57,14 @@
 
     companionEl.addEventListener('mousedown', function () {
       isDragging = true;
+      isDraggingGlobal = true;
+      isDragVisualActive = true;
+      dragFirstMove = true;
+      dragTransitionDone = false;
+      dragAccumX = 0;
+      dragAccumY = 0;
+      currentDragDirection = null;
+      setSprite('dragged');
       // @ts-ignore
       window.companion.sendDragStart();
     });
@@ -51,17 +72,77 @@
     document.addEventListener('mousemove', function (e: MouseEvent) {
       if (!isDragging) return;
       if (e.movementX === 0 && e.movementY === 0) return;
-      // @ts-ignore
-      window.companion.sendWindowMoveBy({ deltaX: e.movementX, deltaY: e.movementY });
+
+      // 方向判定（视觉用）
+      if (dragFirstMove) {
+        dragFirstMove = false;
+        playDragTransition();
+      }
+      updateDragDirection(e.movementX, e.movementY);
     });
 
     document.addEventListener('mouseup', function () {
       if (isDragging) {
         isDragging = false;
+        isDraggingGlobal = false;
+        isDragVisualActive = false;
+        stopDragAnim();
         // @ts-ignore
         window.companion.sendDragEnd();
       }
     });
+  }
+
+  /** 播放 dragged_1 → dragged_2 过渡动画 */
+  function playDragTransition(): void {
+    setSprite('dragged_1');
+    dragAnimTimer = setTimeout(function () {
+      setSprite('dragged_2');
+      dragAnimTimer = setTimeout(function () {
+        dragTransitionDone = true;
+        // 过渡结束，立即应用已累积的方向
+        updateDragDirection(0, 0);
+      }, 200);
+    }, 200);
+  }
+
+  /** 停止拖拽动画 */
+  function stopDragAnim(): void {
+    if (dragAnimTimer) {
+      clearTimeout(dragAnimTimer);
+      dragAnimTimer = null;
+    }
+    dragTransitionDone = false;
+    dragFirstMove = false;
+    currentDragDirection = null;
+  }
+
+  /** 根据最近的移动量更新方向差分（衰减累积） */
+  function updateDragDirection(dx: number, dy: number): void {
+    // 衰减旧值，保留近期趋势
+    dragAccumX = dragAccumX * 0.6 + dx;
+    dragAccumY = dragAccumY * 0.6 + dy;
+
+    // 过渡动画还没结束时不切换精灵图
+    if (!dragTransitionDone) return;
+
+    var absX = Math.abs(dragAccumX);
+    var absY = Math.abs(dragAccumY);
+
+    // 累积值不够大时保持当前方向
+    if (absX < 3 && absY < 3) return;
+
+    var newDirection: string;
+    if (absX > absY) {
+      newDirection = dragAccumX > 0 ? 'right' : 'left';
+    } else {
+      newDirection = dragAccumY > 0 ? 'down' : 'up';
+    }
+
+    if (newDirection !== currentDragDirection) {
+      currentDragDirection = newDirection;
+      setSprite('dragged_' + newDirection);
+    }
   }
 
   function setupCursorTracking(): void {
@@ -114,6 +195,8 @@
   function updateVisual(state: string, _definition: any): void {
     stopSleepAnim();
     if (isBlinking && state === 'idle') return;
+    // 拖拽期间不覆盖精灵图
+    if (isDragVisualActive) return;
 
     switch (state) {
       case 'idle':
@@ -126,7 +209,7 @@
         break;
       case 'dragged':
         companionEl.className = 'dragged';
-        setSprite('dragged');
+        // 不覆盖拖拽动画，由 setupDragHandling 控制精灵图
         break;
       case 'sleepy':
         companionEl.className = 'sleepy';

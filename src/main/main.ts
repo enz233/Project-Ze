@@ -9,6 +9,14 @@ let stateManager: StateManager;
 let timeAwareness: TimeAwareness;
 let transitionEngine: TransitionEngine;
 
+// 拖拽状态（主进程端）
+let isDragging = false;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+let lastCursorX = 0;
+let lastCursorY = 0;
+let dragPollTimer: ReturnType<typeof setInterval> | null = null;
+
 function createWindow(): void {
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
 
@@ -84,14 +92,37 @@ function createWindow(): void {
 
   ipcMain.on('drag-start', () => {
     transitionEngine?.handleDragStart();
-    // 同时返回窗口当前位置
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      const [x, y] = mainWindow.getPosition();
-      mainWindow.webContents.send('window-pos', { x, y });
-    }
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    // 记录鼠标与窗口的偏移量
+    const cursor = screen.getCursorScreenPoint();
+    const [winX, winY] = mainWindow.getPosition();
+    dragOffsetX = cursor.x - winX;
+    dragOffsetY = cursor.y - winY;
+    lastCursorX = cursor.x;
+    lastCursorY = cursor.y;
+    isDragging = true;
+
+    // 开始轮询鼠标位置，每帧更新窗口位置
+    if (dragPollTimer) clearInterval(dragPollTimer);
+    dragPollTimer = setInterval(() => {
+      if (!isDragging || !mainWindow || mainWindow.isDestroyed()) {
+        stopDragPoll();
+        return;
+      }
+      const pos = screen.getCursorScreenPoint();
+      // 只在鼠标实际移动时才更新窗口，避免微小抖动导致漂移
+      if (pos.x !== lastCursorX || pos.y !== lastCursorY) {
+        lastCursorX = pos.x;
+        lastCursorY = pos.y;
+        mainWindow.setPosition(pos.x - dragOffsetX, pos.y - dragOffsetY);
+      }
+    }, 16); // ~60fps
   });
 
   ipcMain.on('drag-end', () => {
+    isDragging = false;
+    stopDragPoll();
     transitionEngine?.handleDragEnd();
   });
 
@@ -99,9 +130,9 @@ function createWindow(): void {
     stateManager?.recordInteraction();
   });
 
-  // 相对移动窗口
+  // 相对移动窗口（拖拽时由主进程轮询处理，这里保留给其他用途）
   ipcMain.on('window-move-by', (_event, data: { deltaX: number; deltaY: number }) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (!mainWindow || mainWindow.isDestroyed() || isDragging) return;
     const [x, y] = mainWindow.getPosition();
     mainWindow.setPosition(x + data.deltaX, y + data.deltaY);
   });
@@ -119,6 +150,13 @@ function createWindow(): void {
       mainWindow.setIgnoreMouseEvents(true, { forward: true });
     }
   });
+}
+
+function stopDragPoll(): void {
+  if (dragPollTimer) {
+    clearInterval(dragPollTimer);
+    dragPollTimer = null;
+  }
 }
 
 app.whenReady().then(createWindow);
