@@ -45,6 +45,11 @@ export class TimeAwareness {
     return this.getCurrentEffect() === 'sleepy_boost';
   }
 
+  /** 判断当前是否为早晨（自然醒来时段） */
+  isMorning(): boolean {
+    return this.getCurrentEffect() === 'natural_wake';
+  }
+
   /**
    * 计算 sleepy_boost 时段的犯困强度（0-1）
    * 22:00 时为 0.0，逐渐升高到 01:00 时为 1.0

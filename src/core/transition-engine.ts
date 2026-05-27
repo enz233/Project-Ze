@@ -23,9 +23,12 @@ export class TransitionEngine {
     this.timeAwareness = timeAwareness;
     this.config = stateManager.getConfig();
 
-    // 监听状态变化：离开 curious 时重置 isCursorNear
+    // 监听状态变化：离开 curious 或 dragged 时重置 isCursorNear
     this.stateManager.onStateChange((event) => {
       if (event.from === 'curious' && event.to !== 'curious') {
+        this.isCursorNear = false;
+      }
+      if (event.from === 'dragged' && event.to !== 'dragged') {
         this.isCursorNear = false;
       }
     });
@@ -49,10 +52,27 @@ export class TransitionEngine {
     const stateDef = this.config.states[currentState];
     const duration = this.stateManager.getStateDuration();
 
-    // 深夜强制 sleeping
-    if (this.timeAwareness.isLateNight() && currentState !== 'sleeping') {
-      this.stateManager.tryTransition('sleeping', 'time');
+    // 深夜（01:00-06:00）：强制 sleeping
+    if (this.timeAwareness.isLateNight()) {
+      if (currentState !== 'sleeping') {
+        this.stateManager.tryTransition('sleeping', 'time');
+      }
       return;
+    }
+
+    // 早晨（06:00-09:00）：sleeping 自然醒来
+    if (this.timeAwareness.isMorning() && currentState === 'sleeping') {
+      this.stateManager.tryTransition('idle', 'time');
+      return;
+    }
+
+    // idle 有概率进入 sleepy（测试用：概率调高）
+    if (currentState === 'idle') {
+      // 每秒有 5% 概率进入 sleepy
+      if (Math.random() < 0.05) {
+        this.stateManager.tryTransition('sleepy', 'time');
+        return;
+      }
     }
 
     // 状态超时 → 回 idle
@@ -93,6 +113,17 @@ export class TransitionEngine {
     if (Math.random() < 0.4) {
       this.stateManager.tryTransition('comfortable', 'interaction');
     } else {
+      this.stateManager.tryTransition('idle', 'interaction');
+    }
+  }
+
+  /** 点击交互：处理睡眠状态的唤醒 */
+  handleInteraction(): void {
+    this.stateManager.recordInteraction();
+    const currentState = this.stateManager.getCurrentState();
+    if (currentState === 'sleeping') {
+      this.stateManager.tryTransition('sleepy', 'interaction');
+    } else if (currentState === 'sleepy') {
       this.stateManager.tryTransition('idle', 'interaction');
     }
   }

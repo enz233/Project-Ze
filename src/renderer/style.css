@@ -68,14 +68,15 @@ html, body {
   cursor: grabbing;
 }
 
-/* 犯困 - 下垂 */
-@keyframes droop {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(4px); }
+/* 犯困 - 轻微摇晃+下垂 */
+@keyframes sleepy-sway {
+  0%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+  30% { transform: translateX(-50%) translateY(2px) rotate(-1.5deg); }
+  70% { transform: translateX(-50%) translateY(2px) rotate(1.5deg); }
 }
 
 #companion.sleepy {
-  animation: droop 3s ease-in-out infinite;
+  animation: sleepy-sway 4s ease-in-out infinite;
 }
 
 /* 睡觉 - 缓慢呼吸 */
@@ -93,9 +94,15 @@ html, body {
   animation: lonely-sway 4s ease-in-out infinite;
 }
 
-/* 舒适 - 放松呼吸 */
+/* 舒适 - 轻摇 */
+@keyframes comfortable-sway {
+  0%, 100% { transform: translateX(-50%) rotate(0deg) translateY(0); }
+  25% { transform: translateX(-50%) rotate(2deg) translateY(-2px); }
+  75% { transform: translateX(-50%) rotate(-2deg) translateY(-2px); }
+}
+
 #companion.comfortable {
-  animation: breathe 3.5s ease-in-out infinite;
+  animation: comfortable-sway 3s ease-in-out infinite;
 }
 
 /* 对话气泡 */

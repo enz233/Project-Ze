@@ -7,6 +7,7 @@
   var bubbleTimeout: ReturnType<typeof setTimeout> | null = null;
   var blinkTimer: ReturnType<typeof setTimeout> | null = null;
   var sleepAnimTimer: ReturnType<typeof setInterval> | null = null;
+  var sleepyAnimTimer: ReturnType<typeof setTimeout> | null = null;
   var isBlinking = false;
 
   // 拖拽动画相关
@@ -17,6 +18,7 @@
   var dragTransitionDone = false;
   var dragFirstMove = false;
   var isDragVisualActive = false; // 拖拽视觉是否激活（mousedown到mouseup之间）
+  var sleepyAnimRunning = false;
 
   var companionEl = document.getElementById('companion')!;
   var spriteEl = document.getElementById('sprite') as HTMLImageElement;
@@ -182,18 +184,76 @@
     }
   }
 
+  function stopSleepyAnim(): void {
+    if (sleepyAnimTimer) {
+      clearTimeout(sleepyAnimTimer);
+      sleepyAnimTimer = null;
+    }
+    sleepyAnimRunning = false;
+  }
+
+  /** sleepy 动画：sleepy_1 → sleepy_2 → sleepy_3 → sleepy（停2秒）→ 反向返回 sleepy_1 */
+  function startSleepyAnim(): void {
+    if (sleepyAnimRunning) return;
+    sleepyAnimRunning = true;
+
+    function scheduleNext(): void {
+      // 基础停留时间 4~8 秒，然后播放过渡帧
+      var baseDelay = 4000 + Math.random() * 4000;
+      sleepyAnimTimer = setTimeout(function () {
+        if (currentState !== 'sleepy') return;
+        setSprite('sleepy_2');
+        sleepyAnimTimer = setTimeout(function () {
+          if (currentState !== 'sleepy') return;
+          setSprite('sleepy_3');
+          sleepyAnimTimer = setTimeout(function () {
+            if (currentState !== 'sleepy') return;
+            setSprite('sleepy'); // 最终帧
+            sleepyAnimTimer = setTimeout(function () {
+              if (currentState !== 'sleepy') return;
+              // 反向返回
+              setSprite('sleepy_3');
+              sleepyAnimTimer = setTimeout(function () {
+                if (currentState !== 'sleepy') return;
+                setSprite('sleepy_2');
+                sleepyAnimTimer = setTimeout(function () {
+                  if (currentState !== 'sleepy') return;
+                  setSprite('sleepy_1'); // 回到主帧
+                  scheduleNext(); // 开始下一轮
+                }, 800);
+              }, 800);
+            }, 2000);
+          }, 800);
+        }, 800);
+      }, baseDelay);
+    }
+
+    setSprite('sleepy_1');
+    scheduleNext();
+  }
+
   function startSleepAnim(): void {
     stopSleepAnim();
-    var frames = ['sleep_1', 'sleep_2', 'sleep_3'];
-    var frameIndex = 0;
-    sleepAnimTimer = setInterval(function () {
-      frameIndex = (frameIndex + 1) % frames.length;
-      setSprite(frames[frameIndex]);
+    setSprite('sleep_1');
+    sleepAnimTimer = setTimeout(function () {
+      setSprite('sleep_2');
+      sleepAnimTimer = setTimeout(function () {
+        setSprite('sleep_3');
+        sleepAnimTimer = setTimeout(function () {
+          setSprite('sleeping'); // 最终帧，长时间停留
+          sleepAnimTimer = null;
+        }, 1500);
+      }, 1500);
     }, 1500);
   }
 
+  var lastVisualState = '';
+
   function updateVisual(state: string, _definition: any): void {
+    if (state === lastVisualState) return;
+    lastVisualState = state;
     stopSleepAnim();
+    stopSleepyAnim();
     if (isBlinking && state === 'idle') return;
     // 拖拽期间不覆盖精灵图
     if (isDragVisualActive) return;
@@ -213,7 +273,7 @@
         break;
       case 'sleepy':
         companionEl.className = 'sleepy';
-        setSprite('sleepy');
+        startSleepyAnim();
         break;
       case 'sleeping':
         companionEl.className = 'sleeping';
@@ -276,12 +336,15 @@
     if (currentState === 'curious') {
       // curious: 2~6秒，更快
       interval = 2000 + Math.random() * 2000 + Math.random() * 2000;
+    } else if (currentState === 'sleepy') {
+      // sleepy: 4~10秒，更慢
+      interval = 4000 + Math.random() * 3000 + Math.random() * 3000;
     } else {
       // idle: 2~8秒
       interval = 2000 + Math.random() * 3000 + Math.random() * 3000;
     }
     blinkTimer = setTimeout(function () {
-      if (currentState === 'idle' || currentState === 'curious') {
+      if (currentState === 'idle' || currentState === 'curious' || currentState === 'sleepy') {
         performBlink();
       }
       scheduleNextBlink();
@@ -295,21 +358,35 @@
     if (currentState === 'curious') {
       // curious: 70~130ms，更快
       speed = 70 + Math.random() * 60;
+    } else if (currentState === 'sleepy') {
+      // sleepy: 120~200ms，更慢
+      speed = 120 + Math.random() * 80;
     } else {
       // idle: 80~150ms
       speed = 80 + Math.random() * 70;
     }
-    setSprite('idle_blink_1');
-    setTimeout(function () {
-      setSprite('idle_blink_2');
+
+    if (currentState === 'sleepy') {
+      // sleepy 眨眼：sleepy_1 → sleepy_blink → sleepy_1
+      setSprite('sleepy_blink');
       setTimeout(function () {
-        setSprite('idle_blink_1');
+        setSprite('sleepy_1');
+        isBlinking = false;
+      }, speed * 2);
+    } else {
+      // idle/curious 眨眼：idle → blink_1 → blink_2 → blink_1 → idle
+      setSprite('idle_blink_1');
+      setTimeout(function () {
+        setSprite('idle_blink_2');
         setTimeout(function () {
-          setSprite('idle');
-          isBlinking = false;
+          setSprite('idle_blink_1');
+          setTimeout(function () {
+            setSprite('idle');
+            isBlinking = false;
+          }, speed);
         }, speed);
       }, speed);
-    }, speed);
+    }
   }
 
   init();

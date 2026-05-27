@@ -1,5 +1,15 @@
 # Quiet Companion - 版本记录
 
+## v0.1.3 (2026-05-25)
+- sleepy状态动画：sleepy_1为主帧+摇晃CSS，周期性哈欠（sleepy_2→sleepy_3→sleepy→反向）
+- sleepy眨眼：使用sleepy_blink素材，间隔4~10秒
+- sleeping动画：sleep_1→sleep_2→sleep_3→sleeping（停留最终帧）
+- 睡眠周期转移：深夜强制sleeping，早晨自然醒来，点击sleeping唤醒到sleepy
+- comfortable轻摇动画（独立CSS）
+- 修复离开dragged后curious无法触发的bug
+- 修复sleepy哈欠动画被500ms状态更新重置的bug
+- idle→sleepy概率触发（当前为测试模式5%/秒）
+
 ## v0.1.2 (2026-05-24)
 - 拖拽方向差分：根据拖拽方向显示 dragged_left/right/up/down
 - 拖拽过渡动画：dragged_1 → dragged_2（被拉起的动作）

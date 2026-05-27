@@ -127,7 +127,7 @@ function createWindow(): void {
   });
 
   ipcMain.on('user-click', () => {
-    stateManager?.recordInteraction();
+    transitionEngine?.handleInteraction();
   });
 
   // 相对移动窗口（拖拽时由主进程轮询处理，这里保留给其他用途）

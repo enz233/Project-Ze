@@ -96,7 +96,7 @@
       "blinkRate": "normal",
       "movement": "gentle",
       "microBehaviors": ["blink", "gentle_smile", "stretch"],
-      "duration": { "min": 30, "max": 60 },
+      "duration": { "min": 20, "max": 40 },
       "priority": 5,
       "bubble": {
         "probability": 0.1,
