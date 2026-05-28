@@ -8,6 +8,8 @@
   var blinkTimer: ReturnType<typeof setTimeout> | null = null;
   var sleepAnimTimer: ReturnType<typeof setInterval> | null = null;
   var sleepyAnimTimer: ReturnType<typeof setTimeout> | null = null;
+  var lonelyAnimTimer: ReturnType<typeof setTimeout> | null = null;
+  var lonelyActionTimer: ReturnType<typeof setTimeout> | null = null;
   var isBlinking = false;
 
   // 拖拽动画相关
@@ -56,16 +58,17 @@
 
   function setupDragHandling(): void {
     var isDragging = false;
+    var dragStarted = false; // 是否真正开始拖拽（有移动）
 
     companionEl.addEventListener('mousedown', function () {
       isDragging = true;
-      isDraggingGlobal = true;
-      isDragVisualActive = true;
+      dragStarted = false;
       dragFirstMove = true;
       dragTransitionDone = false;
       dragAccumX = 0;
       dragAccumY = 0;
       currentDragDirection = null;
+      // 点击立即显示 dragged
       setSprite('dragged');
       // @ts-ignore
       window.companion.sendDragStart();
@@ -74,6 +77,16 @@
     document.addEventListener('mousemove', function (e: MouseEvent) {
       if (!isDragging) return;
       if (e.movementX === 0 && e.movementY === 0) return;
+
+      // 首次移动时才触发拖拽
+      if (!dragStarted) {
+        dragStarted = true;
+        isDraggingGlobal = true;
+        isDragVisualActive = true;
+        setSprite('dragged');
+        // @ts-ignore
+        window.companion.sendDragStart();
+      }
 
       // 方向判定（视觉用）
       if (dragFirstMove) {
@@ -91,6 +104,7 @@
         stopDragAnim();
         // @ts-ignore
         window.companion.sendDragEnd();
+        dragStarted = false;
       }
     });
   }
@@ -192,6 +206,140 @@
     sleepyAnimRunning = false;
   }
 
+  function stopLonelyAnim(): void {
+    if (lonelyAnimTimer) {
+      clearTimeout(lonelyAnimTimer);
+      lonelyAnimTimer = null;
+    }
+    stopLonelyAction();
+  }
+
+  /** lonely 动画：lonely_0 → 1 → 2 → 3 → 4 → lonely（停留最终帧） */
+  function startLonelyAnim(): void {
+    stopLonelyAnim();
+    setSprite('lonely_0');
+    var frames = ['lonely_1', 'lonely_2', 'lonely_3', 'lonely_4', 'lonely'];
+    var i = 0;
+    function next(): void {
+      lonelyAnimTimer = setTimeout(function () {
+        if (currentState !== 'lonely') return;
+        setSprite(frames[i]);
+        i++;
+        if (i < frames.length) {
+          next();
+        } else {
+          // 主帧就位后，启动小动作定时器
+          scheduleLonelyAction();
+        }
+      }, 600);
+    }
+    next();
+  }
+
+  function stopLonelyAction(): void {
+    if (lonelyActionTimer) {
+      clearTimeout(lonelyActionTimer);
+      lonelyActionTimer = null;
+    }
+    // @ts-ignore
+    window.companion.sendLonelyAction(false);
+  }
+
+  /** lonely 退出动画：从当前帧反向播放回 lonely_0 */
+  function playLonelyExit(callback: () => void): void {
+    stopLonelyAnim();
+    stopLonelyAction();
+    // 找到当前帧在序列中的位置，从那里开始反向
+    var fullSeq = ['lonely_0', 'lonely_1', 'lonely_2', 'lonely_3', 'lonely_4', 'lonely'];
+    var currentSrc = spriteEl.src;
+    var currentIdx = -1;
+    for (var j = 0; j < fullSeq.length; j++) {
+      if (currentSrc.indexOf(fullSeq[j] + '.png') !== -1) {
+        currentIdx = j;
+        break;
+      }
+    }
+    // 如果找不到当前帧，默认从 lonely 开始
+    if (currentIdx < 0) currentIdx = fullSeq.length - 1;
+    // 反向序列：从当前帧往回走到 lonely_0
+    var frames: string[] = [];
+    for (var k = currentIdx; k >= 0; k--) {
+      frames.push(fullSeq[k]);
+    }
+    var i = 0;
+    function next(): void {
+      lonelyAnimTimer = setTimeout(function () {
+        setSprite(frames[i]);
+        i++;
+        if (i < frames.length) {
+          next();
+        } else {
+          callback();
+        }
+      }, 200);
+    }
+    next();
+  }
+
+  /** lonely 小动作：大约每分钟触发一次 */
+  function scheduleLonelyAction(): void {
+    stopLonelyAction();
+    var delay = 40000 + Math.random() * 40000; // 40~80秒
+    lonelyActionTimer = setTimeout(function () {
+      if (currentState !== 'lonely') return;
+      playLonelyAction();
+    }, delay);
+  }
+
+  /** 播放 lonely 小动作：0→1→2→3 停几秒 → 4→5→5→4 → 3→2→1→0 回主帧 */
+  function playLonelyAction(): void {
+    // @ts-ignore
+    window.companion.sendLonelyAction(true);
+
+    // 0→1→2→3（600ms每帧）
+    var slow = ['lonely_c_0', 'lonely_c_1', 'lonely_c_2', 'lonely_c_3'];
+    // 4→5→5→4→3（200ms每帧）
+    var fast = ['lonely_c_4', 'lonely_c_5', 'lonely_c_5', 'lonely_c_4', 'lonely_c_3'];
+    // 3→2→1→0（600ms每帧）
+    var back = ['lonely_c_2', 'lonely_c_1', 'lonely_c_0'];
+
+    function playSequence(frames: string[], speed: number, callback: () => void): void {
+      var i = 0;
+      function next(): void {
+        lonelyActionTimer = setTimeout(function () {
+          if (currentState !== 'lonely') { stopLonelyAction(); return; }
+          setSprite(frames[i]);
+          i++;
+          if (i < frames.length) {
+            next();
+          } else {
+            callback();
+          }
+        }, speed);
+      }
+      setSprite(frames[0]);
+      i = 1;
+      next();
+    }
+
+    // 0→1→2→3
+    playSequence(slow, 600, function () {
+      // 停 2~3 秒
+      lonelyActionTimer = setTimeout(function () {
+        if (currentState !== 'lonely') { stopLonelyAction(); return; }
+        // 4→5→5→4→3→2→1→0
+        playSequence(fast, 200, function () {
+          // 3→2→1→0 回主帧
+          playSequence(back, 600, function () {
+            setSprite('lonely');
+            stopLonelyAction();
+            scheduleLonelyAction();
+          });
+        });
+      }, 2000 + Math.random() * 1000);
+    });
+  }
+
   /** sleepy 动画：sleepy_1 → sleepy_2 → sleepy_3 → sleepy（停2秒）→ 反向返回 sleepy_1 */
   function startSleepyAnim(): void {
     if (sleepyAnimRunning) return;
@@ -248,12 +396,29 @@
   }
 
   var lastVisualState = '';
+  var isLonelyExiting = false;
 
   function updateVisual(state: string, _definition: any): void {
     if (state === lastVisualState) return;
+
+    // 退出动画播放中不更新精灵图
+    if (isLonelyExiting) return;
+
+    // 离开 lonely 时先播放反向退出动画
+    if (lastVisualState === 'lonely' && state !== 'lonely') {
+      isLonelyExiting = true;
+      playLonelyExit(function () {
+        isLonelyExiting = false;
+        lastVisualState = '';
+        updateVisual(state, _definition);
+      });
+      return;
+    }
+
     lastVisualState = state;
     stopSleepAnim();
     stopSleepyAnim();
+    stopLonelyAnim();
     if (isBlinking && state === 'idle') return;
     // 拖拽期间不覆盖精灵图
     if (isDragVisualActive) return;
@@ -282,7 +447,7 @@
         break;
       case 'lonely':
         companionEl.className = 'lonely';
-        setSprite('lonely');
+        startLonelyAnim();
         break;
       case 'comfortable':
         companionEl.className = 'comfortable';
@@ -344,6 +509,11 @@
       interval = 2000 + Math.random() * 3000 + Math.random() * 3000;
     }
     blinkTimer = setTimeout(function () {
+      // sleepy 哈欠播放中不眨眼
+      if (currentState === 'sleepy' && sleepyAnimTimer) {
+        scheduleNextBlink();
+        return;
+      }
       if (currentState === 'idle' || currentState === 'curious' || currentState === 'sleepy') {
         performBlink();
       }

@@ -130,6 +130,10 @@ function createWindow(): void {
     transitionEngine?.handleInteraction();
   });
 
+  ipcMain.on('lonely-action', (_event, active: boolean) => {
+    transitionEngine?.setLonelyAction(active);
+  });
+
   // 相对移动窗口（拖拽时由主进程轮询处理，这里保留给其他用途）
   ipcMain.on('window-move-by', (_event, data: { deltaX: number; deltaY: number }) => {
     if (!mainWindow || mainWindow.isDestroyed() || isDragging) return;

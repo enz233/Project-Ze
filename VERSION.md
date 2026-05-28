@@ -1,5 +1,16 @@
 # Quiet Companion - 版本记录
 
+## v0.1.4 (2026-05-28)
+- lonely状态完整实现：10分钟无交互触发，点击/光标靠近唤醒
+- lonely动画：lonely_0→1→2→3→4→lonely（停留最终帧）
+- lonely小动作：lonely_c_0~5序列动画，40~80秒触发一次
+- lonely退出动画：反向播放回lonely_0
+- lonely小动作播放时不被curious打断
+- 区分点击和拖拽：点击显示dragged后回idle，拖拽才真正移动窗口
+- sleepy哈欠动画修复：播放期间不被眨眼打断
+- 状态优先级：sleeping > lonely > sleepy
+- object-position: center bottom 统一精灵图对齐
+
 ## v0.1.3 (2026-05-25)
 - sleepy状态动画：sleepy_1为主帧+摇晃CSS，周期性哈欠（sleepy_2→sleepy_3→sleepy→反向）
 - sleepy眨眼：使用sleepy_blink素材，间隔4~10秒

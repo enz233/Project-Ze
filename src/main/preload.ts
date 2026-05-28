@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('companion', {
   sendMouseLeave: () => {
     ipcRenderer.send('mouse-leave');
   },
+  sendLonelyAction: (active: boolean) => {
+    ipcRenderer.send('lonely-action', active);
+  },
   onStateChanged: (callback: (event: any) => void) => {
     ipcRenderer.on('state-changed', (_event, data) => callback(data));
   },

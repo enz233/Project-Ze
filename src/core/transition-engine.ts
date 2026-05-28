@@ -17,6 +17,7 @@ export class TransitionEngine {
   private config: StatesConfig;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private isCursorNear: boolean = false;
+  private isLonelyAction: boolean = false;
 
   constructor(stateManager: StateManager, timeAwareness: TimeAwareness) {
     this.stateManager = stateManager;
@@ -66,10 +67,16 @@ export class TransitionEngine {
       return;
     }
 
-    // idle 有概率进入 sleepy（测试用：概率调高）
-    if (currentState === 'idle') {
-      // 每秒有 5% 概率进入 sleepy
-      if (Math.random() < 0.05) {
+    // idle 长时间无交互 → lonely（优先级高于 sleepy）
+    if (currentState === 'idle' && this.stateManager.getTimeSinceLastInteraction() > 600) {
+      this.stateManager.tryTransition('lonely', 'timer');
+      return;
+    }
+
+    // 夜晚（22:00-01:00）：idle 有概率进入 sleepy
+    if (this.timeAwareness.isNightTime() && currentState === 'idle') {
+      const intensity = this.timeAwareness.getSleepyIntensity();
+      if (Math.random() < intensity * 0.02) {
         this.stateManager.tryTransition('sleepy', 'time');
         return;
       }
@@ -83,6 +90,11 @@ export class TransitionEngine {
     }
   }
 
+  /** 设置 lonely 小动作播放状态 */
+  setLonelyAction(active: boolean): void {
+    this.isLonelyAction = active;
+  }
+
   /** 光标移动：控制 curious 进入/退出 */
   handleCursorMove(cursor: CursorPosition, companion: CompanionPosition): void {
     const distance = this.calculateDistance(cursor, companion);
@@ -90,7 +102,8 @@ export class TransitionEngine {
 
     if (distance < 200 && !this.isCursorNear) {
       this.isCursorNear = true;
-      if (currentState === 'idle' || currentState === 'lonely') {
+      // lonely 小动作播放中不切换到 curious
+      if ((currentState === 'idle' || currentState === 'lonely') && !this.isLonelyAction) {
         this.stateManager.tryTransition('curious', 'interaction');
       }
     } else if (distance > 300 && this.isCursorNear) {
@@ -117,13 +130,15 @@ export class TransitionEngine {
     }
   }
 
-  /** 点击交互：处理睡眠状态的唤醒 */
+  /** 点击交互：处理睡眠和孤独状态的唤醒 */
   handleInteraction(): void {
     this.stateManager.recordInteraction();
     const currentState = this.stateManager.getCurrentState();
     if (currentState === 'sleeping') {
       this.stateManager.tryTransition('sleepy', 'interaction');
     } else if (currentState === 'sleepy') {
+      this.stateManager.tryTransition('idle', 'interaction');
+    } else if (currentState === 'lonely') {
       this.stateManager.tryTransition('idle', 'interaction');
     }
   }
