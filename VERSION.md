@@ -1,5 +1,10 @@
 # Quiet Companion - 版本记录
 
+## v0.1.4_debug (2026-05-28)
+- 修复 lastVisualState 在早返回前被设置导致精灵图不更新
+- 修复眨眼动画覆盖非 idle 状态的精灵图
+- 修复深夜拖拽被强制 sleeping 打断（现在允许拖拽，松开后 sleepy → sleeping）
+
 ## v0.1.4 (2026-05-28)
 - lonely状态完整实现：10分钟无交互触发，点击/光标靠近唤醒
 - lonely动画：lonely_0→1→2→3→4→lonely（停留最终帧）

@@ -415,13 +415,19 @@
       return;
     }
 
+    if (isBlinking && state === 'idle') return;
+    // 拖拽期间不覆盖精灵图
+    if (isDragVisualActive) return;
+
+    // 离开眨眼状态时重置标记
+    if (state !== 'idle' && state !== 'curious') {
+      isBlinking = false;
+    }
+
     lastVisualState = state;
     stopSleepAnim();
     stopSleepyAnim();
     stopLonelyAnim();
-    if (isBlinking && state === 'idle') return;
-    // 拖拽期间不覆盖精灵图
-    if (isDragVisualActive) return;
 
     switch (state) {
       case 'idle':
@@ -547,10 +553,13 @@
       // idle/curious 眨眼：idle → blink_1 → blink_2 → blink_1 → idle
       setSprite('idle_blink_1');
       setTimeout(function () {
+        if (currentState !== 'idle' && currentState !== 'curious') { isBlinking = false; return; }
         setSprite('idle_blink_2');
         setTimeout(function () {
+          if (currentState !== 'idle' && currentState !== 'curious') { isBlinking = false; return; }
           setSprite('idle_blink_1');
           setTimeout(function () {
+            if (currentState !== 'idle' && currentState !== 'curious') { isBlinking = false; return; }
             setSprite('idle');
             isBlinking = false;
           }, speed);

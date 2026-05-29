@@ -53,9 +53,9 @@ export class TransitionEngine {
     const stateDef = this.config.states[currentState];
     const duration = this.stateManager.getStateDuration();
 
-    // 深夜（01:00-06:00）：强制 sleeping
+    // 深夜（01:00-06:00）：强制 sleeping（但不打断拖拽）
     if (this.timeAwareness.isLateNight()) {
-      if (currentState !== 'sleeping') {
+      if (currentState !== 'sleeping' && currentState !== 'dragged') {
         this.stateManager.tryTransition('sleeping', 'time');
       }
       return;
@@ -120,10 +120,12 @@ export class TransitionEngine {
     this.stateManager.tryTransition('dragged', 'interaction');
   }
 
-  /** 拖拽结束：回 idle 或 comfortable */
+  /** 拖拽结束：回 idle 或 comfortable（深夜回 sleepy） */
   handleDragEnd(): void {
     this.stateManager.recordInteraction();
-    if (Math.random() < 0.4) {
+    if (this.timeAwareness.isLateNight()) {
+      this.stateManager.tryTransition('sleepy', 'interaction');
+    } else if (Math.random() < 0.4) {
       this.stateManager.tryTransition('comfortable', 'interaction');
     } else {
       this.stateManager.tryTransition('idle', 'interaction');
