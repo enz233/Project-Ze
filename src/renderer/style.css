@@ -117,11 +117,11 @@ html, body {
   animation: comfortable-sway 3s ease-in-out infinite;
 }
 
-/* 对话气泡 */
+/* 对话气泡（独立于人物） */
 #bubble {
-  position: absolute;
-  top: -30px;
-  left: 50%;
+  position: fixed;
+  top: 0;
+  left: 0;
   transform: translateX(-50%);
   background: rgba(255, 255, 255, 0.92);
   color: #4a4a4a;
@@ -134,6 +134,7 @@ html, body {
   opacity: 0;
   transition: opacity 0.5s ease;
   pointer-events: none;
+  z-index: 200;
 }
 
 #bubble.visible {

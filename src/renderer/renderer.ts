@@ -96,7 +96,8 @@
     var isDragging = false;
     var dragStarted = false; // 是否真正开始拖拽（有移动）
 
-    companionEl.addEventListener('mousedown', function () {
+    companionEl.addEventListener('mousedown', function (e: MouseEvent) {
+      if (e.button !== 0) return; // 只响应左键
       console.log('[Drag] mousedown');
       isDragging = true;
       isDraggingGlobal = true;
@@ -701,11 +702,19 @@
     return bubbles[state] ?? null;
   }
 
+  /** 更新气泡位置到人物上方 */
+  function updateBubblePosition(): void {
+    var rect = companionEl.getBoundingClientRect();
+    bubbleEl.style.left = (rect.left + rect.width / 2) + 'px';
+    bubbleEl.style.top = (rect.top - 35) + 'px';
+  }
+
   function showBubble(text: string): void {
     if (bubbleTimeout) {
       clearTimeout(bubbleTimeout);
     }
 
+    updateBubblePosition();
     bubbleEl.textContent = text;
     bubbleEl.classList.remove('hidden');
     bubbleEl.classList.add('visible');

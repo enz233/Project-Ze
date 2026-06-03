@@ -2,19 +2,42 @@ import { BrowserWindow } from 'electron';
 import { AIConfigManager } from './ai-config';
 import { AIService, ChatMessage } from './ai-service';
 import { AIMemory } from './ai-memory';
+import { StateManager } from './state-manager';
+
+/** 各状态的情感前缀 */
+const EMOTION_PROMPTS: Record<string, string> = {
+  idle: '',
+  curious: '（你现在很好奇，对用户的话题很感兴趣）',
+  dragged: '（你刚刚被拖拽了，有点惊讶）',
+  sleepy: '（你现在很困，说话可能会带点慵懒）',
+  sleeping: '（你刚被叫醒，迷迷糊糊的）',
+  lonely: '（你刚才很孤单，现在用户终于来找你了，你有点开心）',
+  comfortable: '（你现在很舒服很满足，心情很好）',
+  tried: '（你有点累，说话简短）',
+};
 
 export class ChatManager {
   private aiService: AIService;
   private configManager: AIConfigManager;
   private memory: AIMemory;
+  private stateManager: StateManager;
   private mainWindow: BrowserWindow;
   private isProcessing = false;
+  private previousState: string = 'idle';
+  private previousStateTime: number = Date.now();
 
-  constructor(mainWindow: BrowserWindow, configManager: AIConfigManager, aiService: AIService) {
+  constructor(mainWindow: BrowserWindow, configManager: AIConfigManager, aiService: AIService, stateManager: StateManager) {
     this.mainWindow = mainWindow;
     this.configManager = configManager;
     this.aiService = aiService;
+    this.stateManager = stateManager;
     this.memory = new AIMemory(configManager.getConfigDir());
+
+    // 监听状态变化，记录前一个状态
+    this.stateManager.onStateChange((event) => {
+      this.previousState = event.from;
+      this.previousStateTime = Date.now();
+    });
   }
 
   /** 发送用户消息并获取 AI 回复 */
@@ -33,17 +56,25 @@ export class ChatManager {
     this.sendBubble('思考中...');
 
     try {
-      // 保存用户消息到历史
-      this.memory.addMessage('user', userMessage);
-
       // 构建消息数组（含记忆）
       const config = this.configManager.get();
       const systemPrompt = this.memory.buildSystemPrompt(config.systemPrompt, RESPONSE_FORMAT_PROMPT);
+
+      // 根据状态添加情感前缀（切换后4秒内保持上一个状态的提示词）
+      const currentState = this.stateManager.getCurrentState();
+      const timeSinceChange = Date.now() - this.previousStateTime;
+      const effectiveState = (timeSinceChange < 4000) ? this.previousState : currentState;
+      const emotionPrefix = EMOTION_PROMPTS[effectiveState] || '';
+      const finalUserMessage = emotionPrefix ? emotionPrefix + '\n' + userMessage : userMessage;
+
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
-        ...this.memory.getRecentMessages(config.historyMaxLength),
-        { role: 'user', content: userMessage },
+        ...this.memory.getRecentMessages(config.historyMaxLength - 1),
+        { role: 'user', content: finalUserMessage },
       ];
+
+      // 保存用户消息到历史（在构建消息数组之后，避免重复）
+      this.memory.addMessage('user', userMessage);
 
       // 流式调用
       const fullResponse = await this.aiService.chatStream(messages, (_chunk, _total) => {
