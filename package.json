@@ -1,24 +1,78 @@
 {
   "name": "quiet-companion",
-  "version": "0.1.0",
-  "description": "A quiet digital companion that lives on the desktop",
+  "version": "0.2.1",
+  "description": "安静的伙伴 - 桌面数字伙伴",
   "main": "dist/main/main.js",
   "scripts": {
     "build": "tsc",
     "start": "npm run build && electron .",
-    "dev": "tsc && electron ."
+    "dev": "tsc && electron .",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac"
   },
   "keywords": [
     "desktop-pet",
     "companion",
     "electron"
   ],
-  "author": "",
+  "author": "Quiet Companion",
   "license": "ISC",
   "type": "commonjs",
+  "build": {
+    "appId": "com.quiet-companion.app",
+    "productName": "Quiet Companion",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/config/states.json",
+      "src/assets/**/*",
+      "src/renderer/index.html",
+      "src/renderer/style.css",
+      "src/main/settings.html",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "src/assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Quiet Companion"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "src/assets/icon.icns",
+      "category": "public.app-category.entertainment"
+    },
+    "dmg": {
+      "title": "Quiet Companion",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    }
+  },
   "devDependencies": {
     "@types/node": "^25.9.1",
     "electron": "^42.2.0",
+    "electron-builder": "^26.8.1",
     "typescript": "^6.0.3"
   }
 }

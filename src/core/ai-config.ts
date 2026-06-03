@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { app } from 'electron';
 
 export interface AIConfig {
   apiKey: string;
@@ -29,7 +30,11 @@ export class AIConfigManager {
   private config: AIConfig;
 
   constructor() {
-    this.configPath = path.join(__dirname, '..', '..', 'src', 'config', 'ai-config.json');
+    const configDir = path.join(app.getPath('userData'), 'config');
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+    this.configPath = path.join(configDir, 'ai-config.json');
     this.config = this.load();
   }
 
@@ -71,6 +76,6 @@ export class AIConfigManager {
   }
 
   getConfigDir(): string {
-    return path.dirname(this.configPath);
+    return path.join(app.getPath('userData'), 'config');
   }
 }

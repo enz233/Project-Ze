@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { exec } from 'child_process';
+import * as os from 'os';
 import { TimeAwareness } from './time-awareness';
 import { StateManager } from './state-manager';
 
@@ -57,27 +58,42 @@ export class BubbleManager {
     }
   }
 
-  /** 获取前台窗口标题（Windows） */
+  /** 获取前台窗口标题（跨平台） */
   private getActiveWindowTitle(): Promise<string> {
+    const platform = os.platform();
+
     return new Promise((resolve) => {
-      // 使用 encoded command 避免引号嵌套问题
-      const script = [
-        'Add-Type -TypeDefinition @"',
-        'using System;',
-        'using System.Runtime.InteropServices;',
-        'using System.Text;',
-        'public class Win32 {',
-        '  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();',
-        '  [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);',
-        '}',
-        '"@',
-        '$h = [Win32]::GetForegroundWindow()',
-        '$sb = New-Object System.Text.StringBuilder 256',
-        '[Win32]::GetWindowText($h, $sb, 256) | Out-Null',
-        '$sb.ToString()',
-      ].join('; ');
-      const encoded = Buffer.from(script, 'utf16le').toString('base64');
-      exec(`powershell -NoProfile -EncodedCommand ${encoded}`, { timeout: 5000 }, (error, stdout) => {
+      let cmd: string;
+
+      if (platform === 'darwin') {
+        // macOS: 使用 osascript 获取前台应用名称
+        cmd = `osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true'`;
+      } else if (platform === 'win32') {
+        // Windows: 使用 PowerShell + user32.dll
+        const script = [
+          'Add-Type -TypeDefinition @"',
+          'using System;',
+          'using System.Runtime.InteropServices;',
+          'using System.Text;',
+          'public class Win32 {',
+          '  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();',
+          '  [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);',
+          '}',
+          '"@',
+          '$h = [Win32]::GetForegroundWindow()',
+          '$sb = New-Object System.Text.StringBuilder 256',
+          '[Win32]::GetWindowText($h, $sb, 256) | Out-Null',
+          '$sb.ToString()',
+        ].join('; ');
+        const encoded = Buffer.from(script, 'utf16le').toString('base64');
+        cmd = `powershell -NoProfile -EncodedCommand ${encoded}`;
+      } else {
+        // Linux 等其他平台暂不支持
+        resolve('');
+        return;
+      }
+
+      exec(cmd, { timeout: 5000 }, (error, stdout) => {
         if (error) {
           resolve('');
           return;
