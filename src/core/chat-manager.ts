@@ -3,41 +3,50 @@ import { AIConfigManager } from './ai-config';
 import { AIService, ChatMessage } from './ai-service';
 import { AIMemory } from './ai-memory';
 import { StateManager } from './state-manager';
-
-/** 各状态的情感前缀 */
-const EMOTION_PROMPTS: Record<string, string> = {
-  idle: '',
-  curious: '（你现在很好奇，对用户的话题很感兴趣）',
-  dragged: '（你刚刚被拖拽了，有点惊讶）',
-  sleepy: '（你现在很困，说话可能会带点慵懒）',
-  sleeping: '（你刚被叫醒，迷迷糊糊的）',
-  lonely: '（你刚才很孤单，现在用户终于来找你了，你有点开心）',
-  comfortable: '（你现在很舒服很满足，心情很好）',
-  tried: '（你有点累，说话简短）',
-};
+import { EmotionSystem } from './emotion-system';
+import { EmotionUpdater } from './emotion-updater';
+import { TimeAwareness } from './time-awareness';
 
 export class ChatManager {
   private aiService: AIService;
   private configManager: AIConfigManager;
   private memory: AIMemory;
   private stateManager: StateManager;
+  private emotionSystem: EmotionSystem;
+  private emotionUpdater: EmotionUpdater;
   private mainWindow: BrowserWindow;
   private isProcessing = false;
-  private previousState: string = 'idle';
-  private previousStateTime: number = Date.now();
+  private lastUserInteraction: number = Date.now();
+  private proactiveTimer: ReturnType<typeof setInterval> | null = null;
+  private currentActivity: string = '';
 
-  constructor(mainWindow: BrowserWindow, configManager: AIConfigManager, aiService: AIService, stateManager: StateManager) {
+  constructor(
+    mainWindow: BrowserWindow,
+    configManager: AIConfigManager,
+    aiService: AIService,
+    stateManager: StateManager,
+    timeAwareness: TimeAwareness
+  ) {
     this.mainWindow = mainWindow;
     this.configManager = configManager;
     this.aiService = aiService;
     this.stateManager = stateManager;
     this.memory = new AIMemory(configManager.getConfigDir());
 
-    // 监听状态变化，记录前一个状态
-    this.stateManager.onStateChange((event) => {
-      this.previousState = event.from;
-      this.previousStateTime = Date.now();
-    });
+    // 初始化情绪系统
+    this.emotionSystem = new EmotionSystem();
+    this.emotionSystem.init({ isNight: timeAwareness.isNightTime() || timeAwareness.isLateNight() });
+    this.emotionUpdater = new EmotionUpdater(this.emotionSystem, timeAwareness);
+
+    // 每秒更新情绪
+    setInterval(() => {
+      this.emotionUpdater.tick();
+    }, 1000);
+
+    // 启动主动消息定时器（每3分钟检查一次）
+    this.proactiveTimer = setInterval(() => {
+      this.checkProactiveMessage();
+    }, 3 * 60 * 1000);
   }
 
   /** 发送用户消息并获取 AI 回复 */
@@ -53,6 +62,7 @@ export class ChatManager {
     }
 
     this.isProcessing = true;
+    this.recordInteraction();
     this.sendBubble('思考中...');
 
     try {
@@ -60,12 +70,9 @@ export class ChatManager {
       const config = this.configManager.get();
       const systemPrompt = this.memory.buildSystemPrompt(config.systemPrompt, RESPONSE_FORMAT_PROMPT);
 
-      // 根据状态添加情感前缀（切换后4秒内保持上一个状态的提示词）
-      const currentState = this.stateManager.getCurrentState();
-      const timeSinceChange = Date.now() - this.previousStateTime;
-      const effectiveState = (timeSinceChange < 4000) ? this.previousState : currentState;
-      const emotionPrefix = EMOTION_PROMPTS[effectiveState] || '';
-      const finalUserMessage = emotionPrefix ? emotionPrefix + '\n' + userMessage : userMessage;
+      // 使用情绪系统生成情感提示词
+      const emotionPrompt = this.emotionSystem.toPromptString();
+      const finalUserMessage = emotionPrompt ? emotionPrompt + '\n' + userMessage : userMessage;
 
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
@@ -164,6 +171,70 @@ export class ChatManager {
     }
   }
 
+  /** 更新活动监视结果（由 BubbleManager 调用） */
+  updateActivity(activity: string): void {
+    this.currentActivity = activity;
+  }
+
+  /** 记录用户交互时间 */
+  recordInteraction(): void {
+    this.lastUserInteraction = Date.now();
+    this.emotionUpdater.onInteraction();
+  }
+
+  /** 检查是否需要发送主动消息 */
+  private async checkProactiveMessage(): Promise<void> {
+    if (this.isProcessing) return;
+    if (!this.configManager.isValid()) return;
+
+    const timeSinceInteraction = Date.now() - this.lastUserInteraction;
+    const PROACTIVE_THRESHOLD = 5 * 60 * 1000; // 5分钟无交互
+
+    if (timeSinceInteraction < PROACTIVE_THRESHOLD) return;
+
+    try {
+      console.log('[ChatManager] 触发主动消息...');
+      await this.sendProactiveMessage();
+    } catch (error: any) {
+      console.error('[ChatManager] 主动消息失败:', error.message);
+    }
+  }
+
+  /** 发送主动消息 */
+  private async sendProactiveMessage(): Promise<void> {
+    const now = new Date();
+    const timeStr = now.toLocaleString('zh-CN', {
+      hour: '2-digit', minute: '2-digit',
+    });
+    const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+    const currentState = this.stateManager.getCurrentState();
+
+    // 构建上下文
+    let context = `现在是${timeStr}，星期${dayOfWeek}。`;
+    context += `用户当前的状态是"${currentState}"。`;
+    if (this.currentActivity) {
+      context += `用户正在使用的应用是"${this.currentActivity}"。`;
+    }
+
+    const config = this.configManager.get();
+    const systemPrompt = this.memory.buildSystemPrompt(config.systemPrompt, RESPONSE_FORMAT_PROMPT);
+    const memoryContext = this.memory.getSummary()
+      ? '\n\n关于用户的一些了解：' + this.memory.getSummary()
+      : '';
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'system', content: `${context}${memoryContext}\n\n你已经一段时间没有和用户聊天了。请结合之前的聊天记录以及当前用户的状态，主动发一段简短的关心或问候。要自然可爱，不要像机器人。不要用<item>标签，直接输出文字，限制30字以内。` },
+    ];
+
+    const response = await this.aiService.chat(messages);
+    if (response && response.trim()) {
+      this.sendBubble(response.trim().slice(0, 30));
+      // 记录这次交互，避免连续触发
+      this.lastUserInteraction = Date.now();
+    }
+  }
+
   /** 解析 AI 响应中的 <item> 标签 */
   private parseResponse(text: string): string[] {
     const items: string[] = [];
@@ -203,6 +274,11 @@ export class ChatManager {
   /** 获取记忆摘要 */
   getSummary(): string {
     return this.memory.getSummary();
+  }
+
+  /** 获取情绪更新器（供 TransitionEngine 使用） */
+  getEmotionUpdater(): EmotionUpdater {
+    return this.emotionUpdater;
   }
 }
 

@@ -95,7 +95,15 @@ function createWindow(): void {
   // 初始化 AI 模块
   aiConfigManager = new AIConfigManager();
   aiService = new AIService(aiConfigManager);
-  chatManager = new ChatManager(mainWindow, aiConfigManager, aiService, stateManager);
+  chatManager = new ChatManager(mainWindow, aiConfigManager, aiService, stateManager, timeAwareness);
+
+  // 连接活动监视到 ChatManager
+  bubbleManager.setOnActivity((title) => {
+    chatManager?.updateActivity(title);
+  });
+
+  // 连接情绪系统到 TransitionEngine
+  transitionEngine.setEmotionUpdater(chatManager.getEmotionUpdater());
 
   // 定时发送当前状态给渲染进程（用于UI更新）
   setInterval(() => {

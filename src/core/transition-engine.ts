@@ -1,6 +1,7 @@
 import { StateId, StatesConfig } from './types';
 import { StateManager } from './state-manager';
 import { TimeAwareness } from './time-awareness';
+import { EmotionUpdater } from './emotion-updater';
 
 export interface CursorPosition { x: number; y: number; }
 export interface CompanionPosition { x: number; y: number; }
@@ -19,6 +20,7 @@ export class TransitionEngine {
   private isCursorNear: boolean = false;
   private isLonelyAction: boolean = false;
   private dragStartTime: number = 0;
+  private emotionUpdater: EmotionUpdater | null = null;
 
   constructor(stateManager: StateManager, timeAwareness: TimeAwareness) {
     this.stateManager = stateManager;
@@ -86,8 +88,8 @@ export class TransitionEngine {
       }
     }
 
-    // 状态超时 → 回 idle（dragged 不靠超时，靠 mouseup）
-    if (duration > stateDef.duration.max && currentState !== 'dragged') {
+    // 状态超时 → 回 idle（dragged/lonely 不靠超时）
+    if (duration > stateDef.duration.max && currentState !== 'dragged' && currentState !== 'lonely') {
       if (currentState !== 'idle') {
         this.stateManager.tryTransition('idle', 'timer');
       }
@@ -104,6 +106,11 @@ export class TransitionEngine {
     this.isLonelyAction = active;
   }
 
+  /** 设置情绪更新器 */
+  setEmotionUpdater(updater: EmotionUpdater): void {
+    this.emotionUpdater = updater;
+  }
+
   /** 光标移动：控制 curious 进入/退出 */
   handleCursorMove(cursor: CursorPosition, companion: CompanionPosition): void {
     const distance = this.calculateDistance(cursor, companion);
@@ -111,12 +118,14 @@ export class TransitionEngine {
 
     if (distance < 200 && !this.isCursorNear) {
       this.isCursorNear = true;
+      this.emotionUpdater?.onCursorNear();
       // lonely 小动作播放中不切换到 curious
       if ((currentState === 'idle' || currentState === 'lonely') && !this.isLonelyAction) {
         this.stateManager.tryTransition('curious', 'interaction');
       }
     } else if (distance > 300 && this.isCursorNear) {
       this.isCursorNear = false;
+      this.emotionUpdater?.onCursorLeave();
       if (currentState === 'curious') {
         this.stateManager.tryTransition('idle', 'interaction');
       }
@@ -127,12 +136,14 @@ export class TransitionEngine {
   handleDragStart(): void {
     this.stateManager.recordInteraction();
     this.dragStartTime = Date.now();
+    this.emotionUpdater?.onDragStart();
     this.stateManager.tryTransition('dragged', 'interaction');
   }
 
   /** 拖拽结束：回 idle 或 comfortable 或 tried（深夜回 sleepy） */
   handleDragEnd(): void {
     this.stateManager.recordInteraction();
+    this.emotionUpdater?.onDragEnd();
     if (this.timeAwareness.isLateNight()) {
       this.stateManager.tryTransition('sleepy', 'interaction');
       return;

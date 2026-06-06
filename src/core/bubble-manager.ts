@@ -13,11 +13,17 @@ export class BubbleManager {
   private stateManager: StateManager;
   private activityMonitorTimer: ReturnType<typeof setInterval> | null = null;
   private lastActivityBubble: string = '';
+  private onActivityCallback: ((title: string) => void) | null = null;
 
   constructor(mainWindow: BrowserWindow, timeAwareness: TimeAwareness, stateManager: StateManager) {
     this.mainWindow = mainWindow;
     this.timeAwareness = timeAwareness;
     this.stateManager = stateManager;
+  }
+
+  /** 设置活动检测回调 */
+  setOnActivity(callback: (title: string) => void): void {
+    this.onActivityCallback = callback;
   }
 
   /** 启动时发送问候语 */
@@ -47,6 +53,11 @@ export class BubbleManager {
     try {
       const title = await this.getActiveWindowTitle();
       if (!title) return;
+
+      // 通知回调
+      if (this.onActivityCallback) {
+        this.onActivityCallback(title);
+      }
 
       const bubble = this.matchActivity(title);
       if (bubble && bubble !== this.lastActivityBubble) {
