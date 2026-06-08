@@ -8,6 +8,8 @@ import { AIConfigManager } from '../core/ai-config';
 import { AIService } from '../core/ai-service';
 import { ChatManager } from '../core/chat-manager';
 import { getLogger } from '../core/logger';
+import { AppearanceConfigManager } from '../core/appearance-config';
+import { ScreenAnalyzer } from '../core/screen-analyzer';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -18,6 +20,8 @@ let bubbleManager: BubbleManager;
 let aiConfigManager: AIConfigManager;
 let aiService: AIService;
 let chatManager: ChatManager;
+let appearanceConfig: AppearanceConfigManager;
+let screenAnalyzer: ScreenAnalyzer;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -96,6 +100,8 @@ function createWindow(): void {
   aiConfigManager = new AIConfigManager();
   aiService = new AIService(aiConfigManager);
   chatManager = new ChatManager(mainWindow, aiConfigManager, aiService, stateManager, timeAwareness);
+  appearanceConfig = new AppearanceConfigManager();
+  screenAnalyzer = new ScreenAnalyzer(aiConfigManager);
 
   // 连接活动监视到 ChatManager
   bubbleManager.setOnActivity((title) => {
@@ -208,7 +214,8 @@ function setupIPC(): void {
   });
 
   ipcMain.handle('test-ai-connection', async () => {
-    return await aiService?.testConnection();
+    if (!aiService) return { success: false, message: 'AI 服务未初始化' };
+    return await aiService.testConnection();
   });
 
   // 日志相关
@@ -239,6 +246,37 @@ function setupIPC(): void {
       historyCount: chatManager?.getHistoryCount() || 0,
       summary: chatManager?.getSummary() || '',
     };
+  });
+
+  // 外观设置
+  ipcMain.handle('load-appearance-config', () => {
+    return appearanceConfig?.get();
+  });
+
+  ipcMain.on('save-appearance-config', (_event, config: any) => {
+    appearanceConfig?.update(config);
+  });
+
+  ipcMain.on('apply-appearance', (_event, config: any) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    // 调整窗口大小
+    const newSize = config.petSize || 200;
+    mainWindow.setSize(newSize + 50, newSize + 80);
+    // 设置透明度
+    mainWindow.setOpacity(config.opacity ?? 1.0);
+    // 通知渲染进程更新精灵图大小
+    mainWindow.webContents.send('update-pet-size', newSize);
+  });
+
+  // 屏幕分析
+  ipcMain.handle('test-screen-analysis', async () => {
+    if (!screenAnalyzer) return { success: false, message: '屏幕分析服务未初始化' };
+    try {
+      const result = await screenAnalyzer.analyze('测试截屏分析');
+      return { success: true, message: result };
+    } catch (e: any) {
+      return { success: false, message: '测试失败: ' + e.message };
+    }
   });
 }
 

@@ -287,6 +287,13 @@
     window.companion.onShowBubble(function (text: string) {
       showBubble(text);
     });
+
+    // 主进程发来的宠物大小更新
+    // @ts-ignore
+    window.companion.onUpdatePetSize(function (size: number) {
+      companionEl.style.width = size + 'px';
+      companionEl.style.height = size + 'px';
+    });
   }
 
   function setSprite(name: string): void {

@@ -79,14 +79,77 @@
       font-size: 16px;
       color: #999;
     }
+    .alert {
+      display: none;
+    }
+    .toast {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 9999;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.3s, transform 0.3s;
+      max-width: 400px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .toast.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+      border: 1px solid #a5d6a7;
+    }
+    .toast.error {
+      background: #ffebee;
+      color: #c62828;
+      border: 1px solid #ef9a9a;
+    }
   </style>
 </head>
 <body>
   <h1>⚙ 设置</h1>
 
   <div class="section">
-    <h2>API 配置</h2>
+    <h2>外观设置</h2>
     <hr class="divider">
+    <div class="slider-row">
+      <label>宠物大小</label>
+      <input type="range" id="petSize" min="100" max="300" step="5" />
+      <span class="value" id="petSizeVal">200</span>
+    </div>
+    <div class="slider-row">
+      <label>透明度</label>
+      <input type="range" id="opacity" min="0.3" max="1" step="0.05" />
+      <span class="value" id="opacityVal">100%</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="applyAppearanceBtn">应用外观</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>语言模型配置</h2>
+    <hr class="divider">
+    <div class="field">
+      <label>快速选择</label>
+      <select id="langPreset" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff;">
+        <option value="">自定义</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="openai">OpenAI</option>
+        <option value="mimo">小米 MiMo</option>
+        <option value="siliconflow">SiliconFlow</option>
+        <option value="moonshot">Moonshot (Kimi)</option>
+        <option value="zhipu">智谱 GLM</option>
+        <option value="qwen">通义千问</option>
+      </select>
+    </div>
     <div class="field">
       <label>API Key</label>
       <div class="password-wrap">
@@ -97,7 +160,6 @@
     <div class="field">
       <label>API 基础地址</label>
       <input type="text" id="baseURL" placeholder="https://api.deepseek.com/v1" />
-      <div class="hint">如：https://api.deepseek.com/v1</div>
     </div>
     <div class="field">
       <label>模型</label>
@@ -133,6 +195,45 @@
     </div>
   </div>
 
+  <div class="section">
+    <h2>屏幕分析</h2>
+    <hr class="divider">
+    <div class="hint" style="margin-bottom: 12px; color: #666;">输入 "." 开头的消息时自动截屏分析</div>
+    <div class="field">
+      <label>快速选择</label>
+      <select id="visionPreset" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff;">
+        <option value="">自定义</option>
+        <option value="openai-vision">OpenAI GPT-4o-mini</option>
+        <option value="mimo-vision">小米 MiMo VL</option>
+        <option value="siliconflow-vision">SiliconFlow GLM-4V</option>
+        <option value="zhipu-vision">智谱 GLM-4V</option>
+        <option value="qwen-vision">通义千问 VL</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Vision API Key</label>
+      <div class="password-wrap">
+        <input type="password" id="visionApiKey" placeholder="sk-..." />
+        <button class="toggle-pw" id="toggleVisionPw">👁</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Vision API 地址</label>
+      <input type="text" id="visionBaseURL" placeholder="https://api.openai.com/v1" />
+    </div>
+    <div class="field">
+      <label>Vision 模型</label>
+      <input type="text" id="visionModel" placeholder="gpt-4o-mini" />
+    </div>
+    <div class="field">
+      <label>系统提示词</label>
+      <textarea id="visionSystemPrompt" rows="3"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="testVisionBtn">测试截屏分析</button>
+    </div>
+  </div>
+
   <div class="btn-row">
     <button class="btn btn-primary" id="testBtn">测试连接</button>
     <button class="btn btn-secondary" id="saveBtn">保存</button>
@@ -158,6 +259,7 @@
   </div>
 
   <div class="alert" id="alert"></div>
+  <div class="toast" id="toast"></div>
 
   <script>
     // 加载配置
@@ -168,13 +270,29 @@
       document.getElementById('apiKey').value = config.apiKey || '';
       document.getElementById('baseURL').value = config.baseURL || '';
       document.getElementById('model').value = config.model || '';
-      document.getElementById('temperature').value = config.temperature || 0.7;
-      document.getElementById('temperatureVal').textContent = config.temperature || 0.7;
-      document.getElementById('maxTokens').value = config.maxTokens || 2000;
-      document.getElementById('maxTokensVal').textContent = config.maxTokens || 2000;
-      document.getElementById('historyMaxLength').value = config.historyMaxLength || 20;
-      document.getElementById('historyMaxLengthVal').textContent = config.historyMaxLength || 20;
+      document.getElementById('temperature').value = config.temperature ?? 0.7;
+      document.getElementById('temperatureVal').textContent = config.temperature ?? 0.7;
+      document.getElementById('maxTokens').value = config.maxTokens ?? 2000;
+      document.getElementById('maxTokensVal').textContent = config.maxTokens ?? 2000;
+      document.getElementById('historyMaxLength').value = config.historyMaxLength ?? 20;
+      document.getElementById('historyMaxLengthVal').textContent = config.historyMaxLength ?? 20;
       document.getElementById('systemPrompt').value = config.systemPrompt || '';
+      // Vision
+      document.getElementById('visionApiKey').value = config.visionApiKey || '';
+      document.getElementById('visionBaseURL').value = config.visionBaseURL || 'https://api.openai.com/v1';
+      document.getElementById('visionModel').value = config.visionModel || 'gpt-4o-mini';
+      document.getElementById('visionSystemPrompt').value = config.visionSystemPrompt || '你是一个桌面助手，简短描述用户屏幕上的内容。';
+    }
+
+    // 加载外观配置
+    async function loadAppearance() {
+      // @ts-ignore
+      var config = await window.companion.loadAppearanceConfig();
+      if (!config) return;
+      document.getElementById('petSize').value = config.petSize ?? 200;
+      document.getElementById('petSizeVal').textContent = config.petSize ?? 200;
+      document.getElementById('opacity').value = config.opacity ?? 1.0;
+      document.getElementById('opacityVal').textContent = Math.round((config.opacity ?? 1.0) * 100) + '%';
     }
 
     // 滑块实时更新
@@ -182,6 +300,49 @@
       document.getElementById(id).addEventListener('input', function() {
         document.getElementById(id + 'Val').textContent = this.value;
       });
+    });
+
+    // Toast 通知
+    function showToast(message, type) {
+      var toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast ' + type;
+      setTimeout(function() { toast.classList.add('show'); }, 10);
+      setTimeout(function() { toast.classList.remove('show'); }, 4000);
+    }
+
+    // 语言模型预设
+    var langPresets = {
+      'deepseek': { baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+      'openai': { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+      'mimo': { baseURL: 'https://api.xiaomi.com/v1', model: 'MiMo-MoE-RL' },
+      'siliconflow': { baseURL: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3' },
+      'moonshot': { baseURL: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+      'zhipu': { baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash' },
+      'qwen': { baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-turbo' },
+    };
+    document.getElementById('langPreset').addEventListener('change', function() {
+      var p = langPresets[this.value];
+      if (p) {
+        document.getElementById('baseURL').value = p.baseURL;
+        document.getElementById('model').value = p.model;
+      }
+    });
+
+    // Vision 预设
+    var visionPresets = {
+      'openai-vision': { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+      'mimo-vision': { baseURL: 'https://api.xiaomi.com/v1', model: 'MiMo-VL-7B' },
+      'siliconflow-vision': { baseURL: 'https://api.siliconflow.cn/v1', model: 'THUDM/GLM-4.1V-9B-Thinking' },
+      'zhipu-vision': { baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4v-flash' },
+      'qwen-vision': { baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-vl-plus' },
+    };
+    document.getElementById('visionPreset').addEventListener('change', function() {
+      var p = visionPresets[this.value];
+      if (p) {
+        document.getElementById('visionBaseURL').value = p.baseURL;
+        document.getElementById('visionModel').value = p.model;
+      }
     });
 
     // 密码显示切换
@@ -193,23 +354,22 @@
     // 测试连接
     document.getElementById('testBtn').addEventListener('click', async function() {
       var btn = this;
-      var alertEl = document.getElementById('alert');
       btn.disabled = true;
       btn.textContent = '测试中...';
-      alertEl.className = 'alert';
-      alertEl.style.display = 'none';
 
       try {
-        // 先保存当前配置
         saveConfig();
-
+        var startTime = Date.now();
         // @ts-ignore
         var result = await window.companion.testAIConnection();
-        alertEl.textContent = result.message;
-        alertEl.className = 'alert ' + (result.success ? 'success' : 'error');
+        var latency = Date.now() - startTime;
+        if (result && result.success) {
+          showToast('✓ 连接成功 (' + latency + 'ms)', 'success');
+        } else {
+          showToast('✗ ' + (result ? result.message : '返回值为空'), 'error');
+        }
       } catch (e) {
-        alertEl.textContent = '调用失败: ' + (e.message || e);
-        alertEl.className = 'alert error';
+        showToast('✗ 调用失败: ' + (e.message || e), 'error');
       } finally {
         btn.disabled = false;
         btn.textContent = '测试连接';
@@ -226,6 +386,10 @@
         maxTokens: parseInt(document.getElementById('maxTokens').value),
         historyMaxLength: parseInt(document.getElementById('historyMaxLength').value),
         systemPrompt: document.getElementById('systemPrompt').value,
+        visionApiKey: document.getElementById('visionApiKey').value,
+        visionBaseURL: document.getElementById('visionBaseURL').value,
+        visionModel: document.getElementById('visionModel').value,
+        visionSystemPrompt: document.getElementById('visionSystemPrompt').value,
       };
       // @ts-ignore
       window.companion.saveAIConfig(config);
@@ -234,16 +398,9 @@
     document.getElementById('saveBtn').addEventListener('click', function() {
       try {
         saveConfig();
-        var alertEl = document.getElementById('alert');
-        alertEl.textContent = '已保存！';
-        alertEl.className = 'alert success';
-        alertEl.style.display = 'block';
-        setTimeout(function() { alertEl.style.display = 'none'; }, 2000);
+        showToast('✓ 配置已保存', 'success');
       } catch (e) {
-        var alertEl = document.getElementById('alert');
-        alertEl.textContent = '保存失败: ' + (e.message || e);
-        alertEl.className = 'alert error';
-        alertEl.style.display = 'block';
+        showToast('✗ 保存失败: ' + (e.message || e), 'error');
       }
     });
 
@@ -282,8 +439,63 @@
       }
     });
 
+    // 外观设置
+    document.getElementById('petSize').addEventListener('input', function() {
+      document.getElementById('petSizeVal').textContent = this.value;
+    });
+    document.getElementById('opacity').addEventListener('input', function() {
+      document.getElementById('opacityVal').textContent = Math.round(this.value * 100) + '%';
+    });
+    document.getElementById('applyAppearanceBtn').addEventListener('click', function() {
+      var config = {
+        petSize: parseInt(document.getElementById('petSize').value),
+        opacity: parseFloat(document.getElementById('opacity').value),
+      };
+      // @ts-ignore
+      window.companion.saveAppearanceConfig(config);
+      // @ts-ignore
+      window.companion.applyAppearance(config);
+      var alertEl = document.getElementById('alert');
+      alertEl.textContent = '外观已应用！重启后生效。';
+      alertEl.className = 'alert success';
+      alertEl.style.display = 'block';
+      setTimeout(function() { alertEl.style.display = 'none'; }, 2000);
+    });
+
+    // Vision 密码切换
+    document.getElementById('toggleVisionPw').addEventListener('click', function() {
+      var input = document.getElementById('visionApiKey');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    });
+
+    // 测试截屏分析
+    document.getElementById('testVisionBtn').addEventListener('click', async function() {
+      var btn = this;
+      btn.disabled = true;
+      btn.textContent = '截屏分析中...';
+
+      try {
+        saveConfig();
+        var startTime = Date.now();
+        // @ts-ignore
+        var result = await window.companion.testScreenAnalysis();
+        var latency = Date.now() - startTime;
+        if (result && result.success) {
+          showToast('✓ 分析成功 (' + latency + 'ms): ' + (result.message || '').slice(0, 100), 'success');
+        } else {
+          showToast('✗ ' + (result ? result.message : '返回值为空'), 'error');
+        }
+      } catch (e) {
+        showToast('✗ 测试失败: ' + (e.message || e), 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '测试截屏分析';
+      }
+    });
+
     // 初始化
     loadConfig();
+    loadAppearance();
     loadLogPath();
     loadChatInfo();
   </script>

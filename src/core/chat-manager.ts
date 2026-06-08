@@ -6,6 +6,7 @@ import { StateManager } from './state-manager';
 import { EmotionSystem } from './emotion-system';
 import { EmotionUpdater } from './emotion-updater';
 import { TimeAwareness } from './time-awareness';
+import { ScreenAnalyzer } from './screen-analyzer';
 
 export class ChatManager {
   private aiService: AIService;
@@ -15,6 +16,7 @@ export class ChatManager {
   private emotionSystem: EmotionSystem;
   private emotionUpdater: EmotionUpdater;
   private mainWindow: BrowserWindow;
+  private screenAnalyzer: ScreenAnalyzer;
   private isProcessing = false;
   private lastUserInteraction: number = Date.now();
   private proactiveTimer: ReturnType<typeof setInterval> | null = null;
@@ -32,6 +34,7 @@ export class ChatManager {
     this.aiService = aiService;
     this.stateManager = stateManager;
     this.memory = new AIMemory(configManager.getConfigDir());
+    this.screenAnalyzer = new ScreenAnalyzer(configManager);
 
     // 初始化情绪系统
     this.emotionSystem = new EmotionSystem();
@@ -66,6 +69,17 @@ export class ChatManager {
     this.sendBubble('思考中...');
 
     try {
+      // 检查是否为屏幕分析请求（"." 开头）
+      if (userMessage.startsWith('.')) {
+        const screenMessage = userMessage.slice(1).trim() || '描述一下屏幕上有什么';
+        this.sendBubble('正在看屏幕...');
+        const screenResult = await this.screenAnalyzer.analyze(screenMessage);
+        this.sendBubble(screenResult);
+        this.memory.addMessage('user', userMessage);
+        this.memory.addMessage('assistant', screenResult);
+        return;
+      }
+
       // 构建消息数组（含记忆）
       const config = this.configManager.get();
       const systemPrompt = this.memory.buildSystemPrompt(config.systemPrompt, RESPONSE_FORMAT_PROMPT);

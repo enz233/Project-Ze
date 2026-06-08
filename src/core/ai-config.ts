@@ -10,6 +10,11 @@ export interface AIConfig {
   maxTokens: number;
   systemPrompt: string;
   historyMaxLength: number;
+  // Vision（屏幕分析）
+  visionApiKey: string;
+  visionBaseURL: string;
+  visionModel: string;
+  visionSystemPrompt: string;
 }
 
 const DEFAULT_CONFIG: AIConfig = {
@@ -23,6 +28,10 @@ const DEFAULT_CONFIG: AIConfig = {
 你会关心用户但不会过度打扰。你用"我"称呼自己。
 你的回复要简短可爱，一般1-2句话就好。`,
   historyMaxLength: 20,
+  visionApiKey: '',
+  visionBaseURL: 'https://api.openai.com/v1',
+  visionModel: 'gpt-4o-mini',
+  visionSystemPrompt: '你是一个桌面助手，简短描述用户屏幕上的内容。',
 };
 
 export class AIConfigManager {

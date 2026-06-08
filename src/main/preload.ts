@@ -58,6 +58,21 @@ contextBridge.exposeInMainWorld('companion', {
   getChatInfo: (): Promise<any> => {
     return ipcRenderer.invoke('get-chat-info');
   },
+  loadAppearanceConfig: (): Promise<any> => {
+    return ipcRenderer.invoke('load-appearance-config');
+  },
+  saveAppearanceConfig: (config: any) => {
+    ipcRenderer.send('save-appearance-config', config);
+  },
+  applyAppearance: (config: any) => {
+    ipcRenderer.send('apply-appearance', config);
+  },
+  testScreenAnalysis: (): Promise<any> => {
+    return ipcRenderer.invoke('test-screen-analysis');
+  },
+  onUpdatePetSize: (callback: (size: number) => void) => {
+    ipcRenderer.on('update-pet-size', (_event, size) => callback(size));
+  },
   onStateChanged: (callback: (event: any) => void) => {
     ipcRenderer.on('state-changed', (_event, data) => callback(data));
   },
