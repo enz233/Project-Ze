@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
 
-export type TTSMode = 'gpt-sovits' | 'api';
+export type TTSMode = 'gpt-sovits' | 'api' | 'mimo';
 
 export interface TTSConfig {
   on: boolean;
@@ -16,6 +16,12 @@ export interface TTSConfig {
   ttsModel: string;
   ttsVoice: string;
   ttsSpeed: number;
+  // MiMo TTS
+  mimoApiKey: string;
+  mimoBaseURL: string;
+  mimoModel: string;
+  mimoVoice: string;
+  mimoVoiceDesign: string;
 }
 
 const DEFAULT_CONFIG: TTSConfig = {
@@ -28,6 +34,11 @@ const DEFAULT_CONFIG: TTSConfig = {
   ttsModel: 'tts-1',
   ttsVoice: 'alloy',
   ttsSpeed: 1.0,
+  mimoApiKey: '',
+  mimoBaseURL: 'https://api.xiaomi.com/v1',
+  mimoModel: 'mimo-v2.5-tts',
+  mimoVoice: '冰糖',
+  mimoVoiceDesign: '温柔可爱的少女声音，说话轻声细语',
 };
 
 export class TTSConfigManager {

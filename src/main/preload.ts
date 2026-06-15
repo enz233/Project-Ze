@@ -73,8 +73,8 @@ contextBridge.exposeInMainWorld('companion', {
   onUpdatePetSize: (callback: (size: number) => void) => {
     ipcRenderer.on('update-pet-size', (_event, size) => callback(size));
   },
-  onTtsPlay: (callback: (base64: string) => void) => {
-    ipcRenderer.on('tts-play', (_event, base64) => callback(base64));
+  onTtsPlay: (callback: (base64: string, text: string) => void) => {
+    ipcRenderer.on('tts-play', (_event, base64, text) => callback(base64, text));
   },
   onTtsStop: (callback: () => void) => {
     ipcRenderer.on('tts-stop', () => callback());

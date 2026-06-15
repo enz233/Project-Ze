@@ -9,6 +9,7 @@ import { BrowserWindow } from 'electron';
 import { TTSConfigManager, TTSConfig } from './tts-config';
 import { TTSGptSoVits } from './tts-gpt-sovits';
 import { TTSApi } from './tts-api';
+import { TTSMiMo } from './tts-mimo';
 
 export class TTSManager {
   private configManager: TTSConfigManager;
@@ -37,7 +38,7 @@ export class TTSManager {
     try {
       const audioData = await this.synthesize(text, config);
       if (audioData) {
-        await this.play(audioData);
+        await this.play(audioData, text);
       }
     } catch (error: any) {
       console.error('[TTS] 语音合成失败:', error.message);
@@ -58,6 +59,9 @@ export class TTSManager {
       if (config.mode === 'gpt-sovits') {
         const engine = new TTSGptSoVits(config);
         return await engine.synthesize(text);
+      } else if (config.mode === 'mimo') {
+        const engine = new TTSMiMo(config);
+        return await engine.synthesize(text);
       } else {
         const engine = new TTSApi(config);
         return await engine.synthesize(text);
@@ -68,8 +72,8 @@ export class TTSManager {
     }
   }
 
-  /** 发送音频数据到渲染进程播放 */
-  private play(audioData: ArrayBuffer): Promise<void> {
+  /** 发送音频数据到渲染进程播放（附带字幕文字） */
+  private play(audioData: ArrayBuffer, text: string): Promise<void> {
     return new Promise((resolve) => {
       if (!this.mainWindow || this.mainWindow.isDestroyed()) {
         resolve();
@@ -87,8 +91,8 @@ export class TTSManager {
       };
       ipcMain.on('tts-playback-done', handler);
 
-      // 发送到渲染进程
-      this.mainWindow.webContents.send('tts-play', base64);
+      // 发送到渲染进程（音频 + 字幕文字）
+      this.mainWindow.webContents.send('tts-play', base64, text);
 
       // 超时保护（30秒）
       setTimeout(() => {
@@ -115,6 +119,9 @@ export class TTSManager {
       let ok = false;
       if (config.mode === 'gpt-sovits') {
         const engine = new TTSGptSoVits(config);
+        ok = await engine.test();
+      } else if (config.mode === 'mimo') {
+        const engine = new TTSMiMo(config);
         ok = await engine.test();
       } else {
         const engine = new TTSApi(config);

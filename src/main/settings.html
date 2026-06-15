@@ -286,6 +286,7 @@
         <select id="ttsMode">
           <option value="gpt-sovits">GPT-SoVITS（本地模型）</option>
           <option value="api">外部 TTS API</option>
+          <option value="mimo">小米 MiMo TTS</option>
         </select>
       </div>
 
@@ -333,6 +334,49 @@
           <label>语速</label>
           <input type="range" id="ttsSpeed" min="0.5" max="2" step="0.1" />
           <span class="value" id="ttsSpeedVal">1.0</span>
+        </div>
+      </div>
+
+      <div id="mimoSection" style="display: none;">
+        <h2 style="margin-top: 16px;">小米 MiMo TTS 配置</h2>
+        <hr class="divider">
+        <div class="field">
+          <label>API Key</label>
+          <div class="password-wrap">
+            <input type="password" id="mimoApiKey" placeholder="MiMo API Key" />
+            <button class="toggle-pw" id="toggleMimoPw">👁</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>API 地址</label>
+          <input type="text" id="mimoBaseURL" placeholder="https://api.xiaomi.com/v1" />
+        </div>
+        <div class="field">
+          <label>模型</label>
+          <select id="mimoModel">
+            <option value="mimo-v2.5-tts">mimo-v2.5-tts（内置音色）</option>
+            <option value="mimo-v2.5-tts-voicedesign">mimo-v2.5-tts-voicedesign（音色设计）</option>
+            <option value="mimo-v2.5-tts-voiceclone">mimo-v2.5-tts-voiceclone（声音克隆）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>内置音色</label>
+          <select id="mimoVoice">
+            <option value="冰糖">冰糖（中文女声）</option>
+            <option value="茉莉">茉莉（中文女声）</option>
+            <option value="苏打">苏打（中文男声）</option>
+            <option value="白桦">白桦（中文男声）</option>
+            <option value="Mia">Mia（英文女声）</option>
+            <option value="Chloe">Chloe（英文女声）</option>
+            <option value="Milo">Milo（英文男声）</option>
+            <option value="Dean">Dean（英文男声）</option>
+          </select>
+          <div class="hint">仅 mimo-v2.5-tts 模型有效</div>
+        </div>
+        <div class="field">
+          <label>音色描述（VoiceDesign）</label>
+          <textarea id="mimoVoiceDesign" rows="2" placeholder="温柔可爱的少女声音，说话轻声细语"></textarea>
+          <div class="hint">仅 mimo-v2.5-tts-voicedesign 模型有效</div>
         </div>
       </div>
 
@@ -429,6 +473,12 @@
       document.getElementById('ttsVoice').value = config.ttsVoice || 'alloy';
       document.getElementById('ttsSpeed').value = config.ttsSpeed ?? 1.0;
       document.getElementById('ttsSpeedVal').textContent = config.ttsSpeed ?? 1.0;
+      // MiMo
+      document.getElementById('mimoApiKey').value = config.mimoApiKey || '';
+      document.getElementById('mimoBaseURL').value = config.mimoBaseURL || 'https://api.xiaomi.com/v1';
+      document.getElementById('mimoModel').value = config.mimoModel || 'mimo-v2.5-tts';
+      document.getElementById('mimoVoice').value = config.mimoVoice || '冰糖';
+      document.getElementById('mimoVoiceDesign').value = config.mimoVoiceDesign || '温柔可爱的少女声音，说话轻声细语';
       toggleTtsSections();
     }
 
@@ -479,6 +529,11 @@
         ttsModel: document.getElementById('ttsModel').value,
         ttsVoice: document.getElementById('ttsVoice').value,
         ttsSpeed: parseFloat(document.getElementById('ttsSpeed').value),
+        mimoApiKey: document.getElementById('mimoApiKey').value,
+        mimoBaseURL: document.getElementById('mimoBaseURL').value,
+        mimoModel: document.getElementById('mimoModel').value,
+        mimoVoice: document.getElementById('mimoVoice').value,
+        mimoVoiceDesign: document.getElementById('mimoVoiceDesign').value,
       };
       // @ts-ignore
       window.companion.saveTTSConfig(config);
@@ -488,6 +543,7 @@
       var mode = document.getElementById('ttsMode').value;
       document.getElementById('sovitsSection').style.display = mode === 'gpt-sovits' ? 'block' : 'none';
       document.getElementById('apiSection').style.display = mode === 'api' ? 'block' : 'none';
+      document.getElementById('mimoSection').style.display = mode === 'mimo' ? 'block' : 'none';
     }
 
     // ========== 滑块实时更新 ==========
@@ -637,6 +693,10 @@
     // TTS 密码切换
     document.getElementById('toggleTtsPw').addEventListener('click', function() {
       var input = document.getElementById('ttsApiKey');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    });
+    document.getElementById('toggleMimoPw').addEventListener('click', function() {
+      var input = document.getElementById('mimoApiKey');
       input.type = input.type === 'password' ? 'text' : 'password';
     });
 

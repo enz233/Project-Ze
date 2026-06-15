@@ -295,9 +295,13 @@
       companionEl.style.height = size + 'px';
     });
 
-    // TTS 语音播放
+    // TTS 语音播放（附带字幕）
     // @ts-ignore
-    window.companion.onTtsPlay(function (base64: string) {
+    window.companion.onTtsPlay(function (base64: string, text: string) {
+      // 显示字幕气泡
+      if (text) {
+        showBubble(text);
+      }
       var audioSrc = 'data:audio/wav;base64,' + base64;
       var audio = new Audio(audioSrc);
       audio.onended = function () {
