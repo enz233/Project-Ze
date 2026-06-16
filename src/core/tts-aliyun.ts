@@ -2,11 +2,11 @@
  * 阿里云百炼 TTS 引擎
  *
  * 调用阿里云百炼 qwen3-tts 系列模型
- * API: POST {baseURL}/services/aigc/text2audio/generation
+ * API: POST {baseURL}/chat/completions（OpenAI 兼容格式）
  *
- * 支持的模型：
- * - qwen3-tts-flash（默认）
- * - qwen3-tts-instruct-flash（支持指令控制）
+ * 支持：
+ * - qwen3-tts-flash（系统音色）
+ * - qwen3-tts-vc-2026-01-22（自定义音色，需先注册）
  */
 
 import { TTSConfig } from './tts-config';
@@ -20,20 +20,29 @@ export class TTSAliyun {
 
   /** 合成语音，返回音频 ArrayBuffer */
   async synthesize(text: string): Promise<ArrayBuffer> {
-    const url = `${this.config.aliyunBaseURL}/api/v1/services/aigc/text2audio/generation`;
+    // DashScope MultiModalConversation 端点
+    const baseURL = this.config.aliyunBaseURL || 'https://dashscope.aliyuncs.com/api/v1';
+    const url = baseURL + '/services/aigc/multimodal-generation/generation';
+    const voice = this.config.aliyunVoice || 'Cherry';
 
     const body: any = {
       model: this.config.aliyunModel || 'qwen3-tts-flash',
       input: {
         text: text,
-        voice: this.config.aliyunVoice || 'Cherry',
+        voice: voice,
+      },
+      parameters: {
+        format: 'wav',
       },
     };
 
-    // 语言类型（可选）
+    // 语言类型
     if (this.config.aliyunLanguage && this.config.aliyunLanguage !== 'auto') {
       body.input.language_type = this.config.aliyunLanguage;
     }
+
+    console.log('[Aliyun TTS] 请求 URL:', url);
+    console.log('[Aliyun TTS] 请求体:', JSON.stringify(body, null, 2));
 
     const response = await fetch(url, {
       method: 'POST',
@@ -44,14 +53,18 @@ export class TTSAliyun {
       body: JSON.stringify(body),
     });
 
+    console.log('[Aliyun TTS] 响应状态:', response.status);
+
     if (!response.ok) {
       const error = await response.text();
+      console.error('[Aliyun TTS] 错误响应:', error);
       throw new Error(`阿里云 TTS 请求失败 (${response.status}): ${error}`);
     }
 
     const data = await response.json() as any;
+    console.log('[Aliyun TTS] 响应数据:', JSON.stringify(data).slice(0, 500));
 
-    // 响应格式：output.audio.data (base64) 或 output.audio.url
+    // DashScope 响应格式：output.audio.data (base64) 或 output.audio.url
     const audio = data.output?.audio;
     if (!audio) {
       throw new Error('阿里云 TTS 未返回音频数据');
@@ -70,9 +83,7 @@ export class TTSAliyun {
     if (audio.url) {
       // 下载音频文件
       const audioResponse = await fetch(audio.url);
-      if (!audioResponse.ok) {
-        throw new Error('下载音频失败');
-      }
+      if (!audioResponse.ok) throw new Error('下载音频失败');
       return await audioResponse.arrayBuffer();
     }
 

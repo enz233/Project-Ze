@@ -33,6 +33,7 @@ export class TTSManager {
   /** 合成并播放语音 */
   async speak(text: string): Promise<void> {
     const config = this.configManager.get();
+    console.log('[TTS] speak 调用, on:', config.on, 'mode:', config.mode, 'text:', text.slice(0, 30));
     if (!config.on) return;
 
     // 如果正在播放，加入队列

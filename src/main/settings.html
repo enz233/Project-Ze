@@ -411,33 +411,31 @@
         </div>
         <div class="field">
           <label>API 地址</label>
-          <input type="text" id="aliyunBaseURL" placeholder="https://dashscope.aliyuncs.com" />
+          <input type="text" id="aliyunBaseURL" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions" />
         </div>
         <div class="field">
           <label>模型</label>
-          <select id="aliyunModel">
+          <select id="aliyunModel" onchange="document.getElementById('aliyunCustomModelWrap').style.display = this.value==='_custom'?'block':'none'">
             <option value="qwen3-tts-flash">qwen3-tts-flash</option>
             <option value="qwen3-tts-instruct-flash">qwen3-tts-instruct-flash（指令控制）</option>
             <option value="_custom">自定义...</option>
           </select>
-        </div>
-        <div class="field" id="aliyunCustomModelField" style="display: none;">
-          <label>自定义模型名</label>
-          <input type="text" id="aliyunCustomModel" placeholder="输入模型名称" />
+          <div id="aliyunCustomModelWrap" style="display:none; margin-top:8px;">
+            <input type="text" id="aliyunCustomModel" placeholder="输入自定义模型名" />
+          </div>
         </div>
         <div class="field">
           <label>音色</label>
-          <select id="aliyunVoice">
+          <select id="aliyunVoice" onchange="document.getElementById('aliyunCustomVoiceWrap').style.display = this.value==='_custom'?'block':'none'">
             <option value="Cherry">Cherry（中文女声）</option>
             <option value="Ethan">Ethan（中文男声）</option>
             <option value="Serena">Serena（英文女声）</option>
             <option value="Caleb">Caleb（英文男声）</option>
             <option value="_custom">自定义...</option>
           </select>
-        </div>
-        <div class="field" id="aliyunCustomVoiceField" style="display: none;">
-          <label>自定义音色名</label>
-          <input type="text" id="aliyunCustomVoice" placeholder="输入音色名称" />
+          <div id="aliyunCustomVoiceWrap" style="display:none; margin-top:8px;">
+            <input type="text" id="aliyunCustomVoice" placeholder="输入自定义音色名" />
+          </div>
         </div>
         <div class="field">
           <label>语言</label>
@@ -553,7 +551,7 @@
       document.getElementById('mimoVoiceDesign').value = config.mimoVoiceDesign || '温柔可爱的少女声音，说话轻声细语';
       // 阿里云
       document.getElementById('aliyunApiKey').value = config.aliyunApiKey || '';
-      document.getElementById('aliyunBaseURL').value = config.aliyunBaseURL || 'https://dashscope.aliyuncs.com';
+      document.getElementById('aliyunBaseURL').value = config.aliyunBaseURL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
       var aliyunModel = config.aliyunModel || 'qwen3-tts-flash';
       var modelSelect = document.getElementById('aliyunModel');
       var modelOption = modelSelect.querySelector('option[value="' + aliyunModel + '"]');
@@ -562,7 +560,7 @@
       } else {
         modelSelect.value = '_custom';
         document.getElementById('aliyunCustomModel').value = aliyunModel;
-        document.getElementById('aliyunCustomModelField').style.display = 'block';
+        document.getElementById('aliyunCustomModelWrap').style.display = 'block';
       }
       var aliyunVoice = config.aliyunVoice || 'Cherry';
       var voiceSelect = document.getElementById('aliyunVoice');
@@ -572,7 +570,7 @@
       } else {
         voiceSelect.value = '_custom';
         document.getElementById('aliyunCustomVoice').value = aliyunVoice;
-        document.getElementById('aliyunCustomVoiceField').style.display = 'block';
+        document.getElementById('aliyunCustomVoiceWrap').style.display = 'block';
       }
       document.getElementById('aliyunLanguage').value = config.aliyunLanguage || 'auto';
       toggleTtsSections();
@@ -580,11 +578,14 @@
 
     async function loadChatInfo() {
       try {
+        console.log('[Settings] 加载对话信息...');
         // @ts-ignore
         var info = await window.companion.getChatInfo();
-        document.getElementById('historyCount').textContent = '历史消息：' + info.historyCount + ' 条';
-        document.getElementById('memorySummary').textContent = '记忆摘要：' + (info.summary || '（暂无，累积50条对话后自动生成）');
+        console.log('[Settings] 对话信息:', info);
+        document.getElementById('historyCount').textContent = '历史消息：' + (info ? info.historyCount : 0) + ' 条';
+        document.getElementById('memorySummary').textContent = '记忆摘要：' + ((info && info.summary) || '（暂无，累积50条对话后自动生成）');
       } catch (e) {
+        console.error('[Settings] 加载对话信息失败:', e);
         document.getElementById('historyCount').textContent = '历史消息：加载失败';
       }
     }
@@ -615,32 +616,41 @@
     }
 
     function saveTTSConfig() {
+      var getVal = function(id, fallback) {
+        var el = document.getElementById(id);
+        return el ? el.value : (fallback || '');
+      };
+      var getChecked = function(id) {
+        var el = document.getElementById(id);
+        return el ? el.checked : false;
+      };
+      var getNum = function(id, fallback) {
+        var el = document.getElementById(id);
+        return el ? parseFloat(el.value) : (fallback || 0);
+      };
+
       var config = {
-        on: document.getElementById('ttsOn').checked,
-        ttsLanguage: document.getElementById('ttsLanguage').value,
-        subtitleLanguage: document.getElementById('subtitleLanguage').value,
-        mode: document.getElementById('ttsMode').value,
-        gptSovitsURL: document.getElementById('gptSovitsURL').value,
-        gptSovitsTextLang: document.getElementById('gptSovitsTextLang').value,
-        ttsApiKey: document.getElementById('ttsApiKey').value,
-        ttsBaseURL: document.getElementById('ttsBaseURL').value,
-        ttsModel: document.getElementById('ttsModel').value,
-        ttsVoice: document.getElementById('ttsVoice').value,
-        ttsSpeed: parseFloat(document.getElementById('ttsSpeed').value),
-        mimoApiKey: document.getElementById('mimoApiKey').value,
-        mimoBaseURL: document.getElementById('mimoBaseURL').value,
-        mimoModel: document.getElementById('mimoModel').value,
-        mimoVoice: document.getElementById('mimoVoice').value,
-        mimoVoiceDesign: document.getElementById('mimoVoiceDesign').value,
-        aliyunApiKey: document.getElementById('aliyunApiKey').value,
-        aliyunBaseURL: document.getElementById('aliyunBaseURL').value,
-        aliyunModel: document.getElementById('aliyunModel').value === '_custom'
-          ? document.getElementById('aliyunCustomModel').value
-          : document.getElementById('aliyunModel').value,
-        aliyunVoice: document.getElementById('aliyunVoice').value === '_custom'
-          ? document.getElementById('aliyunCustomVoice').value
-          : document.getElementById('aliyunVoice').value,
-        aliyunLanguage: document.getElementById('aliyunLanguage').value,
+        on: getChecked('ttsOn'),
+        ttsLanguage: getVal('ttsLanguage', 'zh'),
+        subtitleLanguage: getVal('subtitleLanguage', 'zh'),
+        mode: getVal('ttsMode', 'gpt-sovits'),
+        gptSovitsURL: getVal('gptSovitsURL', 'http://127.0.0.1:9880'),
+        gptSovitsTextLang: getVal('gptSovitsTextLang', 'zh'),
+        ttsApiKey: getVal('ttsApiKey'),
+        ttsBaseURL: getVal('ttsBaseURL', 'https://api.openai.com/v1'),
+        ttsModel: getVal('ttsModel', 'tts-1'),
+        ttsVoice: getVal('ttsVoice', 'alloy'),
+        ttsSpeed: getNum('ttsSpeed', 1.0),
+        mimoApiKey: getVal('mimoApiKey'),
+        mimoBaseURL: getVal('mimoBaseURL', 'https://api.xiaomi.com/v1'),
+        mimoModel: getVal('mimoModel', 'mimo-v2.5-tts'),
+        mimoVoice: getVal('mimoVoice', '冰糖'),
+        mimoVoiceDesign: getVal('mimoVoiceDesign', '温柔可爱的少女声音，说话轻声细语'),
+        aliyunApiKey: getVal('aliyunApiKey'),
+        aliyunBaseURL: getVal('aliyunBaseURL', 'https://dashscope.aliyuncs.com'),
+        aliyunModel: getVal('aliyunModel') === '_custom' ? getVal('aliyunCustomModel') : getVal('aliyunModel', 'qwen3-tts-flash'),
+        aliyunVoice: getVal('aliyunVoice') === '_custom' ? getVal('aliyunCustomVoice') : getVal('aliyunVoice', 'Cherry'),
+        aliyunLanguage: getVal('aliyunLanguage', 'auto'),
       };
       // @ts-ignore
       window.companion.saveTTSConfig(config);
@@ -797,9 +807,6 @@
     document.getElementById('ttsSpeed').addEventListener('input', function() {
       document.getElementById('ttsSpeedVal').textContent = parseFloat(this.value).toFixed(1);
     });
-    document.getElementById('aliyunSpeechRate').addEventListener('input', function() {
-      document.getElementById('aliyunSpeechRateVal').textContent = parseFloat(this.value).toFixed(1);
-    });
 
     // TTS 密码切换
     document.getElementById('toggleTtsPw').addEventListener('click', function() {
@@ -814,23 +821,23 @@
       var input = document.getElementById('aliyunApiKey');
       input.type = input.type === 'password' ? 'text' : 'password';
     });
-    document.getElementById('aliyunVoice').addEventListener('change', function() {
-      var show = this.value === '_custom';
-      document.getElementById('aliyunCustomVoiceField').style.display = show ? 'block' : 'none';
-    });
-    document.getElementById('aliyunModel').addEventListener('change', function() {
-      var show = this.value === '_custom';
-      document.getElementById('aliyunCustomModelField').style.display = show ? 'block' : 'none';
-    });
 
     // 保存 TTS 配置
     document.getElementById('saveTtsBtn').addEventListener('click', function() {
-      try { saveTTSConfig(); showToast('✓ 语音配置已保存', 'success'); }
-      catch (e) { showToast('✗ 保存失败: ' + (e.message || e), 'error'); }
+      console.log('[Settings] TTS 保存按钮点击');
+      try {
+        saveTTSConfig();
+        console.log('[Settings] TTS 配置已保存');
+        showToast('✓ 语音配置已保存', 'success');
+      } catch (e) {
+        console.error('[Settings] TTS 保存失败:', e);
+        showToast('✗ 保存失败: ' + (e.message || e), 'error');
+      }
     });
 
     // 测试 TTS
     document.getElementById('testTtsBtn').addEventListener('click', async function() {
+      console.log('[Settings] TTS 测试按钮点击');
       var btn = this;
       btn.disabled = true; btn.textContent = '测试中...';
       try {
@@ -839,12 +846,14 @@
         // @ts-ignore
         var result = await window.companion.testTTS();
         var latency = Date.now() - startTime;
+        console.log('[Settings] TTS 测试结果:', result);
         if (result && result.success) {
           showToast('✓ TTS 连接成功 (' + latency + 'ms)', 'success');
         } else {
           showToast('✗ ' + (result ? result.message : '返回值为空'), 'error');
         }
       } catch (e) {
+        console.error('[Settings] TTS 测试失败:', e);
         showToast('✗ 测试失败: ' + (e.message || e), 'error');
       } finally {
         btn.disabled = false; btn.textContent = '测试语音';

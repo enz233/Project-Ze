@@ -123,13 +123,17 @@ html, body {
   top: 0;
   left: 0;
   transform: translateX(-50%);
+  max-width: 200px;
   background: rgba(255, 255, 255, 0.92);
   color: #4a4a4a;
   padding: 5px 10px;
   border-radius: 10px;
   font-size: 12px;
   font-family: 'Microsoft YaHei', sans-serif;
-  white-space: nowrap;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  text-align: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   opacity: 0;
   transition: opacity 0.5s ease;

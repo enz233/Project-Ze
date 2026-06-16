@@ -321,6 +321,12 @@ function createSettingsWindow(): void {
   });
   settingsWindow.loadFile(path.join(__dirname, '..', '..', 'src', 'main', 'settings.html'));
   settingsWindow.on('closed', () => { settingsWindow = null; });
+  // F12 打开 DevTools
+  settingsWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.key === 'F12' && input.type === 'keyDown') {
+      settingsWindow?.webContents.openDevTools({ mode: 'detach' });
+    }
+  });
 }
 
 function stopDragPoll(): void {

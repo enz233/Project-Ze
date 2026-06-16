@@ -51,7 +51,7 @@ const DEFAULT_CONFIG: TTSConfig = {
   mimoVoice: '冰糖',
   mimoVoiceDesign: '温柔可爱的少女声音，说话轻声细语',
   aliyunApiKey: '',
-  aliyunBaseURL: 'https://dashscope.aliyuncs.com',
+  aliyunBaseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
   aliyunModel: 'qwen3-tts-flash',
   aliyunVoice: 'Cherry',
   aliyunLanguage: 'auto',

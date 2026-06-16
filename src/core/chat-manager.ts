@@ -104,29 +104,38 @@ export class ChatManager {
         // 流式回调（目前不处理中间结果）
       });
 
-      // 解析响应
+      // 解析响应并拆分长文本
       const parsedItems = this.parseResponse(fullResponse);
-
-      if (parsedItems.length === 0) {
-        const rawText = fullResponse || '...';
-        this.sendBubble(rawText.slice(0, 100));
-      } else {
-        for (let i = 0; i < parsedItems.length; i++) {
-          if (i > 0) {
-            await this.delay(1500 + Math.random() * 1000);
-          }
-          this.sendBubble(parsedItems[i]);
+      const rawTexts = parsedItems.length > 0 ? parsedItems : [fullResponse || ''];
+      const texts: string[] = [];
+      for (const t of rawTexts) {
+        // 超过 30 字自动拆分
+        if (t.length > 30) {
+          const parts = this.splitText(t, 30);
+          texts.push(...parts);
+        } else {
+          texts.push(t);
         }
       }
 
       // 保存 AI 回复到历史
       this.memory.addMessage('assistant', fullResponse);
 
-      // TTS 语音播放
+      // TTS 模式：只显示带音频的气泡（TTS 播放时自动显示字幕）
+      // 非 TTS 模式：直接显示气泡
       if (this.ttsManager) {
-        const texts = parsedItems.length > 0 ? parsedItems : [fullResponse || ''];
-        for (const text of texts) {
-          await this.ttsManager.speak(text.slice(0, 200)); // 限制长度
+        for (let i = 0; i < texts.length; i++) {
+          if (i > 0) {
+            await this.delay(1500 + Math.random() * 1000);
+          }
+          await this.ttsManager.speak(texts[i].slice(0, 200));
+        }
+      } else {
+        for (let i = 0; i < texts.length; i++) {
+          if (i > 0) {
+            await this.delay(1500 + Math.random() * 1000);
+          }
+          this.sendBubble(texts[i]);
         }
       }
 
@@ -271,6 +280,36 @@ export class ChatManager {
       }
     }
     return items;
+  }
+
+  /** 拆分长文本，按标点或字数拆分 */
+  private splitText(text: string, maxLen: number): string[] {
+    const parts: string[] = [];
+    // 先按中文标点拆分
+    const sentences = text.split(/([。！？，；：、\n])/);
+    let current = '';
+    for (const s of sentences) {
+      if (current.length + s.length > maxLen && current.length > 0) {
+        parts.push(current.trim());
+        current = '';
+      }
+      current += s;
+    }
+    if (current.trim()) {
+      parts.push(current.trim());
+    }
+    // 如果还有超长的，硬切
+    const result: string[] = [];
+    for (const p of parts) {
+      if (p.length > maxLen) {
+        for (let i = 0; i < p.length; i += maxLen) {
+          result.push(p.slice(i, i + maxLen));
+        }
+      } else {
+        result.push(p);
+      }
+    }
+    return result.length > 0 ? result : [text];
   }
 
   /** 发送气泡到渲染进程 */
