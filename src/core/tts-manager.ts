@@ -78,11 +78,16 @@ export class TTSManager {
 
       // 3. 按顺序播放（第一段立即开始）
       for (let i = 0; i < audioResults.length; i++) {
+        // 检查是否被中断
+        if (!this.isSpeaking) {
+          console.log('[TTS] speakAll interrupted');
+          break;
+        }
         if (audioResults[i]) {
           await this.play(audioResults[i]!, prepared[i].subtitleText);
         }
-        // 段间停顿
-        if (i < audioResults.length - 1) {
+        // 段间停顿（检查中断）
+        if (i < audioResults.length - 1 && this.isSpeaking) {
           await this.delay(800 + Math.random() * 400);
         }
       }

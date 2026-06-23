@@ -316,6 +316,10 @@ function setupIPC(): void {
   ipcMain.handle('test-tts', async () => {
     return await ttsManager?.test();
   });
+
+  ipcMain.on('tts-stop', () => {
+    ttsManager?.stop();
+  });
 }
 
 function createSettingsWindow(): void {

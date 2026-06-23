@@ -63,6 +63,7 @@
   var dragFirstMove = false;
   var isDragVisualActive = false; // 拖拽视觉是否激活（mousedown到mouseup之间）
   var sleepyAnimRunning = false;
+  var justDragged = false; // 刚完成拖拽，忽略接下来的 click
 
   // 交互气泡相关
   var clickTimes: number[] = [];
@@ -121,10 +122,16 @@
       dragAccumX = 0;
       dragAccumY = 0;
       currentDragDirection = null;
-      // 点击立即显示 dragged，打断当前气泡
+      // 打断当前 TTS 播放
+      // @ts-ignore
+      window.companion.sendTtsStop();
+      // 点击立即显示 dragged
       setSprite('dragged');
       companionEl.className = 'dragged';
-      showBubble('哇！');
+      subtitleActive = false; // 清除字幕标记
+      showBubble('！');
+      // 播放随机音效
+      playRandomVoice();
       // @ts-ignore
       window.companion.sendDragStart();
 
@@ -164,9 +171,12 @@
         isDragVisualActive = false;
         stopDragAnim();
         dragStarted = false;
+        justDragged = true;
         if (dragBubbleTimer) { clearTimeout(dragBubbleTimer); dragBubbleTimer = null; }
         // @ts-ignore
         window.companion.sendDragEnd();
+        // 100ms 后清除标记
+        setTimeout(function () { justDragged = false; }, 100);
       }
     });
   }
@@ -259,6 +269,18 @@
     });
   }
 
+  /** 播放随机音效 */
+  function playRandomVoice(): void {
+    if (!SPRITE_DIR) return;
+    // 音效文件在 sprites 同级的 voice 目录
+    var voiceDir = SPRITE_DIR.replace('/sprites/', '/voice/').replace('\\sprites\\', '\\voice\\');
+    var voices = ['1049dfd1900d4a62bce39003b6508865', '02898d44b0ec460fb645a83856d6f4d8', '08612173a15c4b1da649de8f14ac44dd'];
+    var chosen = voices[Math.floor(Math.random() * voices.length)];
+    var audioSrc = voiceDir + chosen + '.wav';
+    var audio = new Audio(audioSrc);
+    audio.play().catch(function () { /* ignore */ });
+  }
+
   function setupCursorTracking(): void {
     document.addEventListener('mousemove', function (e: MouseEvent) {
       // @ts-ignore
@@ -266,6 +288,9 @@
     });
 
     companionEl.addEventListener('click', function () {
+      // 刚完成拖拽，跳过点击
+      if (justDragged) return;
+
       // @ts-ignore
       window.companion.sendClick();
 
@@ -335,8 +360,11 @@
 
     // @ts-ignore
     window.companion.onTtsStop(function () {
-      // 停止所有音频播放（简单实现）
-      document.querySelectorAll('audio').forEach(function (a) { a.pause(); });
+      // 停止所有音频播放，并触发 ended 事件
+      document.querySelectorAll('audio').forEach(function (a) {
+        a.pause();
+        a.dispatchEvent(new Event('ended'));
+      });
     });
   }
 
@@ -760,9 +788,19 @@
     bubbleEl.style.top = (rect.top - 35) + 'px';
   }
 
+  var bubbleHideTimeout: ReturnType<typeof setTimeout> | null = null;
+  var subtitleActive = false; // 字幕正在播放
+
   function showBubble(text: string): void {
+    // 字幕播放期间，普通气泡不能覆盖
+    if (subtitleActive) return;
+
     if (bubbleTimeout) {
       clearTimeout(bubbleTimeout);
+    }
+    if (bubbleHideTimeout) {
+      clearTimeout(bubbleHideTimeout);
+      bubbleHideTimeout = null;
     }
 
     updateBubblePosition();
@@ -772,15 +810,20 @@
 
     bubbleTimeout = setTimeout(function () {
       bubbleEl.classList.remove('visible');
-      setTimeout(function () { bubbleEl.classList.add('hidden'); }, 500);
+      bubbleHideTimeout = setTimeout(function () { bubbleEl.classList.add('hidden'); }, 500);
     }, 3000);
   }
 
   /** 显示字幕（不自动隐藏，等 hideSubtitle 调用） */
   function showSubtitle(text: string): void {
+    subtitleActive = true;
     if (bubbleTimeout) {
       clearTimeout(bubbleTimeout);
       bubbleTimeout = null;
+    }
+    if (bubbleHideTimeout) {
+      clearTimeout(bubbleHideTimeout);
+      bubbleHideTimeout = null;
     }
     updateBubblePosition();
     bubbleEl.textContent = text;
@@ -790,6 +833,7 @@
 
   /** 隐藏字幕 */
   function hideSubtitle(): void {
+    subtitleActive = false;
     bubbleEl.classList.remove('visible');
     setTimeout(function () { bubbleEl.classList.add('hidden'); }, 300);
   }

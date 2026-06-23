@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld('companion', {
   onTtsStop: (callback: () => void) => {
     ipcRenderer.on('tts-stop', () => callback());
   },
+  sendTtsStop: () => {
+    ipcRenderer.send('tts-stop');
+  },
   sendTtsPlaybackDone: () => {
     ipcRenderer.send('tts-playback-done');
   },
