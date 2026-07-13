@@ -19,6 +19,20 @@ interface AppUsage {
   description: string;  // Vision API 返回的描述（可选）
 }
 
+interface InteractionStats {
+  count: number;                  // 该类互动累计次数
+  firstAt: number;                // 第一次发生时间
+  lastAt: number;                 // 最近发生时间
+  byHour: Record<string, number>; // 按小时粗略记录习惯
+}
+
+interface InteractionRecord {
+  type: string;                   // chat / drag / click / app 等
+  detail: string;                 // 简短描述，避免存隐私长文本
+  timestamp: number;
+  state?: string;
+}
+
 interface MemoryData {
   summary: string;
   lastUpdated: number;
@@ -32,11 +46,14 @@ interface MemoryData {
   totalInteractions: number;      // 总互动次数
   todayInteractions: number;      // 今日互动次数
   todayDate: string;              // 今日日期（用于重置每日计数）
+  interactionStats: Record<string, InteractionStats>; // 轻量互动习惯
+  recentInteractions: InteractionRecord[];            // 最近互动轨迹
 }
 
 const SUMMARY_THRESHOLD = 50;
 const SUMMARY_REQUEST_COUNT = 20;
 const MAX_SUMMARY_LENGTH = 200;
+const MAX_RECENT_INTERACTIONS = 40;
 
 export class AIMemory {
   private historyPath: string;
@@ -84,14 +101,47 @@ export class AIMemory {
       if (fs.existsSync(this.memoryPath)) {
         const raw = fs.readFileSync(this.memoryPath, 'utf-8');
         const data = JSON.parse(raw);
-        // 兼容旧版本：没有 appUsage 字段时初始化
-        if (!data.appUsage) data.appUsage = {};
-        return data;
+        return this.normalizeMemoryData(data);
       }
     } catch (e) {
       console.error('[AIMemory] 加载记忆失败:', e);
     }
-    return { summary: '', lastUpdated: 0, totalMessages: 0, appUsage: {}, affection: 50, familiarity: 10, affectionUpdated: 0, familiarityUpdated: 0, firstSeen: Date.now(), totalInteractions: 0, todayInteractions: 0, todayDate: '' };
+    return this.createDefaultMemory();
+  }
+
+  private createDefaultMemory(): MemoryData {
+    return {
+      summary: '',
+      lastUpdated: 0,
+      totalMessages: 0,
+      appUsage: {},
+      affection: 50,
+      familiarity: 10,
+      affectionUpdated: 0,
+      familiarityUpdated: 0,
+      firstSeen: Date.now(),
+      totalInteractions: 0,
+      todayInteractions: 0,
+      todayDate: '',
+      interactionStats: {},
+      recentInteractions: [],
+    };
+  }
+
+  /** 兼容旧版本记忆文件，避免缺字段导致运行期报错 */
+  private normalizeMemoryData(data: Partial<MemoryData>): MemoryData {
+    const defaults = this.createDefaultMemory();
+    return {
+      ...defaults,
+      ...data,
+      appUsage: data.appUsage && typeof data.appUsage === 'object' ? data.appUsage : {},
+      interactionStats: data.interactionStats && typeof data.interactionStats === 'object' ? data.interactionStats : {},
+      recentInteractions: Array.isArray(data.recentInteractions) ? data.recentInteractions.slice(-MAX_RECENT_INTERACTIONS) : [],
+      affection: typeof data.affection === 'number' ? data.affection : defaults.affection,
+      familiarity: typeof data.familiarity === 'number' ? data.familiarity : defaults.familiarity,
+      firstSeen: typeof data.firstSeen === 'number' ? data.firstSeen : defaults.firstSeen,
+      todayDate: typeof data.todayDate === 'string' ? data.todayDate : defaults.todayDate,
+    };
   }
 
   saveMemory(): void {
@@ -132,7 +182,7 @@ export class AIMemory {
 
   clearAll(): void {
     this.history = { messages: [], sinceLastSummary: 0 };
-    this.memory = { summary: '', lastUpdated: 0, totalMessages: 0, appUsage: {}, affection: 50, familiarity: 10, affectionUpdated: 0, familiarityUpdated: 0, firstSeen: Date.now(), totalInteractions: 0, todayInteractions: 0, todayDate: '' };
+    this.memory = this.createDefaultMemory();
     this.saveHistory();
     this.saveMemory();
   }
@@ -262,6 +312,11 @@ export class AIMemory {
       parts.push('【以下是你现在的状态】\n' + statusPrompt);
     }
 
+    const lifePatternPrompt = this.getLifePatternPrompt();
+    if (lifePatternPrompt) {
+      parts.push('【以下是你观察到的轻量生活习惯】\n' + lifePatternPrompt);
+    }
+
     return parts.join('\n\n');
   }
 
@@ -352,16 +407,80 @@ export class AIMemory {
   }
 
   /** 记录互动 */
-  recordInteraction(): void {
+  recordInteraction(type: string = 'interaction', detail: string = '', state?: string): void {
     this.memory.totalInteractions++;
 
-    const today = new Date().toDateString();
+    const now = Date.now();
+    const today = new Date(now).toDateString();
     if (this.memory.todayDate !== today) {
       this.memory.todayDate = today;
       this.memory.todayInteractions = 0;
     }
     this.memory.todayInteractions++;
+
+    const hour = new Date(now).getHours().toString().padStart(2, '0');
+    const existing = this.memory.interactionStats[type];
+    if (existing) {
+      existing.count++;
+      existing.lastAt = now;
+      existing.byHour[hour] = (existing.byHour[hour] || 0) + 1;
+    } else {
+      this.memory.interactionStats[type] = {
+        count: 1,
+        firstAt: now,
+        lastAt: now,
+        byHour: { [hour]: 1 },
+      };
+    }
+
+    this.memory.recentInteractions.push({
+      type,
+      detail: detail.slice(0, 80),
+      timestamp: now,
+      state,
+    });
+    if (this.memory.recentInteractions.length > MAX_RECENT_INTERACTIONS) {
+      this.memory.recentInteractions = this.memory.recentInteractions.slice(-MAX_RECENT_INTERACTIONS);
+    }
+
     this.saveMemory();
+  }
+
+  /** 获取轻量生活习惯提示词 */
+  getLifePatternPrompt(): string {
+    const stats = this.memory.interactionStats || {};
+    const recent = this.memory.recentInteractions || [];
+    const parts: string[] = [];
+
+    const chatCount = stats.chat?.count || 0;
+    const dragCount = stats.drag?.count || 0;
+    const clickCount = stats.click?.count || 0;
+    if (chatCount || dragCount || clickCount) {
+      parts.push(`累计互动：聊天${chatCount}次，拖拽${dragCount}次，点击${clickCount}次`);
+    }
+
+    const topApps = Object.entries(this.memory.appUsage || {})
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 3)
+      .map(([name, usage]) => `${name}(${usage.count}次)`);
+    if (topApps.length > 0) {
+      parts.push('常见活动：' + topApps.join('、'));
+    }
+
+    const recentBrief = recent.slice(-5).map(item => {
+      const detail = item.detail ? `:${item.detail}` : '';
+      return `${item.type}${detail}`;
+    });
+    if (recentBrief.length > 0) {
+      parts.push('最近互动：' + recentBrief.join('，'));
+    }
+
+    return parts.join('\n');
+  }
+
+  /** 获取公开记忆快照，用于调试窗口或设置面板 */
+  getMemorySnapshot(): Readonly<MemoryData> {
+    return this.memory;
   }
 
   /** 获取关系状态提示词 */

@@ -462,11 +462,13 @@
     var i = 0;
     function next(): void {
       lonelyAnimTimer = setTimeout(function () {
+        if (currentState !== 'lonely') { isLonelyExiting = false; return; }
         setSprite(frames[i]);
         i++;
         if (i < frames.length) {
           next();
         } else {
+          isLonelyExiting = false;
           callback();
         }
       }, 200);
@@ -542,23 +544,23 @@
       // 基础停留时间 4~8 秒，然后播放过渡帧
       var baseDelay = 4000 + Math.random() * 4000;
       sleepyAnimTimer = setTimeout(function () {
-        if (currentState !== 'sleepy') return;
+        if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
         setSprite('sleepy_2');
         sleepyAnimTimer = setTimeout(function () {
-          if (currentState !== 'sleepy') return;
+          if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
           setSprite('sleepy_3');
           sleepyAnimTimer = setTimeout(function () {
-            if (currentState !== 'sleepy') return;
+            if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
             setSprite('sleepy'); // 最终帧
             sleepyAnimTimer = setTimeout(function () {
-              if (currentState !== 'sleepy') return;
+              if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
               // 反向返回
               setSprite('sleepy_3');
               sleepyAnimTimer = setTimeout(function () {
-                if (currentState !== 'sleepy') return;
+                if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
                 setSprite('sleepy_2');
                 sleepyAnimTimer = setTimeout(function () {
-                  if (currentState !== 'sleepy') return;
+                  if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
                   setSprite('sleepy_1'); // 回到主帧
                   scheduleNext(); // 开始下一轮
                 }, 800);
@@ -692,14 +694,15 @@
       return;
     }
 
-    if (isBlinking && state === 'idle') return;
+    // 眨眼期间只允许保持当前 idle/curious/sleepy 视觉，不阻塞状态切换
+    if (isBlinking && (state === 'idle' || state === 'curious' || state === 'sleepy') && state === prevState) return;
     // 拖拽期间不覆盖精灵图
     if (isDragVisualActive) return;
     // 拖拽已结束但主进程还在发旧的 dragged 状态，忽略
     if (state === 'dragged' && !isDragVisualActive) return;
 
     // 离开眨眼状态时重置标记
-    if (state !== 'idle' && state !== 'curious') {
+    if (state !== 'idle' && state !== 'curious' && state !== 'sleepy') {
       isBlinking = false;
     }
 

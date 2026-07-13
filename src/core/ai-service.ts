@@ -116,7 +116,7 @@ export class AIService {
       }
       return { success: false, message: 'AI 服务未返回有效响应' };
     } catch (error: any) {
-      return { success: false, message: `连接失败: ${error.message}` };
+      return { success: false, message: `连接失败: ${error?.message || String(error)}` };
     }
   }
 }

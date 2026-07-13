@@ -73,7 +73,8 @@ export class ChatManager {
     }
 
     this.isProcessing = true;
-    this.recordInteraction();
+    this.lastUserInteraction = Date.now();
+    this.emotionUpdater.onInteraction();
     this.sendBubble('思考中...');
 
     try {
@@ -85,6 +86,7 @@ export class ChatManager {
         this.sendBubble(screenResult);
         this.memory.addMessage('user', userMessage);
         this.memory.addMessage('assistant', screenResult);
+        this.memory.recordInteraction('screen-analysis', screenMessage, this.stateManager.getCurrentState());
         return;
       }
 
@@ -102,6 +104,7 @@ export class ChatManager {
         `当前状态：${currentState}`,
         emotionPrompt ? `当前情绪：${emotionPrompt}` : '',
         this.memory.getRelationshipPrompt(),
+        this.memory.getLifePatternPrompt(),
       ].filter(Boolean).join('\n');
 
       const systemPrompt = this.memory.buildSystemPrompt(
@@ -160,7 +163,7 @@ export class ChatManager {
       this.memory.addMessage('assistant', fullResponse);
 
       // 关系追踪：聊天增加好感和熟悉
-      this.memory.recordInteraction();
+      this.memory.recordInteraction('chat', userMessage, this.stateManager.getCurrentState());
       this.memory.changeAffection(0.3);     // 普通聊天 +0.3
       this.memory.changeFamiliarity(0.1);   // 聊天后更熟悉 +0.1
 
@@ -249,9 +252,10 @@ export class ChatManager {
   }
 
   /** 记录用户交互时间 */
-  recordInteraction(): void {
+  recordInteraction(type: string = 'interaction', detail: string = ''): void {
     this.lastUserInteraction = Date.now();
     this.emotionUpdater.onInteraction();
+    this.memory.recordInteraction(type, detail, this.stateManager.getCurrentState());
   }
 
   /** 检查是否需要发送主动消息 */
@@ -286,6 +290,10 @@ export class ChatManager {
     context += `用户当前的状态是"${currentState}"。`;
     if (this.currentActivity) {
       context += `用户正在使用的应用是"${this.currentActivity}"。`;
+    }
+    const lifePattern = this.memory.getLifePatternPrompt();
+    if (lifePattern) {
+      context += `\n轻量生活习惯：\n${lifePattern}`;
     }
 
     const config = this.configManager.get();

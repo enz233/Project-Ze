@@ -13,6 +13,7 @@ export class BubbleManager {
   private stateManager: StateManager;
   private activityMonitorTimer: ReturnType<typeof setInterval> | null = null;
   private lastActivityBubble: string = '';
+  private lastActivityBubbleTime: number = 0;
   private onActivityCallback: ((title: string) => void) | null = null;
 
   constructor(mainWindow: BrowserWindow, timeAwareness: TimeAwareness, stateManager: StateManager) {
@@ -60,8 +61,11 @@ export class BubbleManager {
       }
 
       const bubble = this.matchActivity(title);
-      if (bubble && bubble !== this.lastActivityBubble) {
+      const now = Date.now();
+      const ACTIVITY_BUBBLE_COOLDOWN = 20 * 60 * 1000;
+      if (bubble && bubble !== this.lastActivityBubble && now - this.lastActivityBubbleTime > ACTIVITY_BUBBLE_COOLDOWN) {
         this.lastActivityBubble = bubble;
+        this.lastActivityBubbleTime = now;
         this.sendBubble(bubble);
       }
     } catch (e) {

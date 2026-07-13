@@ -103,8 +103,23 @@ export class ContextCollector {
       if (platform === 'darwin') {
         cmd = `osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true'`;
       } else if (platform === 'win32') {
-        // 使用更简单的 PowerShell 命令
-        cmd = 'powershell -NoProfile -Command "(Get-Process | Where-Object {$_.MainWindowTitle -ne \'\'} | Select-Object -First 1).MainWindowTitle"';
+        const script = [
+          'Add-Type -TypeDefinition @"',
+          'using System;',
+          'using System.Runtime.InteropServices;',
+          'using System.Text;',
+          'public class Win32 {',
+          '  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();',
+          '  [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);',
+          '}',
+          '"@',
+          '$h = [Win32]::GetForegroundWindow()',
+          '$sb = New-Object System.Text.StringBuilder 256',
+          '[Win32]::GetWindowText($h, $sb, 256) | Out-Null',
+          '$sb.ToString()',
+        ].join('; ');
+        const encoded = Buffer.from(script, 'utf16le').toString('base64');
+        cmd = `powershell -NoProfile -EncodedCommand ${encoded}`;
       } else {
         resolve('');
         return;

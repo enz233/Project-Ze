@@ -33,7 +33,7 @@ Desktop Companion → AI Companion → Embodied Agent → Physical Robot
 | 8 State Animation | 空闲/好奇/拖拽/犯困/睡觉/孤独/舒适/疲惫 | ✔ |
 | Emotion System | 动态情绪权重 0~100 | ✔ |
 | AI Chat (LLM) | OpenAI 兼容 API | ✔ |
-| Memory System | 对话摘要 + 长期记忆 | ✔ |
+| Memory System | 对话摘要 + 轻量生活习惯记忆 | ✔ |
 | TTS Voice | GPT-SoVITS / MiMo / 阿里云 / OpenAI | ✔ |
 | Screen Analysis | Vision API 截屏分析 | ✔ |
 | Relationship | 好感度 + 熟悉度系统 | ✔ |
@@ -76,8 +76,9 @@ Main Process
     ├─ StateManager       状态管理
     ├─ TransitionEngine   转移引擎
     ├─ EmotionSystem      情绪权重
-    ├─ AIMemory           记忆
+    ├─ AIMemory           记忆/互动习惯
     ├─ ChatManager        对话
+    ├─ ObserverManager    观察/活动记录
     └─ TTSManager         语音
 ```
 
@@ -93,11 +94,12 @@ Main Process
 - [x] TTS Voice
 - [x] Emotion System
 - [x] Memory & Summary
+- [x] Lightweight Interaction Memory
 - [x] Screen Analysis
 - [x] Relationship System
 
 **v0.3** — Interactive
-- [ ] Long-term Memory (RAG)
+- [ ] Long-term Memory (RAG, later)
 - [ ] Voice Input (ASR)
 - [ ] Custom Sprites
 - [ ] Plugins

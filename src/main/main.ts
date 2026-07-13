@@ -194,11 +194,13 @@ function setupIPC(): void {
     isDragging = false;
     stopDragPoll();
     transitionEngine?.handleDragEnd();
+    chatManager?.recordInteraction('drag', 'end');
   });
 
   ipcMain.on('user-click', () => {
     transitionEngine?.handleInteraction();
     observerManager?.recordActivity();
+    chatManager?.recordInteraction('click', 'companion');
   });
 
   ipcMain.on('lonely-action', (_event, active: boolean) => {
@@ -245,7 +247,12 @@ function setupIPC(): void {
 
   ipcMain.handle('test-ai-connection', async () => {
     if (!aiService) return { success: false, message: 'AI 服务未初始化' };
-    return await aiService.testConnection();
+    try {
+      const result = await aiService.testConnection();
+      return result || { success: false, message: 'AI 服务未返回测试结果' };
+    } catch (e: any) {
+      return { success: false, message: '连接测试失败: ' + (e?.message || String(e)) };
+    }
   });
 
   // 日志相关
@@ -275,6 +282,8 @@ function setupIPC(): void {
     return {
       historyCount: chatManager?.getHistoryCount() || 0,
       summary: chatManager?.getSummary() || '',
+      lifePattern: chatManager?.getMemory().getLifePatternPrompt() || '',
+      memory: chatManager?.getMemory().getMemorySnapshot() || null,
     };
   });
 

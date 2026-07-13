@@ -1,6 +1,6 @@
 # Quiet Companion 项目索引
 
-> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.2.2
+> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.2.12
 
 ## 项目概述
 
@@ -17,7 +17,7 @@ src/
 │   ├── bubble-manager.ts   # 气泡管理（问候、活动监视）
 │   ├── ai-config.ts        # AI 配置（持久化到 userData/config/）
 │   ├── ai-service.ts       # AI 服务（fetch 调用 OpenAI 兼容 API）
-│   ├── ai-memory.ts        # AI 记忆（对话历史+摘要持久化）
+│   ├── ai-memory.ts        # AI 记忆（对话历史+摘要+轻量生活习惯）
 │   ├── chat-manager.ts     # 对话管理（消息构建、流式调用）
 │   ├── logger.ts           # 日志系统（写入 userData/logs/）
 │   └── types.ts            # 类型定义（StateId 等）
@@ -79,7 +79,7 @@ src/
 ### AI 系统
 - **配置**：`ai-config.json` 持久化到 `app.getPath('userData')/config/`
 - **对话**：流式调用，解析 `<item>` 标签逐条显示气泡
-- **记忆**：对话历史持久化，每 50 条自动生成摘要
+- **记忆**：对话历史持久化，每 50 条自动生成摘要；记录轻量互动习惯、常用应用和最近互动轨迹
 - **情感前缀**：根据状态给 AI 消息加情感上下文，切换后 4 秒保持上一个状态
 
 ## IPC 通道一览
@@ -133,7 +133,7 @@ src/
 - lonely 退出动画闭包可能用到旧 state
 - 气泡淡出的 500ms 内部 timeout 无法取消
 - `sleepyAnimRunning` 可能卡住
-- `test-ai-connection` 返回 undefined 时 renderer 报错
+- test-ai-connection 返回 undefined 时 renderer 报错（v0.2.12 已加兜底）
 
 ## 版本历史
 
@@ -149,3 +149,4 @@ src/
 | v0.2.0 | 2026-05-30 | AI 接入 |
 | v0.2.1 | 2026-05-30 | AI 记忆+情感前缀+气泡独立 |
 | v0.2.2 | 2026-06-03 | macOS 兼容+打包配置 |
+| v0.2.12 | 2026-07-13 | 轻量互动记忆、活动气泡冷却、前台窗口检测修复、动画卡住兜底 |
