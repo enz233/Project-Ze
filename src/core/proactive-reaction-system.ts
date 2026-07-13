@@ -1,6 +1,7 @@
 import { ContextSnapshot } from './context-collector';
 import { AIMemory } from './ai-memory';
 import { getLogger } from './logger';
+import proactiveConfig from '../config/proactive-reactions.json';
 
 export type ActivityCategory = 'code' | 'document' | 'browser' | 'chat' | 'media' | 'game' | 'work' | 'unknown';
 export type ProactiveReason =
@@ -10,6 +11,18 @@ export type ProactiveReason =
   | 'returning_from_idle'
   | 'meaningful_app_switch'
   | 'recent_interaction_followup';
+
+export interface ProactiveComponentContext {
+  snapshot: ContextSnapshot;
+  category: ActivityCategory;
+  previousCategory: ActivityCategory;
+  recentDirectInteraction: boolean;
+}
+
+export interface ProactiveComponentDecision {
+  candidate: ProactiveCandidate | null;
+  debug: ProactiveDebugSnapshot;
+}
 
 export interface ProactiveCandidate {
   reason: ProactiveReason;
@@ -40,28 +53,45 @@ export interface ProactiveDebugSnapshot {
   focusSessionKey: string;
   firedFocusThresholds: number[];
   lastDirectInteraction: DirectInteraction | null;
+  configDescription: string;
 }
 
-const GLOBAL_SPACING_MS = 90 * 1000;
-const ROLLING_WINDOW_MS = 30 * 60 * 1000;
-const ROLLING_LIMIT = 3;
-const DAILY_LIMIT = 10;
-const STABLE_SWITCH_SECONDS = 60;
-const WORK_TO_REST_SECONDS = 15 * 60;
-const REST_TO_WORK_SECONDS = 3 * 60;
-const IDLE_RETURN_SECONDS = 8 * 60;
-const DIRECT_INTERACTION_WINDOW_MS = 5 * 60 * 1000;
-const RECENT_INTERACTION_SWITCH_SECONDS = 30;
-const LONG_FOCUS_THRESHOLDS = [30 * 60, 60 * 60, 90 * 60];
+interface ProactiveConfig {
+  description: string;
+  limits: {
+    globalSpacingMs: number;
+    rollingWindowMs: number;
+    rollingLimit: number;
+    dailyLimit: number;
+    stableSwitchSeconds: number;
+    recentInteractionSwitchSeconds: number;
+    workToRestSeconds: number;
+    restToWorkSeconds: number;
+    idleReturnSeconds: number;
+    directInteractionWindowMs: number;
+    longFocusThresholdsSeconds: number[];
+  };
+  cooldownsMs: Record<ProactiveReason, number>;
+  categories: Partial<Record<ActivityCategory, string[]>>;
+  templates: Record<ProactiveReason, string[]>;
+  aiWordingReasons: ProactiveReason[];
+}
 
-const REASON_COOLDOWNS: Record<ProactiveReason, number> = {
-  work_to_rest: 20 * 60 * 1000,
-  rest_to_work: 15 * 60 * 1000,
-  long_focus: 0,
-  returning_from_idle: 20 * 60 * 1000,
-  meaningful_app_switch: 12 * 60 * 1000,
-  recent_interaction_followup: 10 * 60 * 1000,
-};
+const CONFIG = proactiveConfig as ProactiveConfig;
+const LIMITS = CONFIG.limits;
+const GLOBAL_SPACING_MS = LIMITS.globalSpacingMs;
+const ROLLING_WINDOW_MS = LIMITS.rollingWindowMs;
+const ROLLING_LIMIT = LIMITS.rollingLimit;
+const DAILY_LIMIT = LIMITS.dailyLimit;
+const STABLE_SWITCH_SECONDS = LIMITS.stableSwitchSeconds;
+const WORK_TO_REST_SECONDS = LIMITS.workToRestSeconds;
+const REST_TO_WORK_SECONDS = LIMITS.restToWorkSeconds;
+const IDLE_RETURN_SECONDS = LIMITS.idleReturnSeconds;
+const DIRECT_INTERACTION_WINDOW_MS = LIMITS.directInteractionWindowMs;
+const RECENT_INTERACTION_SWITCH_SECONDS = LIMITS.recentInteractionSwitchSeconds;
+const LONG_FOCUS_THRESHOLDS = LIMITS.longFocusThresholdsSeconds;
+
+const REASON_COOLDOWNS = CONFIG.cooldownsMs;
 
 /**
  * 情境化主动回应系统。
@@ -151,6 +181,18 @@ export class ProactiveReactionSystem {
     return candidate;
   }
 
+  /**
+   * 主动部件入口：后续 AI/行为系统可以调用这里取得候选与调试状态。
+   * 注意：这里仍只做本地候选判断，不直接发气泡、不截图。
+   */
+  evaluateComponent(snapshot: ContextSnapshot): ProactiveComponentDecision {
+    const candidate = this.evaluate(snapshot);
+    return {
+      candidate,
+      debug: this.getDebugSnapshot(),
+    };
+  }
+
   markDelivered(candidate: ProactiveCandidate, text?: string): void {
     const now = Date.now();
     this.resetDailyBudgetIfNeeded(now);
@@ -180,17 +222,16 @@ export class ProactiveReactionSystem {
       focusSessionKey: this.focusSessionKey,
       firedFocusThresholds: Array.from(this.firedFocusThresholds),
       lastDirectInteraction: this.lastDirectInteraction,
+      configDescription: CONFIG.description,
     };
   }
 
   classify(snapshot: ContextSnapshot): ActivityCategory {
     const text = `${snapshot.processName || ''} ${snapshot.windowTitle || ''}`.toLowerCase();
-    if (this.includesAny(text, ['visual studio code', 'vscode', 'cursor', 'webstorm', 'intellij', 'pycharm'])) return 'code';
-    if (this.includesAny(text, ['word', 'powerpoint', 'excel', 'notion', 'wps', '飞书', '钉钉'])) return 'document';
-    if (this.includesAny(text, ['youtube', 'bilibili', '爱奇艺', '腾讯视频', 'netflix'])) return 'media';
-    if (this.includesAny(text, ['steam', 'epic', 'wegame', 'game', '游戏'])) return 'game';
-    if (this.includesAny(text, ['wechat', '微信', 'qq', 'telegram', 'discord', 'slack'])) return 'chat';
-    if (this.includesAny(text, ['chrome', 'edge', 'firefox', 'opera', 'browser', '浏览器'])) return 'browser';
+    const ordered: ActivityCategory[] = ['code', 'document', 'media', 'game', 'chat', 'browser'];
+    for (const category of ordered) {
+      if (this.includesAny(text, CONFIG.categories[category] || [])) return category;
+    }
     return 'unknown';
   }
 
@@ -211,18 +252,18 @@ export class ProactiveReactionSystem {
     const toRest = this.isRestCategory(category);
 
     if (fromWork && toRest && previousDuration >= WORK_TO_REST_SECONDS) {
-      return this.createCandidate('work_to_rest', '辛苦啦，休息一下也很好~', 0.9, true, snapshot, category, previousCategory, previousDuration);
+      return this.createCandidate('work_to_rest', this.pickTemplate('work_to_rest'), 0.9, this.allowsAIWording('work_to_rest'), snapshot, category, previousCategory, previousDuration);
     }
 
     if (fromRest && toWork && previousDuration >= REST_TO_WORK_SECONDS) {
-      return this.createCandidate('rest_to_work', '回来啦，我安静陪你~', 0.78, false, snapshot, category, previousCategory, previousDuration);
+      return this.createCandidate('rest_to_work', this.pickTemplate('rest_to_work'), 0.78, this.allowsAIWording('rest_to_work'), snapshot, category, previousCategory, previousDuration);
     }
 
     if (category !== previousCategory && category !== 'unknown' && previousCategory !== 'unknown') {
       const newApp = snapshot.processName ? this.memory.isNewApp(snapshot.processName) : false;
       const frequentApp = snapshot.processName ? this.memory.isFrequentApp(snapshot.processName) : false;
       if (newApp || frequentApp || recentInteraction) {
-        return this.createCandidate('meaningful_app_switch', '换个东西看看吗？', 0.58, false, snapshot, category, previousCategory, previousDuration);
+        return this.createCandidate('meaningful_app_switch', this.pickTemplate('meaningful_app_switch'), 0.58, this.allowsAIWording('meaningful_app_switch'), snapshot, category, previousCategory, previousDuration);
       }
     }
 
@@ -235,8 +276,9 @@ export class ProactiveReactionSystem {
     for (const threshold of LONG_FOCUS_THRESHOLDS) {
       if (duration >= threshold && !this.firedFocusThresholds.has(threshold)) {
         this.firedFocusThresholds.add(threshold);
-        const message = threshold >= 90 * 60 ? '好久没休息了，肩膀放松一下。' : '你专注一会儿啦，眨眨眼~';
-        return this.createCandidate('long_focus', message, threshold >= 90 * 60 ? 0.86 : 0.74, threshold >= 90 * 60, snapshot, category, category, duration);
+        const templates = CONFIG.templates.long_focus;
+        const message = threshold >= 90 * 60 ? (templates[1] || templates[0]) : templates[0];
+        return this.createCandidate('long_focus', message, threshold >= 90 * 60 ? 0.86 : 0.74, this.allowsAIWording('long_focus') && threshold >= 90 * 60, snapshot, category, category, duration);
       }
     }
     return null;
@@ -248,7 +290,7 @@ export class ProactiveReactionSystem {
     if (idleSeconds < IDLE_RETURN_SECONDS) return null;
     if (!snapshot.userActive && !changed) return null;
     this.idleStartedAt = null;
-    return this.createCandidate('returning_from_idle', '回来啦，我还在这里~', 0.82, true, snapshot, category, this.previousCategory, idleSeconds);
+    return this.createCandidate('returning_from_idle', this.pickTemplate('returning_from_idle'), 0.82, this.allowsAIWording('returning_from_idle'), snapshot, category, this.previousCategory, idleSeconds);
   }
 
   private updateIdleState(snapshot: ContextSnapshot, now: number): void {
@@ -334,5 +376,14 @@ export class ProactiveReactionSystem {
 
   private includesAny(text: string, keywords: string[]): boolean {
     return keywords.some(keyword => text.includes(keyword.toLowerCase()));
+  }
+
+  private pickTemplate(reason: ProactiveReason): string {
+    const templates = CONFIG.templates[reason] || [];
+    return templates[0] || '我在这里哦~';
+  }
+
+  private allowsAIWording(reason: ProactiveReason): boolean {
+    return CONFIG.aiWordingReasons.includes(reason);
   }
 }

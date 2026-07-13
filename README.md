@@ -38,7 +38,7 @@ Desktop Companion → AI Companion → Embodied Agent → Physical Robot
 | Screen Analysis | Vision API 截屏分析 | ✔ |
 | Relationship | 好感度 + 熟悉度系统 | ✔ |
 | Activity Monitor | 窗口标题感知 | ✔ |
-| Contextual Proactive Reactions | 根据工作/休息切换与长专注轻柔回应 | ✔ |
+| Contextual Proactive Reactions | 配置化的工作/休息切换与长专注轻柔回应 | ✔ |
 | Debug Window | F3 调试面板，含日志/关系/记忆快照 | ✔ |
 
 ## Quick Start
@@ -112,6 +112,8 @@ Main Process
 
 ## Project Structure
 
+主动回应部件说明见 [docs/proactive-reaction-component.md](docs/proactive-reaction-component.md)。
+
 ```
 Project-Ze/
 ├── src/
@@ -120,6 +122,7 @@ Project-Ze/
 │   ├── renderer/      渲染进程
 │   ├── config/        配置
 │   └── assets/        资源
+├── docs/              设计与开发说明
 ├── README.md
 └── package.json
 ```

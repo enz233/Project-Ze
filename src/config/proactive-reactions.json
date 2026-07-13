@@ -1,0 +1,41 @@
+{
+  "description": "情境化主动回应配置。保持轻量：只捕捉节奏变化，不做持续监控或任务建议。",
+  "limits": {
+    "globalSpacingMs": 90000,
+    "rollingWindowMs": 1800000,
+    "rollingLimit": 3,
+    "dailyLimit": 10,
+    "stableSwitchSeconds": 60,
+    "recentInteractionSwitchSeconds": 30,
+    "workToRestSeconds": 900,
+    "restToWorkSeconds": 180,
+    "idleReturnSeconds": 480,
+    "directInteractionWindowMs": 300000,
+    "longFocusThresholdsSeconds": [1800, 3600, 5400]
+  },
+  "cooldownsMs": {
+    "work_to_rest": 1200000,
+    "rest_to_work": 900000,
+    "long_focus": 0,
+    "returning_from_idle": 1200000,
+    "meaningful_app_switch": 720000,
+    "recent_interaction_followup": 600000
+  },
+  "categories": {
+    "code": ["visual studio code", "vscode", "cursor", "webstorm", "intellij", "pycharm"],
+    "document": ["word", "powerpoint", "excel", "notion", "wps", "飞书", "钉钉"],
+    "media": ["youtube", "bilibili", "爱奇艺", "腾讯视频", "netflix"],
+    "game": ["steam", "epic", "wegame", "game", "游戏"],
+    "chat": ["wechat", "微信", "qq", "telegram", "discord", "slack"],
+    "browser": ["chrome", "edge", "firefox", "opera", "browser", "浏览器"]
+  },
+  "templates": {
+    "work_to_rest": ["辛苦啦，休息一下也很好~", "刚刚专注了好久呢。"],
+    "rest_to_work": ["回来啦，我安静陪你~", "准备继续了吗？"],
+    "long_focus": ["你专注一会儿啦，眨眨眼~", "好久没休息了，肩膀放松一下。"],
+    "returning_from_idle": ["回来啦，我还在这里~", "欢迎回来~"],
+    "meaningful_app_switch": ["换个东西看看吗？", "这个好像不常见呢。"],
+    "recent_interaction_followup": ["我在这里哦~"]
+  },
+  "aiWordingReasons": ["work_to_rest", "returning_from_idle"]
+}

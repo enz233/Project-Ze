@@ -1,5 +1,11 @@
 # Quiet Companion - 版本记录
 
+## v0.2.16 (2026-07-13)
+- 主动回应阈值、冷却、分类关键词、模板和 AI 改写 reason 迁移到 `src/config/proactive-reactions.json`
+- 为后续 AI/微行为系统预留主动部件接口 `evaluateComponent()`，统一返回候选与调试状态
+- 新增主动回应部件说明文档 `docs/proactive-reaction-component.md`，明确边界：不持续监控、不自动截图、不做任务建议
+- 打包配置加入主动回应配置文件，避免发布包缺少运行配置
+
 ## v0.2.15 (2026-07-13)
 - Debug 面板新增 Proactive 卡片，展示当前/上一个活动分类、最近候选、拦截原因、预算、最近主动回应和最近直接互动
 - 主动回应系统增加调试快照，便于观察为什么说话或保持沉默

@@ -106,7 +106,8 @@ export class ObserverManager {
         '| active:', snapshot.userActive);
 
       // 先判断候选，再记录应用使用；这样 isNewApp/isFrequentApp 看到的是进入当前窗口前的记忆。
-      const candidate = this.proactiveReactionSystem.evaluate(snapshot);
+      const proactiveDecision = this.proactiveReactionSystem.evaluateComponent(snapshot);
+      const candidate = proactiveDecision.candidate;
 
       if (snapshot.processName) {
         this.memory.recordAppUsage(snapshot.processName);
