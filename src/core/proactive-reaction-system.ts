@@ -27,16 +27,32 @@ interface DirectInteraction {
   timestamp: number;
 }
 
-const GLOBAL_SPACING_MS = 120 * 1000;
+export interface ProactiveDebugSnapshot {
+  category: ActivityCategory;
+  previousCategory: ActivityCategory;
+  lastDecision: string;
+  lastCandidateReason: string;
+  lastSuppressReason: string;
+  lastDeliveredMessage: string;
+  lastDeliveredAt: number;
+  rollingCount: number;
+  dailyDelivered: number;
+  focusSessionKey: string;
+  firedFocusThresholds: number[];
+  lastDirectInteraction: DirectInteraction | null;
+}
+
+const GLOBAL_SPACING_MS = 90 * 1000;
 const ROLLING_WINDOW_MS = 30 * 60 * 1000;
-const ROLLING_LIMIT = 2;
-const DAILY_LIMIT = 8;
-const STABLE_SWITCH_SECONDS = 120;
-const WORK_TO_REST_SECONDS = 25 * 60;
-const REST_TO_WORK_SECONDS = 5 * 60;
-const IDLE_RETURN_SECONDS = 10 * 60;
+const ROLLING_LIMIT = 3;
+const DAILY_LIMIT = 10;
+const STABLE_SWITCH_SECONDS = 60;
+const WORK_TO_REST_SECONDS = 15 * 60;
+const REST_TO_WORK_SECONDS = 3 * 60;
+const IDLE_RETURN_SECONDS = 8 * 60;
 const DIRECT_INTERACTION_WINDOW_MS = 5 * 60 * 1000;
-const LONG_FOCUS_THRESHOLDS = [45 * 60, 90 * 60];
+const RECENT_INTERACTION_SWITCH_SECONDS = 30;
+const LONG_FOCUS_THRESHOLDS = [30 * 60, 60 * 60, 90 * 60];
 
 const REASON_COOLDOWNS: Record<ProactiveReason, number> = {
   work_to_rest: 20 * 60 * 1000,
@@ -65,6 +81,11 @@ export class ProactiveReactionSystem {
   private dailyDelivered = 0;
   private dailyDate = '';
   private lastDeliveredMessage = '';
+  private lastDeliveredAt = 0;
+  private currentCategory: ActivityCategory = 'unknown';
+  private lastDecision = 'not evaluated yet';
+  private lastCandidateReason = '';
+  private lastSuppressReason = '';
 
   constructor(memory: AIMemory) {
     this.memory = memory;
@@ -80,6 +101,7 @@ export class ProactiveReactionSystem {
     this.resetDailyBudgetIfNeeded(now);
 
     const category = this.classify(snapshot);
+    this.currentCategory = category;
     const previous = this.previousSnapshot;
     const previousCategory = this.previousCategory;
     const changedWindow = !!previous && snapshot.windowTitle !== previous.windowTitle;
@@ -106,14 +128,25 @@ export class ProactiveReactionSystem {
     this.previousSnapshot = snapshot;
     this.previousCategory = category;
 
-    if (!candidate) return null;
+    if (!candidate) {
+      this.lastDecision = `silent: ${previousCategory} → ${category}`;
+      this.lastCandidateReason = '';
+      this.lastSuppressReason = '';
+      return null;
+    }
+
+    this.lastCandidateReason = candidate.reason;
+    this.lastDecision = `candidate: ${candidate.reason}`;
 
     const suppressReason = this.getSuppressReason(candidate, now);
     if (suppressReason) {
+      this.lastSuppressReason = suppressReason;
+      this.lastDecision = `suppressed: ${candidate.reason} / ${suppressReason}`;
       getLogger().log('observer', `[Proactive] suppressed ${candidate.reason}: ${suppressReason}`);
       return null;
     }
 
+    this.lastSuppressReason = '';
     getLogger().log('observer', `[Proactive] candidate ${candidate.reason}: ${candidate.contextSummary}`);
     return candidate;
   }
@@ -126,7 +159,28 @@ export class ProactiveReactionSystem {
     this.deliveredAt = this.deliveredAt.filter(t => now - t <= ROLLING_WINDOW_MS);
     this.dailyDelivered++;
     this.lastDeliveredMessage = text || candidate.message;
+    this.lastDeliveredAt = now;
+    this.lastDecision = `delivered: ${candidate.reason}`;
     getLogger().log('observer', `[Proactive] delivered ${candidate.reason}: ${this.lastDeliveredMessage}`);
+  }
+
+  getDebugSnapshot(): ProactiveDebugSnapshot {
+    const now = Date.now();
+    this.deliveredAt = this.deliveredAt.filter(t => now - t <= ROLLING_WINDOW_MS);
+    return {
+      category: this.currentCategory,
+      previousCategory: this.previousCategory,
+      lastDecision: this.lastDecision,
+      lastCandidateReason: this.lastCandidateReason,
+      lastSuppressReason: this.lastSuppressReason,
+      lastDeliveredMessage: this.lastDeliveredMessage,
+      lastDeliveredAt: this.lastDeliveredAt,
+      rollingCount: this.deliveredAt.length,
+      dailyDelivered: this.dailyDelivered,
+      focusSessionKey: this.focusSessionKey,
+      firedFocusThresholds: Array.from(this.firedFocusThresholds),
+      lastDirectInteraction: this.lastDirectInteraction,
+    };
   }
 
   classify(snapshot: ContextSnapshot): ActivityCategory {
@@ -147,13 +201,14 @@ export class ProactiveReactionSystem {
     previousDuration: number,
     changed: boolean
   ): ProactiveCandidate | null {
-    if (!changed || previousDuration < STABLE_SWITCH_SECONDS) return null;
+    const recentInteraction = this.hasRecentDirectInteraction();
+    const stableRequirement = recentInteraction ? RECENT_INTERACTION_SWITCH_SECONDS : STABLE_SWITCH_SECONDS;
+    if (!changed || previousDuration < stableRequirement) return null;
 
     const fromWork = this.isWorkCategory(previousCategory);
     const toWork = this.isWorkCategory(category);
     const fromRest = this.isRestCategory(previousCategory);
     const toRest = this.isRestCategory(category);
-    const recentInteraction = this.hasRecentDirectInteraction();
 
     if (fromWork && toRest && previousDuration >= WORK_TO_REST_SECONDS) {
       return this.createCandidate('work_to_rest', '辛苦啦，休息一下也很好~', 0.9, true, snapshot, category, previousCategory, previousDuration);

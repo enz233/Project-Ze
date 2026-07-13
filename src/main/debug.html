@@ -42,7 +42,7 @@
     /* 记忆状态 */
     .memory-panel {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 8px;
       padding: 8px 12px;
       background: #202020;
@@ -167,6 +167,10 @@
       <div class="memory-title">Life Pattern</div>
       <div class="memory-value" id="lifePatternView">Loading...</div>
     </div>
+    <div class="memory-card">
+      <div class="memory-title">Proactive</div>
+      <div class="memory-value" id="proactiveView">Loading...</div>
+    </div>
   </div>
   <div class="filters">
     <button class="filter-btn active" data-cat="all">All</button>
@@ -190,6 +194,7 @@
     var interactionView = document.getElementById('interactionView');
     var appsView = document.getElementById('appsView');
     var lifePatternView = document.getElementById('lifePatternView');
+    var proactiveView = document.getElementById('proactiveView');
     var paused = false;
     var logCount = 0;
     var activeFilters = new Set(['state', 'drag', 'tts', 'observer', 'chat', 'ai', 'error']);
@@ -265,6 +270,31 @@
         .join('\n');
     }
 
+    function formatTimeAgo(timestamp) {
+      if (!timestamp) return 'never';
+      var seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+      if (seconds < 60) return seconds + 's ago';
+      var minutes = Math.round(seconds / 60);
+      if (minutes < 60) return minutes + 'm ago';
+      return Math.round(minutes / 60) + 'h ago';
+    }
+
+    function formatProactive(proactive) {
+      if (!proactive) return 'No proactive state yet';
+      var direct = proactive.lastDirectInteraction
+        ? proactive.lastDirectInteraction.type + ' ' + formatTimeAgo(proactive.lastDirectInteraction.timestamp)
+        : 'none';
+      return [
+        'cat: ' + proactive.previousCategory + ' → ' + proactive.category,
+        'decision: ' + (proactive.lastDecision || 'none'),
+        'candidate: ' + (proactive.lastCandidateReason || '-'),
+        'suppress: ' + (proactive.lastSuppressReason || '-'),
+        'rolling/day: ' + proactive.rollingCount + '/' + proactive.dailyDelivered,
+        'last: ' + (proactive.lastDeliveredMessage || '-') + ' (' + formatTimeAgo(proactive.lastDeliveredAt) + ')',
+        'direct: ' + direct
+      ].join('\n');
+    }
+
     function refreshMemoryPanel() {
       // @ts-ignore
       if (!window.companion || !window.companion.getChatInfo) return;
@@ -280,12 +310,14 @@
         interactionView.textContent = formatInteractionStats(memory.interactionStats);
         appsView.textContent = formatTopApps(memory.appUsage);
         lifePatternView.textContent = info.lifePattern || info.summary || 'No memory summary yet';
+        proactiveView.textContent = formatProactive(info.proactive);
       }).catch(function(error) {
         var msg = 'Memory load failed: ' + (error && error.message ? error.message : String(error));
         relationshipView.textContent = msg;
         interactionView.textContent = msg;
         appsView.textContent = msg;
         lifePatternView.textContent = msg;
+        proactiveView.textContent = msg;
       });
     }
 

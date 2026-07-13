@@ -291,6 +291,7 @@ function setupIPC(): void {
       summary: chatManager?.getSummary() || '',
       lifePattern: chatManager?.getMemory().getLifePatternPrompt() || '',
       memory: chatManager?.getMemory().getMemorySnapshot() || null,
+      proactive: proactiveReactionSystem?.getDebugSnapshot() || null,
     };
   });
 
