@@ -16,6 +16,9 @@ import { EmotionSystem } from './emotion-system';
 import { StateManager } from './state-manager';
 import { AIMemory } from './ai-memory';
 import { AIConfigManager } from './ai-config';
+import { BubbleManager } from './bubble-manager';
+import { ProactiveCandidate, ProactiveReactionSystem } from './proactive-reaction-system';
+import { getLogger } from './logger';
 
 interface AnalysisResult {
   user_activity: string;
@@ -34,6 +37,8 @@ export class ObserverManager {
   private stateManager: StateManager;
   private memory: AIMemory;
   private mainWindow: BrowserWindow;
+  private bubbleManager: BubbleManager;
+  private proactiveReactionSystem: ProactiveReactionSystem;
   private collectTimer: ReturnType<typeof setInterval> | null = null;
   private isAnalyzing = false;
 
@@ -46,7 +51,9 @@ export class ObserverManager {
     stateManager: StateManager,
     memory: AIMemory,
     screenAnalyzer: ScreenAnalyzer,
-    configManager: AIConfigManager
+    configManager: AIConfigManager,
+    bubbleManager: BubbleManager,
+    proactiveReactionSystem: ProactiveReactionSystem
   ) {
     this.mainWindow = mainWindow;
     this.aiService = aiService;
@@ -55,6 +62,8 @@ export class ObserverManager {
     this.memory = memory;
     this.screenAnalyzer = screenAnalyzer;
     this.configManager = configManager;
+    this.bubbleManager = bubbleManager;
+    this.proactiveReactionSystem = proactiveReactionSystem;
     this.contextCollector = new ContextCollector();
     this.screenshotTrigger = new ScreenshotTrigger(aiService, emotionSystem);
   }
@@ -85,43 +94,85 @@ export class ObserverManager {
   private lastTriggerTime: number = 0;
   private stayTriggered: Set<number> = new Set(); // 已触发的停留阶梯
 
-  /** 收集上下文并检查是否需要分析 */
+  /** 收集上下文并检查是否需要主动回应 */
   private async collectAndAnalyze(): Promise<void> {
     if (this.isAnalyzing) return;
 
     try {
       const snapshot = await this.contextCollector.collect();
 
-      // 记录应用使用
-      if (snapshot.processName) {
-        this.memory.recordAppUsage(snapshot.processName);
-      }
-
-      // 窗口变化时重置停留阶梯
-      if (snapshot.windowTitle !== this.lastWindow) {
-        this.stayTriggered.clear();
-      }
-
-      // Debug
       console.log('[Observer]', snapshot.windowTitle,
         '|', Math.round(snapshot.windowDuration) + 's',
         '| active:', snapshot.userActive);
 
-      // 检查停留触发（阶梯式）
-      const stayTrigger = this.checkStayTrigger(snapshot);
-      if (stayTrigger) {
-        await this.triggerWithVision(snapshot, stayTrigger);
-        return;
-      }
+      // 先判断候选，再记录应用使用；这样 isNewApp/isFrequentApp 看到的是进入当前窗口前的记忆。
+      const candidate = this.proactiveReactionSystem.evaluate(snapshot);
 
-      // 检查窗口切换触发（概率式）
-      const switchTrigger = this.checkSwitchTrigger(snapshot);
-      if (switchTrigger) {
-        await this.triggerWithLLM(snapshot, switchTrigger);
+      if (snapshot.processName) {
+        this.memory.recordAppUsage(snapshot.processName);
+      }
+      if (!candidate) return;
+
+      const text = await this.resolveCandidateText(candidate, snapshot);
+      if (!text) return;
+
+      const shown = this.bubbleManager.tryShowProactiveBubble(text, candidate.reason);
+      if (shown) {
+        this.proactiveReactionSystem.markDelivered(candidate, text);
+      } else {
+        getLogger().log('observer', `[Proactive] bubble blocked: ${candidate.reason}`);
       }
     } catch (error) {
       console.error('[Observer] error:', error);
     }
+  }
+
+  private async resolveCandidateText(candidate: ProactiveCandidate, snapshot: ContextSnapshot): Promise<string> {
+    if (!candidate.allowAIWording || !this.configManager.isValid()) {
+      return candidate.message;
+    }
+
+    try {
+      const generated = await this.generateReactionText(candidate, snapshot);
+      if (!generated || generated === '.' || generated === '。') {
+        return candidate.message;
+      }
+      return generated.slice(0, 30);
+    } catch (error: any) {
+      console.error('[Observer] proactive wording failed:', error?.message || error);
+      return candidate.message;
+    }
+  }
+
+  private async generateReactionText(candidate: ProactiveCandidate, snapshot: ContextSnapshot): Promise<string> {
+    const emotionPrompt = this.emotionSystem.toPromptString();
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: `你是 Ze，一个安静、温柔、有陪伴感的桌面伙伴。你只需要把一个已经通过本地规则允许的主动回应意图，改写成一句自然中文。
+规则：
+- 20到30个中文字符以内
+- 不要像系统通知
+- 不要命令用户
+- 不要解释你的判断
+- 语气轻、温柔、像陪在旁边
+- 如果觉得不适合改写，只回复英文句号"."`,
+      },
+      {
+        role: 'user',
+        content: `事件：${candidate.reason}
+当前窗口：${snapshot.windowTitle}
+应用：${snapshot.processName || '未知'}
+停留：${Math.round(snapshot.windowDuration)}秒
+当前情绪：${emotionPrompt || '平静'}
+关系：${this.memory.getRelationshipPrompt()}
+生活习惯：${this.memory.getLifePatternPrompt() || '暂无'}
+本地文案：${candidate.message}`,
+      },
+    ];
+
+    const response = await this.aiService.chat(messages);
+    return response.trim();
   }
 
   /** 停留触发：阶梯式时间检查 */

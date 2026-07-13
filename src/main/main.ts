@@ -13,6 +13,7 @@ import { ScreenAnalyzer } from '../core/screen-analyzer';
 import { TTSConfigManager } from '../core/tts-config';
 import { TTSManager } from '../core/tts-manager';
 import { ObserverManager } from '../core/observer-manager';
+import { ProactiveReactionSystem } from '../core/proactive-reaction-system';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -29,6 +30,7 @@ let screenAnalyzer: ScreenAnalyzer;
 let ttsConfigManager: TTSConfigManager;
 let ttsManager: TTSManager;
 let observerManager: ObserverManager;
+let proactiveReactionSystem: ProactiveReactionSystem;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -133,9 +135,11 @@ function createWindow(): void {
   chatManager.setTTSManager(ttsManager);
 
   // 初始化观察系统
+  proactiveReactionSystem = new ProactiveReactionSystem(chatManager.getMemory());
   observerManager = new ObserverManager(
     mainWindow, aiService, chatManager.getEmotionUpdater().getEmotionSystem(),
-    stateManager, chatManager.getMemory(), screenAnalyzer, aiConfigManager
+    stateManager, chatManager.getMemory(), screenAnalyzer, aiConfigManager,
+    bubbleManager, proactiveReactionSystem
   );
   observerManager.start(30000); // 每30秒检查一次
 
@@ -195,12 +199,14 @@ function setupIPC(): void {
     stopDragPoll();
     transitionEngine?.handleDragEnd();
     chatManager?.recordInteraction('drag', 'end');
+    proactiveReactionSystem?.recordDirectInteraction('drag', 'end');
   });
 
   ipcMain.on('user-click', () => {
     transitionEngine?.handleInteraction();
     observerManager?.recordActivity();
     chatManager?.recordInteraction('click', 'companion');
+    proactiveReactionSystem?.recordDirectInteraction('click', 'companion');
   });
 
   ipcMain.on('lonely-action', (_event, active: boolean) => {
@@ -230,6 +236,7 @@ function setupIPC(): void {
   });
 
   ipcMain.on('user-message', (_event, text: string) => {
+    proactiveReactionSystem?.recordDirectInteraction('chat', text.slice(0, 40));
     chatManager?.sendMessage(text);
   });
 

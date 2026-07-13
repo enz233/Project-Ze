@@ -38,6 +38,7 @@ Desktop Companion → AI Companion → Embodied Agent → Physical Robot
 | Screen Analysis | Vision API 截屏分析 | ✔ |
 | Relationship | 好感度 + 熟悉度系统 | ✔ |
 | Activity Monitor | 窗口标题感知 | ✔ |
+| Contextual Proactive Reactions | 根据工作/休息切换与长专注轻柔回应 | ✔ |
 | Debug Window | F3 调试面板，含日志/关系/记忆快照 | ✔ |
 
 ## Quick Start
@@ -95,6 +96,7 @@ Main Process
 - [x] Emotion System
 - [x] Memory & Summary
 - [x] Lightweight Interaction Memory
+- [x] Contextual Proactive Reactions
 - [x] Screen Analysis
 - [x] Relationship System
 

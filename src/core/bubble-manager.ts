@@ -14,6 +14,7 @@ export class BubbleManager {
   private activityMonitorTimer: ReturnType<typeof setInterval> | null = null;
   private lastActivityBubble: string = '';
   private lastActivityBubbleTime: number = 0;
+  private lastProactiveBubbleTime: number = 0;
   private onActivityCallback: ((title: string) => void) | null = null;
 
   constructor(mainWindow: BrowserWindow, timeAwareness: TimeAwareness, stateManager: StateManager) {
@@ -147,6 +148,30 @@ export class BubbleManager {
   private async analyzeWithLLM(windowTitle: string): Promise<string | null> {
     // TODO: 未来接入大模型识别应用
     return null;
+  }
+
+  /** 尝试发送主动气泡，统一状态门禁和短间隔 */
+  tryShowProactiveBubble(text: string, source: string = 'proactive'): boolean {
+    const currentState = this.stateManager.getCurrentState();
+    const allowed = ['idle', 'curious', 'comfortable'];
+    if (!allowed.includes(currentState)) {
+      console.log(`[BubbleManager] proactive suppressed by state: ${currentState} (${source})`);
+      return false;
+    }
+
+    const now = Date.now();
+    const PROACTIVE_BUBBLE_SPACING = 90 * 1000;
+    if (now - this.lastProactiveBubbleTime < PROACTIVE_BUBBLE_SPACING) {
+      console.log(`[BubbleManager] proactive suppressed by spacing (${source})`);
+      return false;
+    }
+
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('show-bubble', text);
+      this.lastProactiveBubbleTime = now;
+      return true;
+    }
+    return false;
   }
 
   /** 发送气泡到渲染进程（仅在特定状态下） */

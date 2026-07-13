@@ -54,10 +54,7 @@ export class ChatManager {
     // 初始化关系
     this.memory.initRelationship();
 
-    // 启动主动消息定时器（每3分钟检查一次）
-    this.proactiveTimer = setInterval(() => {
-      this.checkProactiveMessage();
-    }, 3 * 60 * 1000);
+    // 主动回应由 ObserverManager + ProactiveReactionSystem 统一处理，避免多套主动气泡互相竞争。
   }
 
   /** 发送用户消息并获取 AI 回复 */
