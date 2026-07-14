@@ -10,7 +10,7 @@
  */
 
 import { TTSConfig } from './tts-config';
-import { TTSAudioResult, TTSEngine, arrayBufferToBase64 } from './tts-engine';
+import { TTSAudioResult, TTSEngine, arrayBufferToBase64, normalizeBase64Audio } from './tts-engine';
 
 export class TTSAliyun implements TTSEngine {
   private config: TTSConfig;
@@ -72,7 +72,7 @@ export class TTSAliyun implements TTSEngine {
     }
 
     if (audio.data) {
-      return { base64: audio.data, mimeType: 'audio/wav' };
+      return { base64: normalizeBase64Audio(audio.data), mimeType: 'audio/wav' };
     }
 
     if (audio.url) {

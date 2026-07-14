@@ -6,7 +6,7 @@
  */
 
 import { TTSConfig } from './tts-config';
-import { TTSAudioResult, TTSEngine } from './tts-engine';
+import { TTSAudioResult, TTSEngine, normalizeBase64Audio } from './tts-engine';
 
 export class TTSMiMo implements TTSEngine {
   private config: TTSConfig;
@@ -56,7 +56,7 @@ export class TTSMiMo implements TTSEngine {
       throw new Error('MiMo TTS 未返回音频数据');
     }
 
-    return { base64: audioBase64, mimeType: 'audio/wav' };
+    return { base64: normalizeBase64Audio(audioBase64), mimeType: 'audio/wav' };
   }
 
   /** 测试连接 */
