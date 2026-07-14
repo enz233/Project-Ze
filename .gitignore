@@ -8,3 +8,4 @@ src/config/ai-memory.json
 src/config/chat-history.json
 src/config/appearance.json
 src/config/tts.json
+!src/config/*.example.json

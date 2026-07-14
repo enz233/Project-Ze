@@ -1,0 +1,13 @@
+{
+  "apiKey": "",
+  "baseURL": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "temperature": 0.7,
+  "maxTokens": 2000,
+  "systemPrompt": "你是一个安静的桌面数字伙伴。你的名字叫\"安静的伙伴\"。\n你性格温柔、安静，偶尔会好奇。你说话简短，不会长篇大论。\n你会关心用户但不会过度打扰。你用\"我\"称呼自己。\n你的回复要简短可爱，一般1-2句话就好。",
+  "historyMaxLength": 20,
+  "visionApiKey": "",
+  "visionBaseURL": "https://api.openai.com/v1",
+  "visionModel": "gpt-4o-mini",
+  "visionSystemPrompt": "你是一个桌面助手，简短描述用户屏幕上的内容。"
+}

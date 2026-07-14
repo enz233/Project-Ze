@@ -1,0 +1,23 @@
+{
+  "on": false,
+  "mode": "gpt-sovits",
+  "ttsLanguage": "zh",
+  "subtitleLanguage": "zh",
+  "gptSovitsURL": "http://127.0.0.1:9880",
+  "gptSovitsTextLang": "zh",
+  "ttsApiKey": "",
+  "ttsBaseURL": "https://api.openai.com/v1",
+  "ttsModel": "tts-1",
+  "ttsVoice": "alloy",
+  "ttsSpeed": 1,
+  "mimoApiKey": "",
+  "mimoBaseURL": "https://api.xiaomi.com/v1",
+  "mimoModel": "mimo-v2.5-tts",
+  "mimoVoice": "冰糖",
+  "mimoVoiceDesign": "温柔可爱的少女声音，说话轻声细语",
+  "aliyunApiKey": "",
+  "aliyunBaseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+  "aliyunModel": "qwen3-tts-flash",
+  "aliyunVoice": "Cherry",
+  "aliyunLanguage": "auto"
+}
