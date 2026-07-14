@@ -1,0 +1,63 @@
+{
+  "enabled": true,
+  "defaultBehavior": {
+    "behavior": "pause",
+    "durationMs": 700,
+    "showBubble": true,
+    "bubbleDelayMs": 0,
+    "intensity": 0.5,
+    "direction": "center"
+  },
+  "reasonMap": {
+    "work_to_rest": {
+      "behavior": "state_hint",
+      "state": "comfortable",
+      "durationMs": 1800,
+      "showBubble": true,
+      "bubbleDelayMs": 300,
+      "intensity": 0.6,
+      "direction": "center"
+    },
+    "rest_to_work": {
+      "behavior": "lean",
+      "durationMs": 900,
+      "showBubble": true,
+      "bubbleDelayMs": 200,
+      "intensity": 0.6,
+      "direction": "center"
+    },
+    "long_focus": {
+      "behavior": "state_hint",
+      "state": "curious",
+      "durationMs": 1600,
+      "showBubble": true,
+      "bubbleDelayMs": 600,
+      "intensity": 0.5,
+      "direction": "center"
+    },
+    "returning_from_idle": {
+      "behavior": "wiggle",
+      "durationMs": 800,
+      "showBubble": true,
+      "bubbleDelayMs": 100,
+      "intensity": 0.7,
+      "direction": "center"
+    },
+    "meaningful_app_switch": {
+      "behavior": "pause",
+      "durationMs": 600,
+      "showBubble": false,
+      "bubbleDelayMs": 0,
+      "intensity": 0.4,
+      "direction": "center"
+    },
+    "recent_interaction_followup": {
+      "behavior": "lean",
+      "durationMs": 700,
+      "showBubble": true,
+      "bubbleDelayMs": 150,
+      "intensity": 0.5,
+      "direction": "center"
+    }
+  }
+}
