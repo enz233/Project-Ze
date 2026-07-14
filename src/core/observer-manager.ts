@@ -18,6 +18,7 @@ import { BubbleManager } from './bubble-manager';
 import { ProactiveCandidate, ProactiveReactionSystem } from './proactive-reaction-system';
 import { MicroBehaviorManager } from './micro-behavior-manager';
 import { getLogger } from './logger';
+import { WindowActivityService } from './window-activity-service';
 
 export class ObserverManager {
   private contextCollector: ContextCollector;
@@ -43,7 +44,8 @@ export class ObserverManager {
     configManager: AIConfigManager,
     bubbleManager: BubbleManager,
     proactiveReactionSystem: ProactiveReactionSystem,
-    microBehaviorManager: MicroBehaviorManager
+    microBehaviorManager: MicroBehaviorManager,
+    activityService: WindowActivityService
   ) {
     this.mainWindow = mainWindow;
     this.aiService = aiService;
@@ -54,7 +56,7 @@ export class ObserverManager {
     this.bubbleManager = bubbleManager;
     this.proactiveReactionSystem = proactiveReactionSystem;
     this.microBehaviorManager = microBehaviorManager;
-    this.contextCollector = new ContextCollector();
+    this.contextCollector = new ContextCollector(activityService);
   }
 
   /** 启动观察系统 */

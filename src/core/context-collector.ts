@@ -5,8 +5,7 @@
  * 每 30 秒收集一次当前上下文信息。
  */
 
-import * as os from 'os';
-import { exec } from 'child_process';
+import { WindowActivityService } from './window-activity-service';
 
 export interface ContextSnapshot {
   windowTitle: string;
@@ -17,19 +16,21 @@ export interface ContextSnapshot {
 }
 
 export class ContextCollector {
+  private activityService: WindowActivityService;
   private lastWindowTitle: string = '';
   private lastWindowChangeTime: number = Date.now();
   private lastUserActivityTime: number = Date.now();
   private activityListeners: (() => void)[] = [];
 
-  constructor() {
+  constructor(activityService: WindowActivityService = new WindowActivityService()) {
+    this.activityService = activityService;
     // 监听用户活动（鼠标/键盘）
     this.setupActivityListeners();
   }
 
   /** 收集当前上下文快照 */
   async collect(): Promise<ContextSnapshot> {
-    const windowTitle = await this.getActiveWindowTitle();
+    const windowTitle = await this.activityService.getActiveWindowTitle();
     console.log('[Context] raw window title:', JSON.stringify(windowTitle));
     const now = Date.now();
 
@@ -41,10 +42,11 @@ export class ContextCollector {
 
     const windowDuration = (now - this.lastWindowChangeTime) / 1000;
     const userActive = (now - this.lastUserActivityTime) < 5000; // 5秒内有活动
+    const activity = this.activityService.classify(windowTitle);
 
     return {
       windowTitle,
-      processName: this.extractProcessName(windowTitle),
+      processName: activity.processName,
       windowDuration,
       userActive,
       currentTime: new Date(),
@@ -64,75 +66,6 @@ export class ContextCollector {
   /** 用户是否活跃（5秒内有操作） */
   isUserActive(): boolean {
     return (Date.now() - this.lastUserActivityTime) < 5000;
-  }
-
-  /** 从窗口标题提取进程名 */
-  private extractProcessName(title: string): string {
-    if (!title) return '';
-    // 常见应用识别
-    const patterns: Record<string, string> = {
-      'Visual Studio Code': 'VSCode',
-      'WebStorm': 'WebStorm',
-      'IntelliJ': 'IntelliJ',
-      'PyCharm': 'PyCharm',
-      'Cursor': 'Cursor',
-      'Chrome': 'Chrome',
-      'Firefox': 'Firefox',
-      'Edge': 'Edge',
-      'YouTube': 'YouTube',
-      'Bilibili': 'Bilibili',
-      '微信': 'WeChat',
-      'QQ': 'QQ',
-      'Steam': 'Steam',
-      'Word': 'Word',
-      'PowerPoint': 'PowerPoint',
-      'Excel': 'Excel',
-      'Notion': 'Notion',
-    };
-    for (const [key, value] of Object.entries(patterns)) {
-      if (title.includes(key)) return value;
-    }
-    return title.split(' - ')[0] || title;
-  }
-
-  /** 获取前台窗口标题（跨平台） */
-  private getActiveWindowTitle(): Promise<string> {
-    const platform = os.platform();
-    return new Promise((resolve) => {
-      let cmd: string;
-      if (platform === 'darwin') {
-        cmd = `osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true'`;
-      } else if (platform === 'win32') {
-        const script = [
-          'Add-Type -TypeDefinition @"',
-          'using System;',
-          'using System.Runtime.InteropServices;',
-          'using System.Text;',
-          'public class Win32 {',
-          '  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();',
-          '  [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);',
-          '}',
-          '"@',
-          '$h = [Win32]::GetForegroundWindow()',
-          '$sb = New-Object System.Text.StringBuilder 256',
-          '[Win32]::GetWindowText($h, $sb, 256) | Out-Null',
-          '$sb.ToString()',
-        ].join('; ');
-        const encoded = Buffer.from(script, 'utf16le').toString('base64');
-        cmd = `powershell -NoProfile -EncodedCommand ${encoded}`;
-      } else {
-        resolve('');
-        return;
-      }
-      exec(cmd, { timeout: 5000 }, (error, stdout) => {
-        if (error) {
-          console.log('[Context] getActiveWindowTitle error:', error.message);
-          resolve('');
-          return;
-        }
-        resolve(stdout.trim());
-      });
-    });
   }
 
   /** 设置用户活动监听（鼠标/键盘） */

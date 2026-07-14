@@ -15,6 +15,7 @@ import { TTSManager } from '../core/tts-manager';
 import { ObserverManager } from '../core/observer-manager';
 import { ProactiveReactionSystem } from '../core/proactive-reaction-system';
 import { MicroBehaviorManager } from '../core/micro-behavior-manager';
+import { WindowActivityService } from '../core/window-activity-service';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -33,6 +34,7 @@ let ttsManager: TTSManager;
 let observerManager: ObserverManager;
 let proactiveReactionSystem: ProactiveReactionSystem;
 let microBehaviorManager: MicroBehaviorManager;
+let windowActivityService: WindowActivityService;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -100,7 +102,8 @@ function createWindow(): void {
   transitionEngine.start(1000);
 
   // 初始化气泡管理器
-  bubbleManager = new BubbleManager(mainWindow, timeAwareness, stateManager);
+  windowActivityService = new WindowActivityService();
+  bubbleManager = new BubbleManager(mainWindow, timeAwareness, stateManager, windowActivityService);
   // 延迟发送问候语（等渲染进程就绪）
   setTimeout(() => {
     bubbleManager.showGreeting();
@@ -137,7 +140,8 @@ function createWindow(): void {
   observerManager = new ObserverManager(
     mainWindow, aiService, chatManager.getEmotionUpdater().getEmotionSystem(),
     stateManager, chatManager.getMemory(), aiConfigManager,
-    bubbleManager, proactiveReactionSystem, microBehaviorManager
+    bubbleManager, proactiveReactionSystem, microBehaviorManager,
+    windowActivityService
   );
   observerManager.start(30000); // 每30秒检查一次
 
