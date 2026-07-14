@@ -14,7 +14,7 @@ import { EmotionSystem } from './emotion-system';
 import { StateManager } from './state-manager';
 import { AIMemory } from './ai-memory';
 import { AIConfigManager } from './ai-config';
-import { BubbleManager } from './bubble-manager';
+import { BubbleOrchestrator } from './bubble-orchestrator';
 import { ProactiveCandidate, ProactiveReactionSystem } from './proactive-reaction-system';
 import { MicroBehaviorManager } from './micro-behavior-manager';
 import { getLogger } from './logger';
@@ -27,7 +27,7 @@ export class ObserverManager {
   private stateManager: StateManager;
   private memory: AIMemory;
   private mainWindow: BrowserWindow;
-  private bubbleManager: BubbleManager;
+  private bubbleOrchestrator: BubbleOrchestrator;
   private proactiveReactionSystem: ProactiveReactionSystem;
   private microBehaviorManager: MicroBehaviorManager;
   private collectTimer: ReturnType<typeof setInterval> | null = null;
@@ -42,7 +42,7 @@ export class ObserverManager {
     stateManager: StateManager,
     memory: AIMemory,
     configManager: AIConfigManager,
-    bubbleManager: BubbleManager,
+    bubbleOrchestrator: BubbleOrchestrator,
     proactiveReactionSystem: ProactiveReactionSystem,
     microBehaviorManager: MicroBehaviorManager,
     activityService: WindowActivityService
@@ -53,7 +53,7 @@ export class ObserverManager {
     this.stateManager = stateManager;
     this.memory = memory;
     this.configManager = configManager;
-    this.bubbleManager = bubbleManager;
+    this.bubbleOrchestrator = bubbleOrchestrator;
     this.proactiveReactionSystem = proactiveReactionSystem;
     this.microBehaviorManager = microBehaviorManager;
     this.contextCollector = new ContextCollector(activityService);
@@ -111,7 +111,7 @@ export class ObserverManager {
           await this.delay(behaviorResult.bubbleDelayMs);
         }
         if (text) {
-          shown = this.bubbleManager.tryShowProactiveBubble(text, candidate.reason);
+          shown = this.bubbleOrchestrator.tryShowProactive(text, candidate.reason);
         }
       }
 

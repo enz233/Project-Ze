@@ -4,6 +4,7 @@ import { StateManager } from '../core/state-manager';
 import { TimeAwareness } from '../core/time-awareness';
 import { TransitionEngine } from '../core/transition-engine';
 import { BubbleManager } from '../core/bubble-manager';
+import { BubbleOrchestrator } from '../core/bubble-orchestrator';
 import { AIConfigManager } from '../core/ai-config';
 import { AIService } from '../core/ai-service';
 import { ChatManager } from '../core/chat-manager';
@@ -24,6 +25,7 @@ let stateManager: StateManager;
 let timeAwareness: TimeAwareness;
 let transitionEngine: TransitionEngine;
 let bubbleManager: BubbleManager;
+let bubbleOrchestrator: BubbleOrchestrator;
 let aiConfigManager: AIConfigManager;
 let aiService: AIService;
 let chatManager: ChatManager;
@@ -104,6 +106,7 @@ function createWindow(): void {
   // 初始化气泡管理器
   windowActivityService = new WindowActivityService();
   bubbleManager = new BubbleManager(mainWindow, timeAwareness, stateManager, windowActivityService);
+  bubbleOrchestrator = new BubbleOrchestrator(bubbleManager);
   // 延迟发送问候语（等渲染进程就绪）
   setTimeout(() => {
     bubbleManager.showGreeting();
@@ -140,7 +143,7 @@ function createWindow(): void {
   observerManager = new ObserverManager(
     mainWindow, aiService, chatManager.getEmotionUpdater().getEmotionSystem(),
     stateManager, chatManager.getMemory(), aiConfigManager,
-    bubbleManager, proactiveReactionSystem, microBehaviorManager,
+    bubbleOrchestrator, proactiveReactionSystem, microBehaviorManager,
     windowActivityService
   );
   observerManager.start(30000); // 每30秒检查一次
