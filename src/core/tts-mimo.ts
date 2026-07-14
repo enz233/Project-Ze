@@ -6,16 +6,17 @@
  */
 
 import { TTSConfig } from './tts-config';
+import { TTSAudioResult, TTSEngine } from './tts-engine';
 
-export class TTSMiMo {
+export class TTSMiMo implements TTSEngine {
   private config: TTSConfig;
 
   constructor(config: TTSConfig) {
     this.config = config;
   }
 
-  /** 合成语音，返回音频 ArrayBuffer */
-  async synthesize(text: string): Promise<ArrayBuffer> {
+  /** 合成语音，返回音频 base64 */
+  async synthesize(text: string): Promise<TTSAudioResult> {
     const url = `${this.config.mimoBaseURL}/chat/completions`;
 
     // 构建请求
@@ -55,13 +56,7 @@ export class TTSMiMo {
       throw new Error('MiMo TTS 未返回音频数据');
     }
 
-    // base64 → ArrayBuffer
-    const binary = atob(audioBase64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes.buffer;
+    return { base64: audioBase64, mimeType: 'audio/wav' };
   }
 
   /** 测试连接 */

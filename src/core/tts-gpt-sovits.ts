@@ -6,16 +6,17 @@
  */
 
 import { TTSConfig } from './tts-config';
+import { TTSAudioResult, TTSEngine, arrayBufferToBase64 } from './tts-engine';
 
-export class TTSGptSoVits {
+export class TTSGptSoVits implements TTSEngine {
   private config: TTSConfig;
 
   constructor(config: TTSConfig) {
     this.config = config;
   }
 
-  /** 合成语音，返回音频 ArrayBuffer */
-  async synthesize(text: string): Promise<ArrayBuffer> {
+  /** 合成语音，返回音频 base64 */
+  async synthesize(text: string): Promise<TTSAudioResult> {
     const url = `${this.config.gptSovitsURL}/tts`;
 
     const response = await fetch(url, {
@@ -32,7 +33,7 @@ export class TTSGptSoVits {
       throw new Error(`GPT-SoVITS 请求失败 (${response.status}): ${error}`);
     }
 
-    return await response.arrayBuffer();
+    return { base64: arrayBufferToBase64(await response.arrayBuffer()), mimeType: 'audio/wav' };
   }
 
   /** 测试连接 */

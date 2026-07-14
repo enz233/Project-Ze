@@ -10,16 +10,17 @@
  */
 
 import { TTSConfig } from './tts-config';
+import { TTSAudioResult, TTSEngine, arrayBufferToBase64 } from './tts-engine';
 
-export class TTSAliyun {
+export class TTSAliyun implements TTSEngine {
   private config: TTSConfig;
 
   constructor(config: TTSConfig) {
     this.config = config;
   }
 
-  /** 合成语音，返回音频 ArrayBuffer */
-  async synthesize(text: string): Promise<ArrayBuffer> {
+  /** 合成语音，返回音频 base64 */
+  async synthesize(text: string): Promise<TTSAudioResult> {
     // DashScope MultiModalConversation 端点
     const baseURL = this.config.aliyunBaseURL || 'https://dashscope.aliyuncs.com/api/v1';
     const url = baseURL + '/services/aigc/multimodal-generation/generation';
@@ -71,20 +72,14 @@ export class TTSAliyun {
     }
 
     if (audio.data) {
-      // base64 解码
-      const binary = atob(audio.data);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      return bytes.buffer;
+      return { base64: audio.data, mimeType: 'audio/wav' };
     }
 
     if (audio.url) {
       // 下载音频文件
       const audioResponse = await fetch(audio.url);
       if (!audioResponse.ok) throw new Error('下载音频失败');
-      return await audioResponse.arrayBuffer();
+      return { base64: arrayBufferToBase64(await audioResponse.arrayBuffer()), mimeType: 'audio/wav' };
     }
 
     throw new Error('阿里云 TTS 返回格式异常');
