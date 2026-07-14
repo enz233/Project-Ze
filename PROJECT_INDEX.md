@@ -60,6 +60,7 @@ src/
 - `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务。
 - `emotion-system.ts` / `emotion-updater.ts`：情绪状态与更新。
 - `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
+- `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。
 
 ## 8 个状态
 
@@ -95,6 +96,7 @@ src/
 
 ### AI 系统
 - **配置**：`ai-config.json` 持久化到 `app.getPath('userData')/config/`
+- **运行态配置存储**：真实用户配置保存在 Electron `userData/config`；通用读写逻辑由 `JsonConfigStore<T>` 承担，已迁移的配置管理器保留原有 `get()` / `update()` / `save()` API，源码树只保留默认规则和安全 example 文件。
 - **对话**：流式调用，解析 `<item>` 标签逐条显示气泡
 - **记忆**：对话历史持久化，每 50 条自动生成摘要；记录轻量互动习惯、常用应用和最近互动轨迹
 - **情感前缀**：根据状态给 AI 消息加情感上下文，切换后 4 秒保持上一个状态
