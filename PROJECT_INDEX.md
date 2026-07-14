@@ -59,7 +59,7 @@ src/
 - `bubble-manager.ts`：气泡发送、状态门禁、主动气泡短间隔控制。
 - `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务。
 - `emotion-system.ts` / `emotion-updater.ts`：情绪状态与更新。
-- `tts-manager.ts` / `tts-*.ts`：TTS 编排与各供应商实现。
+- `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
 
 ## 8 个状态
 
@@ -99,6 +99,7 @@ src/
 - **记忆**：对话历史持久化，每 50 条自动生成摘要；记录轻量互动习惯、常用应用和最近互动轨迹
 - **情感前缀**：根据状态给 AI 消息加情感上下文，切换后 4 秒保持上一个状态
 - **情境化主动回应**：本地规则先判断是否应该回应，AI 仅用于高价值场景短句改写，不用于决定是否打扰；阈值、分类、模板和 AI 改写 reason 已配置化
+- **TTS 架构**：`TTSManager` 保持唯一编排入口，读取配置并调用 `createTTSEngine(config)` 获取供应商引擎；供应商引擎实现 `TTSEngine.synthesize(text)` 并返回 base64 音频，Electron 播放、字幕、停止和 `playbackId` 完成确认仍只在 `TTSManager`、preload 和 renderer 链路中处理
 
 ## IPC 通道一览
 
