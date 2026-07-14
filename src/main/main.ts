@@ -119,11 +119,6 @@ function createWindow(): void {
   ttsConfigManager = new TTSConfigManager();
   ttsManager = new TTSManager(mainWindow, ttsConfigManager);
 
-  // 连接活动监视到 ChatManager
-  bubbleManager.setOnActivity((title) => {
-    chatManager?.updateActivity(title);
-  });
-
   // 连接情绪系统到 TransitionEngine
   transitionEngine.setEmotionUpdater(chatManager.getEmotionUpdater());
 
@@ -141,7 +136,7 @@ function createWindow(): void {
   microBehaviorManager = new MicroBehaviorManager(mainWindow);
   observerManager = new ObserverManager(
     mainWindow, aiService, chatManager.getEmotionUpdater().getEmotionSystem(),
-    stateManager, chatManager.getMemory(), screenAnalyzer, aiConfigManager,
+    stateManager, chatManager.getMemory(), aiConfigManager,
     bubbleManager, proactiveReactionSystem, microBehaviorManager
   );
   observerManager.start(30000); // 每30秒检查一次
