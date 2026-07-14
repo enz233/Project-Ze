@@ -85,9 +85,13 @@
 
 ## 五、配置文件说明
 
+运行时的 AI / TTS / 外观 / 对话历史 / AI 记忆配置保存在 Electron `userData/config` 目录，不应提交到仓库。仓库中的 `src/config/*.example.json` 只用于展示安全字段形状；真实 API Key、聊天内容和个人记忆不要写入示例文件。更多说明见 [docs/configuration-security.md](docs/configuration-security.md)。
+
 | 文件 | 位置 | 说明 |
 |------|------|------|
-| `ai-config.json` | src/config/ | AI 配置（API Key、模型等） |
-| `chat-history.json` | src/config/ | 对话历史（持久化） |
-| `ai-memory.json` | src/config/ | AI 记忆摘要 |
+| `ai-config.example.json` | src/config/ | AI 配置示例（API Key 为空） |
+| `tts.example.json` | src/config/ | TTS 配置示例（API Key 为空） |
+| `chat-history.example.json` | src/config/ | 对话历史示例（空消息列表） |
+| `ai-memory.example.json` | src/config/ | AI 记忆示例（无个人内容） |
+| `appearance.example.json` | src/config/ | 外观配置示例 |
 | `states.json` | src/config/ | 状态定义（一般不需要改） |

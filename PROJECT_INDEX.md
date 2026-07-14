@@ -34,9 +34,8 @@ src/
 ├── config/             # 配置文件
 │   ├── states.json         # 状态定义（7 个状态 + 转移规则）
 │   ├── proactive-reactions.json # 主动回应阈值/分类/模板配置
-│   ├── ai-config.json      # AI 配置（运行时生成，gitignore）
-│   ├── chat-history.json   # 对话历史（运行时生成，gitignore）
-│   └── ai-memory.json      # AI 记忆摘要（运行时生成，gitignore）
+│   ├── *.example.json      # 可提交的安全配置示例
+│   └── 本地真实配置          # AI/TTS/外观/聊天/记忆运行时生成，gitignore
 └── assets/
     └── sprites/basic/      # 差分图（按状态分文件夹）
         ├── idle/           # idle.png, idle_blink_1/2.png
