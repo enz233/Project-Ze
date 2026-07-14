@@ -75,6 +75,7 @@
   var bubbleEl = document.getElementById('bubble')!;
   var chatStatusEl = document.getElementById('chat-status');
   var chatStatusTimer: ReturnType<typeof setTimeout> | null = null;
+  var activeTtsAudio: HTMLAudioElement | null = null;
 
   function init(): void {
     // @ts-ignore
@@ -400,37 +401,32 @@
 
     // TTS 语音播放（附带字幕）
     // @ts-ignore
-    window.companion.onTtsPlay(function (base64: string, text: string) {
+    window.companion.onTtsPlay(function (base64: string, text: string, playbackId: string) {
       // 显示字幕（不自动隐藏，等音频结束）
       if (text) {
         showSubtitle(text);
       }
       var audioSrc = 'data:audio/wav;base64,' + base64;
       var audio = new Audio(audioSrc);
-      audio.onended = function () {
+      activeTtsAudio = audio;
+      var notifyDone = function () {
+        if (activeTtsAudio === audio) activeTtsAudio = null;
         hideSubtitle();
         // @ts-ignore
-        window.companion.sendTtsPlaybackDone();
+        window.companion.sendTtsPlaybackDone(playbackId);
       };
-      audio.onerror = function () {
-        hideSubtitle();
-        // @ts-ignore
-        window.companion.sendTtsPlaybackDone();
-      };
-      audio.play().catch(function () {
-        hideSubtitle();
-        // @ts-ignore
-        window.companion.sendTtsPlaybackDone();
-      });
+      audio.onended = notifyDone;
+      audio.onerror = notifyDone;
+      audio.play().catch(notifyDone);
     });
 
     // @ts-ignore
     window.companion.onTtsStop(function () {
-      // 停止所有音频播放，并触发 ended 事件
-      document.querySelectorAll('audio').forEach(function (a) {
-        a.pause();
-        a.dispatchEvent(new Event('ended'));
-      });
+      if (activeTtsAudio) {
+        activeTtsAudio.pause();
+        activeTtsAudio.dispatchEvent(new Event('ended'));
+        activeTtsAudio = null;
+      }
     });
   }
 

@@ -1,6 +1,6 @@
 # Architecture Cleanup Bugfix Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove real runtime config from the source tree, delete unreachable proactive-response code, centralize window/activity detection, share the ScreenAnalyzer instance, and update architecture docs without changing visible app behavior.
 
@@ -226,7 +226,7 @@ for p in Path('.').rglob('*'):
         continue
     for i, line in enumerate(text.splitlines(), 1):
         if re.search(r'sk-[A-Za-z0-9_-]+', line):
-            bad.append((str(p), i, 'sk-* token'))
+            bad.append((str(p), i, 'secret-token pattern'))
         if re.search(r'(apiKey|ApiKey|api_key)"?\s*[:=]\s*"[^"\s]{8,}"', line):
             if '.example.json' not in str(p):
                 bad.append((str(p), i, 'non-empty api key'))
@@ -1060,7 +1060,7 @@ for p in Path('.').rglob('*'):
         continue
     for i, line in enumerate(text.splitlines(), 1):
         if re.search(r'sk-[A-Za-z0-9_-]+', line):
-            bad.append((str(p), i, 'sk-* token'))
+            bad.append((str(p), i, 'secret-token pattern'))
         if re.search(r'(apiKey|ApiKey|api_key)"?\s*[:=]\s*"[^"\s]{8,}"', line):
             if '.example.json' not in str(p):
                 bad.append((str(p), i, 'non-empty api key'))
