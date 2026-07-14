@@ -18,6 +18,7 @@ import { AIMemory } from './ai-memory';
 import { AIConfigManager } from './ai-config';
 import { BubbleManager } from './bubble-manager';
 import { ProactiveCandidate, ProactiveReactionSystem } from './proactive-reaction-system';
+import { MicroBehaviorManager } from './micro-behavior-manager';
 import { getLogger } from './logger';
 
 interface AnalysisResult {
@@ -39,6 +40,7 @@ export class ObserverManager {
   private mainWindow: BrowserWindow;
   private bubbleManager: BubbleManager;
   private proactiveReactionSystem: ProactiveReactionSystem;
+  private microBehaviorManager: MicroBehaviorManager;
   private collectTimer: ReturnType<typeof setInterval> | null = null;
   private isAnalyzing = false;
 
@@ -53,7 +55,8 @@ export class ObserverManager {
     screenAnalyzer: ScreenAnalyzer,
     configManager: AIConfigManager,
     bubbleManager: BubbleManager,
-    proactiveReactionSystem: ProactiveReactionSystem
+    proactiveReactionSystem: ProactiveReactionSystem,
+    microBehaviorManager: MicroBehaviorManager
   ) {
     this.mainWindow = mainWindow;
     this.aiService = aiService;
@@ -64,6 +67,7 @@ export class ObserverManager {
     this.configManager = configManager;
     this.bubbleManager = bubbleManager;
     this.proactiveReactionSystem = proactiveReactionSystem;
+    this.microBehaviorManager = microBehaviorManager;
     this.contextCollector = new ContextCollector();
     this.screenshotTrigger = new ScreenshotTrigger(aiService, emotionSystem);
   }
@@ -114,14 +118,24 @@ export class ObserverManager {
       }
       if (!candidate) return;
 
-      const text = await this.resolveCandidateText(candidate, snapshot);
-      if (!text) return;
+      const behaviorResult = this.microBehaviorManager.performForCandidate(candidate);
 
-      const shown = this.bubbleManager.tryShowProactiveBubble(text, candidate.reason);
-      if (shown) {
-        this.proactiveReactionSystem.markDelivered(candidate, text);
+      let shown = false;
+      let text = '';
+      if (behaviorResult.shouldShowBubble) {
+        text = await this.resolveCandidateText(candidate, snapshot);
+        if (text && behaviorResult.bubbleDelayMs > 0) {
+          await this.delay(behaviorResult.bubbleDelayMs);
+        }
+        if (text) {
+          shown = this.bubbleManager.tryShowProactiveBubble(text, candidate.reason);
+        }
+      }
+
+      if (shown || behaviorResult.performed) {
+        this.proactiveReactionSystem.markDelivered(candidate, text || candidate.message);
       } else {
-        getLogger().log('observer', `[Proactive] bubble blocked: ${candidate.reason}`);
+        getLogger().log('observer', `[Proactive] output blocked: ${candidate.reason}`);
       }
     } catch (error) {
       console.error('[Observer] error:', error);
@@ -143,6 +157,10 @@ export class ObserverManager {
       console.error('[Observer] proactive wording failed:', error?.message || error);
       return candidate.message;
     }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   private async generateReactionText(candidate: ProactiveCandidate, snapshot: ContextSnapshot): Promise<string> {

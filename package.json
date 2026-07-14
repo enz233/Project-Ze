@@ -29,6 +29,7 @@
       "dist/**/*",
       "src/config/states.json",
       "src/config/proactive-reactions.json",
+      "src/config/micro-behaviors.json",
       "src/assets/**/*",
       "src/renderer/index.html",
       "src/renderer/style.css",

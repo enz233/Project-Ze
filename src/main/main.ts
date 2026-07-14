@@ -14,6 +14,7 @@ import { TTSConfigManager } from '../core/tts-config';
 import { TTSManager } from '../core/tts-manager';
 import { ObserverManager } from '../core/observer-manager';
 import { ProactiveReactionSystem } from '../core/proactive-reaction-system';
+import { MicroBehaviorManager } from '../core/micro-behavior-manager';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -31,6 +32,7 @@ let ttsConfigManager: TTSConfigManager;
 let ttsManager: TTSManager;
 let observerManager: ObserverManager;
 let proactiveReactionSystem: ProactiveReactionSystem;
+let microBehaviorManager: MicroBehaviorManager;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -136,10 +138,11 @@ function createWindow(): void {
 
   // 初始化观察系统
   proactiveReactionSystem = new ProactiveReactionSystem(chatManager.getMemory());
+  microBehaviorManager = new MicroBehaviorManager(mainWindow);
   observerManager = new ObserverManager(
     mainWindow, aiService, chatManager.getEmotionUpdater().getEmotionSystem(),
     stateManager, chatManager.getMemory(), screenAnalyzer, aiConfigManager,
-    bubbleManager, proactiveReactionSystem
+    bubbleManager, proactiveReactionSystem, microBehaviorManager
   );
   observerManager.start(30000); // 每30秒检查一次
 
@@ -292,6 +295,7 @@ function setupIPC(): void {
       lifePattern: chatManager?.getMemory().getLifePatternPrompt() || '',
       memory: chatManager?.getMemory().getMemorySnapshot() || null,
       proactive: proactiveReactionSystem?.getDebugSnapshot() || null,
+      microBehavior: microBehaviorManager?.getDebugSnapshot() || null,
     };
   });
 
