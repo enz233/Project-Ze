@@ -325,6 +325,12 @@
       showBubble(text);
     });
 
+    // 主进程发来的轻量微行为
+    // @ts-ignore
+    window.companion.onMicroBehavior(function (payload: any) {
+      playMicroBehavior(payload);
+    });
+
     // 主进程发来的宠物大小更新
     // @ts-ignore
     window.companion.onUpdatePetSize(function (size: number) {
@@ -366,6 +372,59 @@
         a.dispatchEvent(new Event('ended'));
       });
     });
+  }
+
+  var microBehaviorTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function playMicroBehavior(payload: any): void {
+    if (!payload || typeof payload.behavior !== 'string') return;
+    var behavior = payload.behavior;
+    var durationMs = typeof payload.durationMs === 'number' && payload.durationMs >= 0 ? payload.durationMs : 700;
+    var direction = typeof payload.direction === 'string' ? payload.direction : 'center';
+
+    clearMicroBehaviorClasses();
+
+    if (behavior === 'none') return;
+    if (behavior === 'pause') {
+      companionEl.classList.add('micro-pause');
+    } else if (behavior === 'wiggle') {
+      companionEl.classList.add('micro-wiggle');
+    } else if (behavior === 'lean') {
+      companionEl.classList.add('micro-lean-' + direction);
+    } else if (behavior === 'state_hint') {
+      companionEl.classList.add('micro-state-hint');
+      if (payload.state === 'curious') companionEl.classList.add('micro-state-curious');
+      if (payload.state === 'comfortable') companionEl.classList.add('micro-state-comfortable');
+    } else if (behavior === 'bubble_delay') {
+      companionEl.classList.add('micro-pause');
+    } else {
+      console.log('[MicroBehavior] unknown behavior:', behavior);
+      return;
+    }
+
+    if (microBehaviorTimer) clearTimeout(microBehaviorTimer);
+    microBehaviorTimer = setTimeout(function () {
+      clearMicroBehaviorClasses();
+    }, durationMs);
+  }
+
+  function clearMicroBehaviorClasses(): void {
+    companionEl.classList.remove(
+      'micro-pause',
+      'micro-wiggle',
+      'micro-lean-left',
+      'micro-lean-right',
+      'micro-lean-up',
+      'micro-lean-down',
+      'micro-lean-center',
+      'micro-state-hint',
+      'micro-state-curious',
+      'micro-state-comfortable'
+    );
+    if (microBehaviorTimer) {
+      clearTimeout(microBehaviorTimer);
+      microBehaviorTimer = null;
+    }
   }
 
   function setSprite(name: string): void {

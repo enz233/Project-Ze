@@ -109,4 +109,7 @@ contextBridge.exposeInMainWorld('companion', {
   onShowBubble: (callback: (text: string) => void) => {
     ipcRenderer.on('show-bubble', (_event, text) => callback(text));
   },
+  onMicroBehavior: (callback: (payload: any) => void) => {
+    ipcRenderer.on('micro-behavior', (_event, payload) => callback(payload));
+  },
 });

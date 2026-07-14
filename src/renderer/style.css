@@ -117,6 +117,79 @@ html, body {
   animation: comfortable-sway 3s ease-in-out infinite;
 }
 
+/* 主动回应微行为：短暂停顿 */
+@keyframes micro-pause {
+  0%, 100% { transform: translateX(-50%) scale(1); filter: none; }
+  45% { transform: translateX(-50%) scale(0.985); filter: brightness(0.98); }
+}
+
+#companion.micro-pause {
+  animation: micro-pause 0.7s ease-in-out;
+}
+
+/* 主动回应微行为：轻微晃动 */
+@keyframes micro-wiggle {
+  0%, 100% { transform: translateX(-50%) rotate(0deg); }
+  20% { transform: translateX(-50%) rotate(-3deg); }
+  40% { transform: translateX(-50%) rotate(3deg); }
+  60% { transform: translateX(-50%) rotate(-2deg); }
+  80% { transform: translateX(-50%) rotate(2deg); }
+}
+
+#companion.micro-wiggle {
+  animation: micro-wiggle 0.8s ease-in-out;
+}
+
+/* 主动回应微行为：探头/靠近 */
+@keyframes micro-lean-center {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-6px) scale(1.02); }
+}
+
+@keyframes micro-lean-left {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(calc(-50% - 8px)) translateY(-3px) rotate(-2deg); }
+}
+
+@keyframes micro-lean-right {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(calc(-50% + 8px)) translateY(-3px) rotate(2deg); }
+}
+
+@keyframes micro-lean-up {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-8px); }
+}
+
+@keyframes micro-lean-down {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(5px); }
+}
+
+#companion.micro-lean-center { animation: micro-lean-center 0.8s ease-in-out; }
+#companion.micro-lean-left { animation: micro-lean-left 0.8s ease-in-out; }
+#companion.micro-lean-right { animation: micro-lean-right 0.8s ease-in-out; }
+#companion.micro-lean-up { animation: micro-lean-up 0.8s ease-in-out; }
+#companion.micro-lean-down { animation: micro-lean-down 0.8s ease-in-out; }
+
+/* 主动回应微行为：状态提示，不接管主状态机 */
+@keyframes micro-state-hint {
+  0%, 100% { transform: translateX(-50%) scale(1); filter: none; }
+  50% { transform: translateX(-50%) scale(1.015); filter: brightness(1.04); }
+}
+
+#companion.micro-state-hint {
+  animation: micro-state-hint 1.2s ease-in-out;
+}
+
+#companion.micro-state-curious {
+  transform-origin: 50% 90%;
+}
+
+#companion.micro-state-comfortable {
+  transform-origin: 50% 100%;
+}
+
 /* 对话气泡（独立于人物） */
 #bubble {
   position: fixed;
