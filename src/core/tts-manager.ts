@@ -7,10 +7,7 @@
 
 import { BrowserWindow, ipcMain, IpcMainEvent } from 'electron';
 import { TTSConfigManager, TTSConfig, TTSLanguage } from './tts-config';
-import { TTSGptSoVits } from './tts-gpt-sovits';
-import { TTSApi } from './tts-api';
-import { TTSMiMo } from './tts-mimo';
-import { TTSAliyun } from './tts-aliyun';
+import { TTSAudioResult, createTTSEngine } from './tts-engine';
 import { AIService, ChatMessage } from './ai-service';
 
 export class TTSManager {
@@ -45,9 +42,9 @@ export class TTSManager {
 
     try {
       const { ttsText, subtitleText } = await this.prepareText(text, config);
-      const audioData = await this.synthesize(ttsText, config);
-      if (audioData) {
-        await this.play(audioData, subtitleText);
+      const audio = await this.synthesize(ttsText, config);
+      if (audio) {
+        await this.play(audio, subtitleText);
       }
     } catch (error: any) {
       console.error('[TTS] speak failed:', error.message);
@@ -155,21 +152,10 @@ export class TTSManager {
   }
 
   /** 根据配置选择引擎并合成 */
-  private async synthesize(text: string, config: TTSConfig): Promise<ArrayBuffer | null> {
+  private async synthesize(text: string, config: TTSConfig): Promise<TTSAudioResult | null> {
     try {
-      if (config.mode === 'gpt-sovits') {
-        const engine = new TTSGptSoVits(config);
-        return await engine.synthesize(text);
-      } else if (config.mode === 'mimo') {
-        const engine = new TTSMiMo(config);
-        return await engine.synthesize(text);
-      } else if (config.mode === 'aliyun') {
-        const engine = new TTSAliyun(config);
-        return await engine.synthesize(text);
-      } else {
-        const engine = new TTSApi(config);
-        return await engine.synthesize(text);
-      }
+      const engine = createTTSEngine(config);
+      return await engine.synthesize(text);
     } catch (error: any) {
       console.error('[TTS] 合成失败:', error.message);
       return null;
@@ -177,15 +163,15 @@ export class TTSManager {
   }
 
   /** 发送音频数据到渲染进程播放（附带字幕文字） */
-  private play(audioData: ArrayBuffer, text: string): Promise<void> {
+  private play(audio: TTSAudioResult, text: string): Promise<void> {
     return new Promise((resolve) => {
       if (!this.mainWindow || this.mainWindow.isDestroyed()) {
         resolve();
         return;
       }
 
-      // 将 ArrayBuffer 转为 base64
-      const base64 = Buffer.from(audioData).toString('base64');
+      // 使用引擎返回的 base64 音频数据
+      const base64 = audio.base64;
       const playbackId = String(++this.playbackSeq);
 
       // 通过 IPC 监听当前播放完成，避免旧音频事件误结束新播放
@@ -225,20 +211,8 @@ export class TTSManager {
     const config = this.configManager.get();
 
     try {
-      let ok = false;
-      if (config.mode === 'gpt-sovits') {
-        const engine = new TTSGptSoVits(config);
-        ok = await engine.test();
-      } else if (config.mode === 'mimo') {
-        const engine = new TTSMiMo(config);
-        ok = await engine.test();
-      } else if (config.mode === 'aliyun') {
-        const engine = new TTSAliyun(config);
-        ok = await engine.test();
-      } else {
-        const engine = new TTSApi(config);
-        ok = await engine.test();
-      }
+      const engine = createTTSEngine(config);
+      const ok = await engine.test();
 
       return ok
         ? { success: true, message: 'TTS 连接成功' }
