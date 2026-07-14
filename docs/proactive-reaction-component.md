@@ -99,3 +99,34 @@ getDebugSnapshot(): ProactiveDebugSnapshot
 - 仅记录，不输出
 
 推荐方向是让主动回应逐渐支持动作表达，而不是无限增加说话规则。
+
+## Micro behavior handoff
+
+主动回应候选现在可以交给 `MicroBehaviorManager` 映射为轻量微行为。
+
+主流程：
+
+```txt
+ObserverManager
+  → ContextCollector.collect()
+  → ProactiveReactionSystem.evaluateComponent(snapshot)
+  → MicroBehaviorManager.performForCandidate(candidate)
+  → optional AI wording if bubble is allowed
+  → BubbleManager.tryShowProactiveBubble(...) if needed
+```
+
+核心文件：
+
+- [src/core/micro-behavior-manager.ts](src/core/micro-behavior-manager.ts)
+- [src/config/micro-behaviors.json](src/config/micro-behaviors.json)
+
+第一版微行为只通过 IPC 和 CSS 做轻量表现，不新增素材，也不接管 `StateManager` 状态。
+
+支持的行为：
+
+- `none`：仅记录。
+- `pause`：短暂停顿。
+- `wiggle`：轻微晃动。
+- `lean`：轻微偏移/探头。
+- `state_hint`：状态感提示。
+- `bubble_delay`：延迟气泡。
