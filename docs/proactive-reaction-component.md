@@ -130,3 +130,21 @@ ObserverManager
 - `lean`：轻微偏移/探头。
 - `state_hint`：状态感提示。
 - `bubble_delay`：延迟气泡。
+
+## Debug panel
+
+F3 Debug 面板现在会分开展示主动回应决策与微行为状态。
+
+展示内容包括：
+
+- Proactive Decision：当前分类、前一分类、最近决策、候选 reason、拦截原因、滚动/每日预算、最近输出、最近直接互动、长专注阈值。
+- Micro Behavior：微行为开关、最近行为、对应 reason、是否显示气泡、气泡延迟、决策来源、是否已发送，以及最近 3 条微行为简史。
+
+这些信息来自：
+
+```ts
+proactiveReactionSystem.getDebugSnapshot()
+microBehaviorManager.getDebugSnapshot()
+```
+
+Debug 面板只读展示状态，不改变主动回应规则或微行为执行逻辑。
