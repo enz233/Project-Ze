@@ -32,10 +32,11 @@ src/
 │   ├── index.html          # 主页面
 │   └── style.css           # 样式（动画、气泡、输入框）
 ├── config/             # 配置文件
-│   ├── states.json         # 状态定义（7 个状态 + 转移规则）
+│   ├── states.json              # 状态定义
 │   ├── proactive-reactions.json # 主动回应阈值/分类/模板配置
-│   ├── *.example.json      # 可提交的安全配置示例
-│   └── 本地真实配置          # AI/TTS/外观/聊天/记忆运行时生成，gitignore
+│   ├── micro-behaviors.json     # 微行为触发与动作配置
+│   ├── *.example.json           # 可提交的安全配置示例
+│   └── 本地真实配置              # AI/TTS/外观/聊天/记忆运行时生成，gitignore
 └── assets/
     └── sprites/basic/      # 差分图（按状态分文件夹）
         ├── idle/           # idle.png, idle_blink_1/2.png
@@ -47,6 +48,18 @@ src/
         ├── comfortable/    # comfortable.png
         └── tried/          # tried_0~4.png
 ```
+
+### core 模块速查
+
+- `observer-manager.ts`：观察编排器，当前主动回应主入口。
+- `context-collector.ts`：轻量上下文快照收集。
+- `window-activity-service.ts`：前台窗口、进程名和活动分类识别。
+- `proactive-reaction-system.ts`：主动回应候选判断与冷却记录。
+- `micro-behavior-manager.ts`：主动候选触发的微行为执行。
+- `bubble-manager.ts`：气泡发送、状态门禁、主动气泡短间隔控制。
+- `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务。
+- `emotion-system.ts` / `emotion-updater.ts`：情绪状态与更新。
+- `tts-manager.ts` / `tts-*.ts`：TTS 编排与各供应商实现。
 
 ## 8 个状态
 
@@ -78,7 +91,7 @@ src/
 - **AI 模块**：AIConfigManager → AIService → ChatManager
 - **设置窗口**：单例模式，F11 打开
 - **调试窗口**：F3 打开，显示日志、关系数值、互动统计、常用应用和生活习惯提示词
-- **主动回应**：ObserverManager → ProactiveReactionSystem → BubbleManager，基于应用切换、工作/休息转换、长专注和直接互动生成轻柔回应；规则来自 `src/config/proactive-reactions.json`，Debug 面板显示最近决策/拦截原因/预算状态
+- **主动回应**：当前主动回应主路径：`ObserverManager → ContextCollector → ProactiveReactionSystem → MicroBehaviorManager → BubbleManager.tryShowProactiveBubble`。基于轻量上下文快照、应用切换、工作/休息转换、长专注和直接互动生成轻柔回应；规则来自 `src/config/proactive-reactions.json` 与 `src/config/micro-behaviors.json`，Debug 面板显示最近决策/拦截原因/预算状态
 
 ### AI 系统
 - **配置**：`ai-config.json` 持久化到 `app.getPath('userData')/config/`

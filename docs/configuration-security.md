@@ -1,8 +1,14 @@
 # Configuration Security
 
-Project-Ze 的真实运行时配置不应提交到仓库。应用运行时会把用户配置、聊天历史和记忆写入 Electron `userData/config` 目录；仓库中的配置文件只应保存默认规则或安全示例。
+Project-Ze 的真实运行时配置不应提交到仓库。应用运行时会把用户配置、聊天历史和记忆写入 Electron `userData/config` 目录；仓库中的 `src/config` 只应保存默认规则（如状态、主动回应和微行为规则）或安全示例。
 
 ## Safe to commit
+
+以下文件是可提交的默认规则：
+
+- [src/config/states.json](../src/config/states.json)
+- [src/config/proactive-reactions.json](../src/config/proactive-reactions.json)
+- [src/config/micro-behaviors.json](../src/config/micro-behaviors.json)
 
 以下文件是安全示例，可以提交：
 

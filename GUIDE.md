@@ -95,3 +95,5 @@
 | `ai-memory.example.json` | src/config/ | AI 记忆示例（无个人内容） |
 | `appearance.example.json` | src/config/ | 外观配置示例 |
 | `states.json` | src/config/ | 状态定义（一般不需要改） |
+| `proactive-reactions.json` | src/config/ | 主动回应阈值、分类和模板规则 |
+| `micro-behaviors.json` | src/config/ | 微行为触发与动作规则 |
