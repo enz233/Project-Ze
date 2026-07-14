@@ -1,17 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ChatMessage } from './ai-service';
+import { ChatHistoryStore, HistoryData } from './chat-history-store';
 
-interface HistoryMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-}
-
-interface HistoryData {
-  messages: HistoryMessage[];
-  sinceLastSummary: number;
-}
 
 interface AppUsage {
   count: number;        // 使用次数
@@ -56,44 +47,20 @@ const MAX_SUMMARY_LENGTH = 200;
 const MAX_RECENT_INTERACTIONS = 40;
 
 export class AIMemory {
-  private historyPath: string;
+  private historyStore: ChatHistoryStore;
   private memoryPath: string;
-  private history: HistoryData;
   private memory: MemoryData;
 
   constructor(configDir: string) {
-    this.historyPath = path.join(configDir, 'chat-history.json');
+    this.historyStore = new ChatHistoryStore(configDir);
     this.memoryPath = path.join(configDir, 'ai-memory.json');
-    this.history = this.loadHistory();
     this.memory = this.loadMemory();
   }
 
   // ========== 持久化 ==========
 
-  private loadHistory(): HistoryData {
-    try {
-      if (fs.existsSync(this.historyPath)) {
-        const raw = fs.readFileSync(this.historyPath, 'utf-8');
-        const data = JSON.parse(raw);
-        return {
-          messages: Array.isArray(data.messages) ? data.messages : [],
-          sinceLastSummary: data.sinceLastSummary || 0,
-        };
-      }
-    } catch (e) {
-      console.error('[AIMemory] 加载历史失败:', e);
-    }
-    return { messages: [], sinceLastSummary: 0 };
-  }
-
   saveHistory(): void {
-    try {
-      const dir = path.dirname(this.historyPath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(this.historyPath, JSON.stringify(this.history, null, 2), 'utf-8');
-    } catch (e) {
-      console.error('[AIMemory] 保存历史失败:', e);
-    }
+    this.historyStore.save();
   }
 
   private loadMemory(): MemoryData {
@@ -157,31 +124,20 @@ export class AIMemory {
   // ========== 历史操作 ==========
 
   addMessage(role: 'user' | 'assistant', content: string): void {
-    this.history.messages.push({
-      role,
-      content,
-      timestamp: Date.now(),
-    });
-    this.history.sinceLastSummary++;
+    this.historyStore.addMessage(role, content);
     this.memory.totalMessages++;
-    this.saveHistory();
   }
 
   getRecentMessages(count: number): ChatMessage[] {
-    const messages = this.history.messages;
-    const start = Math.max(0, messages.length - count);
-    return messages.slice(start).map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
+    return this.historyStore.getRecentMessages(count);
   }
 
   getHistoryCount(): number {
-    return this.history.messages.length;
+    return this.historyStore.getHistoryCount();
   }
 
   clearAll(): void {
-    this.history = { messages: [], sinceLastSummary: 0 };
+    this.historyStore.setData({ messages: [], sinceLastSummary: 0 });
     this.memory = this.createDefaultMemory();
     this.saveHistory();
     this.saveMemory();
@@ -190,7 +146,7 @@ export class AIMemory {
   // ========== 摘要 ==========
 
   shouldSummarize(): boolean {
-    return this.history.sinceLastSummary >= SUMMARY_THRESHOLD;
+    return this.historyStore.shouldSummarize(SUMMARY_THRESHOLD);
   }
 
   buildSummaryMessages(): ChatMessage[] {
@@ -235,7 +191,7 @@ export class AIMemory {
     if (!summary || !summary.trim()) return;
     this.memory.summary = summary.trim();
     this.memory.lastUpdated = Date.now();
-    this.history.sinceLastSummary = 0;
+    this.historyStore.resetSinceLastSummary();
     this.saveMemory();
     this.saveHistory();
     console.log('[AIMemory] 记忆摘要已更新');
@@ -322,7 +278,7 @@ export class AIMemory {
 
   /** 启动时总结上下文成记忆（合并旧记忆+新对话） */
   async summarizeOnStartup(aiService: any): Promise<void> {
-    if (this.history.messages.length < 5) return;
+    if (this.getHistoryCount() < 5) return;
 
     console.log('[AIMemory] startup: summarizing history...');
     try {
@@ -339,8 +295,8 @@ export class AIMemory {
 
   /** 关闭时总结（快速，不等待太久） */
   async summarizeOnShutdown(aiService: any): Promise<void> {
-    if (this.history.messages.length < 5) return;
-    if (this.history.sinceLastSummary < 5) return; // 最近已经总结过，跳过
+    if (this.getHistoryCount() < 5) return;
+    if (!this.historyStore.shouldSummarize(5)) return; // 最近已经总结过，跳过
 
     console.log('[AIMemory] shutdown: summarizing...');
     try {
@@ -506,7 +462,7 @@ export class AIMemory {
     }
     if (!this.memory.familiarity) {
       // 根据历史消息数计算初始熟悉度
-      const base = Math.min(Math.floor(this.history.messages.length / 100) * 5, 20);
+      const base = Math.min(Math.floor(this.getHistoryCount() / 100) * 5, 20);
       this.memory.familiarity = Math.max(10, base);
     }
     this.memory.todayDate = new Date().toDateString();
