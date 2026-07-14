@@ -34,6 +34,7 @@
       "src/renderer/index.html",
       "src/renderer/style.css",
       "src/main/settings.html",
+      "src/main/debug.html",
       "package.json"
     ],
     "win": {
