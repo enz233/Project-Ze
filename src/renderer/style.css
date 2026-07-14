@@ -238,7 +238,8 @@ html, body {
   left: 50%;
   transform: translateX(-50%);
   width: 180px;
-  padding: 5px 12px;
+  min-height: 30px;
+  padding: 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 15px;
   background: rgba(255, 255, 255, 0.9);
@@ -260,6 +261,58 @@ html, body {
   border-color: rgba(100, 150, 255, 0.8);
   background: rgba(255, 255, 255, 1);
   box-shadow: 0 2px 8px rgba(100, 150, 255, 0.2);
+}
+
+#chat-status {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 180px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(38, 38, 38, 0.54);
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 11px;
+  font-family: 'Microsoft YaHei', sans-serif;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 120;
+}
+
+#chat-status.chat-status-visible {
+  display: block;
+}
+
+#chat-status.chat-status-thinking::before,
+#chat-status.chat-status-screen::before,
+#chat-status.chat-status-speaking::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  animation: chat-status-pulse 1s ease-in-out infinite;
+  vertical-align: 1px;
+}
+
+#chat-status.chat-status-error {
+  background: rgba(180, 72, 72, 0.7);
+}
+
+#chat-status.chat-status-busy {
+  background: rgba(92, 105, 150, 0.65);
+}
+
+@keyframes chat-status-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.12); }
 }
 
 .hidden {

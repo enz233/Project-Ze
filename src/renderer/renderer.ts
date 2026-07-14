@@ -73,6 +73,8 @@
   var companionEl = document.getElementById('companion')!;
   var spriteEl = document.getElementById('sprite') as HTMLImageElement;
   var bubbleEl = document.getElementById('bubble')!;
+  var chatStatusEl = document.getElementById('chat-status');
+  var chatStatusTimer: ReturnType<typeof setTimeout> | null = null;
 
   function init(): void {
     // @ts-ignore
@@ -234,29 +236,32 @@
   }
 
   function setupChatInput(): void {
-    var chatInput = document.getElementById('chat-input') as HTMLInputElement;
+    var chatInput = document.getElementById('chat-input') as HTMLTextAreaElement;
     if (!chatInput) return;
 
     // 右键伙伴打开输入框
     companionEl.addEventListener('contextmenu', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      chatInput.classList.remove('hidden');
-      chatInput.focus();
+      openChatInput(chatInput, '');
     });
 
-    // 回车发送
+    // Ctrl+Enter 换行，Enter 发送
     chatInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !e.ctrlKey) {
+        e.preventDefault();
         var text = chatInput.value.trim();
         if (text) {
           // @ts-ignore
           window.companion.sendUserMessage(text);
           chatInput.value = '';
+          chatInput.classList.add('hidden');
+          updateChatStatus({ phase: 'thinking', message: '已发送，思考中...' });
         }
       } else if (e.key === 'Escape') {
         chatInput.classList.add('hidden');
         chatInput.value = '';
+        updateChatStatus({ phase: 'idle' });
       }
     });
 
@@ -267,6 +272,55 @@
         chatInput.value = '';
       }, 200);
     });
+  }
+
+  function openChatInput(chatInput: HTMLTextAreaElement, text: string): void {
+    chatInput.classList.remove('hidden');
+    chatInput.value = text;
+    chatInput.focus();
+    if (text) {
+      chatInput.setSelectionRange(text.length, text.length);
+    }
+    updateChatStatus({ phase: 'idle', message: 'Enter 发送，Ctrl+Enter 换行' });
+  }
+
+  function updateChatStatus(payload: any): void {
+    if (!chatStatusEl || !payload) return;
+    var phase = typeof payload.phase === 'string' ? payload.phase : 'idle';
+    var message = typeof payload.message === 'string' ? payload.message : '';
+
+    if (chatStatusTimer) {
+      clearTimeout(chatStatusTimer);
+      chatStatusTimer = null;
+    }
+
+    chatStatusEl.className = '';
+    if (phase === 'idle' && !message) {
+      chatStatusEl.classList.add('hidden');
+      chatStatusEl.textContent = '';
+      return;
+    }
+
+    var text = message;
+    if (!text) {
+      if (phase === 'thinking') text = '思考中...';
+      else if (phase === 'screen') text = '正在看屏幕...';
+      else if (phase === 'speaking') text = '播放回复中...';
+      else if (phase === 'busy') text = '还在处理上一句';
+      else if (phase === 'error') text = '出错了';
+      else text = '准备聊天';
+    }
+
+    chatStatusEl.textContent = text;
+    chatStatusEl.classList.add('chat-status-visible', 'chat-status-' + phase);
+
+    if (phase === 'idle' || phase === 'error') {
+      chatStatusTimer = setTimeout(function () {
+        if (!chatStatusEl) return;
+        chatStatusEl.classList.add('hidden');
+        chatStatusEl.textContent = '';
+      }, phase === 'error' ? 3500 : 1800);
+    }
   }
 
   /** 播放随机音效 */
@@ -329,6 +383,12 @@
     // @ts-ignore
     window.companion.onMicroBehavior(function (payload: any) {
       playMicroBehavior(payload);
+    });
+
+    // 主进程发来的聊天处理状态
+    // @ts-ignore
+    window.companion.onChatStatus(function (payload: any) {
+      updateChatStatus(payload);
     });
 
     // 主进程发来的宠物大小更新

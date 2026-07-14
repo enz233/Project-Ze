@@ -25,6 +25,12 @@ export class ChatManager {
   private proactiveTimer: ReturnType<typeof setInterval> | null = null;
   private currentActivity: string = '';
 
+  private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'speaking' | 'busy' | 'error', message: string = ''): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('chat-status', { phase, message });
+    }
+  }
+
   constructor(
     mainWindow: BrowserWindow,
     configManager: AIConfigManager,
@@ -61,11 +67,13 @@ export class ChatManager {
   async sendMessage(userMessage: string): Promise<void> {
     if (this.isProcessing) {
       this.sendBubble('等一下，我还在想...');
+      this.sendChatStatus('busy', '还在想上一句');
       return;
     }
 
     if (!this.configManager.isValid()) {
       this.sendBubble('还没有配置 API 哦，请打开设置配置一下~');
+      this.sendChatStatus('error', 'AI 未配置');
       return;
     }
 
@@ -73,12 +81,14 @@ export class ChatManager {
     this.lastUserInteraction = Date.now();
     this.emotionUpdater.onInteraction();
     this.sendBubble('思考中...');
+    this.sendChatStatus('thinking', '思考中...');
 
     try {
       // 检查是否为屏幕分析请求（"." 开头）
       if (userMessage.startsWith('.')) {
         const screenMessage = userMessage.slice(1).trim() || '描述一下屏幕上有什么';
         this.sendBubble('正在看屏幕...');
+        this.sendChatStatus('screen', '正在看屏幕...');
         const screenResult = await this.screenAnalyzer.analyze(screenMessage);
         this.sendBubble(screenResult);
         this.memory.addMessage('user', userMessage);
@@ -168,6 +178,7 @@ export class ChatManager {
       // 非 TTS 模式：直接显示气泡
       if (this.ttsManager) {
         const ttsTexts = texts.map(t => t.slice(0, 200));
+        this.sendChatStatus('speaking', '播放回复中...');
         await this.ttsManager.speakAll(ttsTexts);
       } else {
         for (let i = 0; i < texts.length; i++) {
@@ -186,8 +197,10 @@ export class ChatManager {
     } catch (error: any) {
       console.error('[ChatManager] AI 调用失败:', error);
       this.sendBubble('出错了... ' + (error.message || ''));
+      this.sendChatStatus('error', error.message || '出错了');
     } finally {
       this.isProcessing = false;
+      this.sendChatStatus('idle');
     }
   }
 
