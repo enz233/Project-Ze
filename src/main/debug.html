@@ -42,7 +42,7 @@
     /* 记忆状态 */
     .memory-panel {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 8px;
       padding: 8px 12px;
       background: #202020;
@@ -168,8 +168,12 @@
       <div class="memory-value" id="lifePatternView">Loading...</div>
     </div>
     <div class="memory-card">
-      <div class="memory-title">Proactive</div>
+      <div class="memory-title">Proactive Decision</div>
       <div class="memory-value" id="proactiveView">Loading...</div>
+    </div>
+    <div class="memory-card">
+      <div class="memory-title">Micro Behavior</div>
+      <div class="memory-value" id="microBehaviorView">Loading...</div>
     </div>
   </div>
   <div class="filters">
@@ -195,6 +199,7 @@
     var appsView = document.getElementById('appsView');
     var lifePatternView = document.getElementById('lifePatternView');
     var proactiveView = document.getElementById('proactiveView');
+    var microBehaviorView = document.getElementById('microBehaviorView');
     var paused = false;
     var logCount = 0;
     var activeFilters = new Set(['state', 'drag', 'tts', 'observer', 'chat', 'ai', 'error']);
@@ -284,15 +289,42 @@
       var direct = proactive.lastDirectInteraction
         ? proactive.lastDirectInteraction.type + ' ' + formatTimeAgo(proactive.lastDirectInteraction.timestamp)
         : 'none';
+      var focus = proactive.firedFocusThresholds && proactive.firedFocusThresholds.length
+        ? proactive.firedFocusThresholds.join(',') + 's'
+        : '-';
       return [
-        'cat: ' + proactive.previousCategory + ' → ' + proactive.category,
+        'cat: ' + (proactive.previousCategory || '-') + ' → ' + (proactive.category || '-'),
         'decision: ' + (proactive.lastDecision || 'none'),
         'candidate: ' + (proactive.lastCandidateReason || '-'),
         'suppress: ' + (proactive.lastSuppressReason || '-'),
-        'rolling/day: ' + proactive.rollingCount + '/' + proactive.dailyDelivered,
+        'budget: ' + fmtNum(proactive.rollingCount) + ' rolling / ' + fmtNum(proactive.dailyDelivered) + ' day',
         'last: ' + (proactive.lastDeliveredMessage || '-') + ' (' + formatTimeAgo(proactive.lastDeliveredAt) + ')',
-        'direct: ' + direct
+        'direct: ' + direct,
+        'focus: ' + (proactive.focusSessionKey || '-') + ' / ' + focus
       ].join('\n');
+    }
+
+    function formatMicroBehavior(microBehavior) {
+      if (!microBehavior) return 'No micro behavior yet';
+      var decision = microBehavior.lastDecision || null;
+      var result = microBehavior.lastResult || null;
+      var recent = microBehavior.recentBehaviors || [];
+      var lines = [
+        'enabled: ' + (microBehavior.enabled ? 'yes' : 'no'),
+        'behavior: ' + (decision ? decision.behavior : '-'),
+        'reason: ' + (decision ? decision.reason : '-'),
+        'bubble: ' + (decision ? String(decision.showBubble) : '-'),
+        'delay: ' + (decision ? fmtNum(decision.bubbleDelayMs) + 'ms' : '-'),
+        'source: ' + (decision ? decision.source : '-'),
+        'performed: ' + (result ? String(result.performed) : '-')
+      ];
+      if (recent.length) {
+        lines.push('recent:');
+        recent.slice(0, 3).forEach(function(item) {
+          lines.push('- ' + item.reason + ' → ' + item.behavior + ' / bubble=' + item.showBubble + ' / ok=' + item.success);
+        });
+      }
+      return lines.join('\n');
     }
 
     function refreshMemoryPanel() {
@@ -311,6 +343,7 @@
         appsView.textContent = formatTopApps(memory.appUsage);
         lifePatternView.textContent = info.lifePattern || info.summary || 'No memory summary yet';
         proactiveView.textContent = formatProactive(info.proactive);
+        microBehaviorView.textContent = formatMicroBehavior(info.microBehavior);
       }).catch(function(error) {
         var msg = 'Memory load failed: ' + (error && error.message ? error.message : String(error));
         relationshipView.textContent = msg;
@@ -318,6 +351,7 @@
         appsView.textContent = msg;
         lifePatternView.textContent = msg;
         proactiveView.textContent = msg;
+        microBehaviorView.textContent = msg;
       });
     }
 
