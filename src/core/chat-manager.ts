@@ -33,14 +33,15 @@ export class ChatManager {
     configManager: AIConfigManager,
     aiService: AIService,
     stateManager: StateManager,
-    timeAwareness: TimeAwareness
+    timeAwareness: TimeAwareness,
+    screenAnalyzer: ScreenAnalyzer
   ) {
     this.mainWindow = mainWindow;
     this.configManager = configManager;
     this.aiService = aiService;
     this.stateManager = stateManager;
     this.memory = new AIMemory(configManager.getConfigDir());
-    this.screenAnalyzer = new ScreenAnalyzer(configManager);
+    this.screenAnalyzer = screenAnalyzer;
 
     // 初始化情绪系统
     this.emotionSystem = new EmotionSystem();

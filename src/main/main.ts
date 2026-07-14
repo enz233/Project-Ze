@@ -116,9 +116,9 @@ function createWindow(): void {
   // 初始化 AI 模块
   aiConfigManager = new AIConfigManager();
   aiService = new AIService(aiConfigManager);
-  chatManager = new ChatManager(mainWindow, aiConfigManager, aiService, stateManager, timeAwareness);
-  appearanceConfig = new AppearanceConfigManager();
   screenAnalyzer = new ScreenAnalyzer(aiConfigManager);
+  chatManager = new ChatManager(mainWindow, aiConfigManager, aiService, stateManager, timeAwareness, screenAnalyzer);
+  appearanceConfig = new AppearanceConfigManager();
   ttsConfigManager = new TTSConfigManager();
   ttsManager = new TTSManager(mainWindow, ttsConfigManager);
 
