@@ -1,55 +1,57 @@
-# Final Review Fix Report
+# ASR Provider Presets Final Review Fix Report
 
-Date: 2026-07-15
+## Status
+Completed re-review fixes for ASR Provider Presets and validated with tests/build.
 
 ## Files changed
+- `src/main/settings.html`
+  - Changed ASR config load fallback from `||` to nullish/preset-aware defaults so intentional empty strings, especially Aliyun/custom `model: ''`, stay empty.
+- `src/core/asr-openai-compatible.ts`
+  - Added `joinTranscriptParts` smart boundary joining for chunked fallback final transcripts.
+  - Changed chunked fallback transcription failures into ASR `{ type: 'error', recoverable: false }` events instead of rejected streams.
+- `src/core/asr-config.ts`
+  - Hardened ASR normalization with provider/streamingMode/key/string/boolean/cache validation.
+  - Deep-merged cache defaults.
+  - Inferred `custom-openai-compatible` when a non-custom preset key has mismatched managed fields.
+  - Switched preset guard to `hasOwnProperty`.
+  - Preserved `enabled:false` and `autoSendFinalTranscript:false` defaults.
+- `src/core/json-config-store.ts`
+  - Made `update()` normalize the merged value before saving, preserving nested defaults through normalizer hooks.
+- `scripts/voice-input-contract.test.js`
+  - Added/strengthened coverage for settings fallback, managed-field mismatch inference, empty Aliyun model preservation, ASR type/cache hardening, JsonConfigStore update normalization, chunk smart joining, and chunk error events.
+- `.superpowers/sdd/final-review-fix-report.md`
+  - This report.
 
-- `src/core/asr-openai-compatible.ts` — added realtime auth via WebSocket subprotocol plus initial auth/session message; kept chunked fallback bearer auth.
-- `src/core/asr-engine.ts` — reject unsupported ASR providers instead of silently routing through OpenAI-compatible engine.
-- `src/core/voice-audio-cache.ts` — added active cache policy update method.
-- `src/main/main.ts` — refresh active voice cache config on ASR save and notify renderer of updated ASR config.
-- `src/main/preload.ts` — exposed ASR config update event to renderer.
-- `src/main/settings.html` — hid unsupported ASR providers and validates provider/cache numeric fields before saving.
-- `src/renderer/renderer.ts` — consumes saved hold-to-talk shortcut, refreshes it after settings save, and checks ASR enabled before requesting microphone permission.
-- `scripts/voice-input-contract.test.js` — covered unsupported provider rejection.
-- `docs/superpowers/specs/2026-07-15-voice-input-asr-design.md` — documented supported provider scope and realtime WebSocket auth limitation.
-- `package.json` — bumped version to 0.3.0.
-- `package-lock.json` — bumped root package version to 0.3.0.
+## Commit hash
+Pending before commit; final commit hash recorded by git after this report is staged.
 
-## Commands and results
+## Commands run / results
+- `npm test`
+  - Passed: TypeScript build completed and `voice-input-contract tests passed`.
+  - One intermediate run failed while adding the JsonConfigStore contract test because the Electron/fs test mock intercepted module source reads; fixed the test harness mock and reran successfully.
+- `npm run build`
+  - Passed: TypeScript build completed.
+- `git status --short`
+  - Showed modified source/test/report files plus pre-existing untracked `.superpowers/sdd/progress.md` and `.superpowers/sdd/task-*.md` files.
 
-- `npm run build` — passed.
-- `npm run build && npm test` — passed; `voice-input-contract tests passed`.
-- `npm run build` — passed.
-- `git diff --check` — passed.
-- `git status --short` — showed expected modified files before commit.
+## Tests added
+- Preset normalization infers custom when non-custom preset managed fields mismatch.
+- Aliyun preset with intentional empty model remains valid and empty.
+- ASR normalizer validates provider/streamingMode/string/boolean/cache fields and deep-merges cache defaults.
+- JsonConfigStore `update()` normalizes merged values and keeps nested defaults.
+- settings.html contract asserts preset field values and nullish `config.model ?? preset.model` fallback.
+- chunked fallback smart-joins Chinese, English, punctuation, and mixed alphanumeric boundaries.
+- chunked fallback HTTP errors yield ASR error events.
 
-NPM emitted existing config warnings for `electron_mirror` / `electron-mirror`; they did not fail verification.
+## Self-review
+- Did not add a dedicated 阿里百炼 ASR engine.
+- Did not hardcode an unverified 百炼 ASR model.
+- Did not fill API keys; tests only use dummy keys.
+- Kept `enabled:false` and `autoSendFinalTranscript:false` defaults.
+- Did not change renderer mic capture or IPC names.
+- JsonConfigStore normalization is generic and opt-in-compatible with existing normalizer hooks.
+- The smart join intentionally inserts spaces only between ASCII alphanumeric boundaries to avoid changing CJK/punctuation concatenation.
 
-## Commit
-
-- Commit hash: `35f476e`
-- Commit message: `fix(voice): stabilize voice input verification`
-
-## Limitations
-
-- Browser/Electron WebSocket clients still cannot set arbitrary HTTP `Authorization` upgrade headers. Realtime auth now uses the OpenAI-compatible `openai-insecure-api-key.<key>` subprotocol plus an initial `session.auth` message; endpoints requiring header-only upgrade auth need chunked fallback or a future provider-specific Node-side socket implementation.
-- ASR settings currently expose only OpenAI-compatible provider selection until additional provider engines are implemented.
-
----
-
-## Final re-review fix — post-commit realtime drain
-
-Date: 2026-07-15
-
-### Files changed
-
-- `src/core/asr-openai-compatible.ts` — after `input_audio_buffer.commit`, waits briefly for provider final/error/close events before local close, drains pending events during that grace period, and still closes locally after timeout to avoid hanging. Existing realtime subprotocol auth and initial `session.auth` behavior are preserved.
-- `scripts/voice-input-contract.test.js` — added lightweight contract coverage for terminal-event classification and a fake WebSocket stream that emits a final transcript after commit.
-
-### Commands and results
-
-- `npm test` — passed; `voice-input-contract tests passed`.
-- `npm run build` — passed.
-
-NPM emitted existing config warnings for `electron_mirror` / `electron-mirror`; they did not fail verification.
+## Concerns
+- `npm` still emits existing warnings about unknown `electron_mirror` / `electron-mirror` config; tests/build pass.
+- Existing untracked `.superpowers/sdd/progress.md` and `.superpowers/sdd/task-*.md` files were present at task start and were left uncommitted.

@@ -10,6 +10,8 @@
 - 文档补充语音输入交互、配置安全、IPC 和模块职责
 
 ## Unreleased
+- ASR 设置新增供应商预设：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible；阿里百炼当前作为 OpenAI-compatible 预设接入，不新增专用 ASR 引擎。
+- Renderer 动画守卫修复：为 blink、sleepy、lonely、bubble/subtitle timeout 链加入 handle 清理与 generation 检查，避免 stale callback 覆盖新状态或 guard flag 卡住
 
 ## v0.3.1 (2026-07-15)
 - 摄像头感知模块：新增独立 core、配置持久化、Vision 单帧结构化解析、状态机和回来轻柔回应边界
@@ -20,7 +22,6 @@
 - Move 测试反馈微调：修正自动移动左右镜像方向，降低默认移动速度让行走更自然
 - 设置页新增临时 Move 测试入口，可输入坐标调用 `moveTo` / `teleportTo` 验证自动移动和直接切换
 - 屏幕目标指示系统：规划并实现 `.` 显式屏幕分析中的目标定位与指向流程，普通聊天自然语言自动触发暂缓
-- Renderer 动画守卫修复：为 blink、sleepy、lonely、bubble/subtitle timeout 链加入 handle 清理与 generation 检查，避免 stale callback 覆盖新状态或 guard flag 卡住
 
 ## v0.2.17 (2026-07-15)
 - 架构清理：移除旧主动响应路径，集中化活动上下文检测，并共享屏幕分析实例

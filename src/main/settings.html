@@ -552,10 +552,25 @@
       </div>
 
       <div class="field">
-        <label>供应商</label>
-        <select id="asrProvider">
+        <label>供应商预设</label>
+        <select id="asrProviderPreset">
+          <option value="openai">OpenAI</option>
+          <option value="aliyun-bailian">阿里百炼 / DashScope</option>
+          <option value="custom-openai-compatible">自定义 OpenAI-compatible</option>
+        </select>
+        <div class="hint" id="asrProviderPresetNote">OpenAI 官方语音识别接口，使用当前 OpenAI-compatible ASR 引擎。</div>
+      </div>
+
+      <div class="field">
+        <label>实际引擎</label>
+        <select id="asrProvider" disabled aria-readonly="true">
           <option value="openai-compatible">OpenAI-compatible</option>
         </select>
+        <div class="hint">实际引擎由供应商预设决定；本轮所有预设都复用 OpenAI-compatible ASR 引擎。</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="applyASRPresetBtn">应用推荐配置</button>
       </div>
 
       <div class="field">
@@ -769,18 +784,81 @@
       toggleTtsSections();
     }
 
+    var asrProviderPresets = {
+      'openai': {
+        label: 'OpenAI',
+        provider: 'openai-compatible',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini-transcribe',
+        realtimePath: '/realtime',
+        transcriptionPath: '/audio/transcriptions',
+        streamingMode: 'realtime',
+        language: 'zh',
+        note: 'OpenAI 官方语音识别接口，使用当前 OpenAI-compatible ASR 引擎。',
+      },
+      'aliyun-bailian': {
+        label: '阿里百炼 / DashScope',
+        provider: 'openai-compatible',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        model: '',
+        realtimePath: '/realtime',
+        transcriptionPath: '/audio/transcriptions',
+        streamingMode: 'chunked-fallback',
+        language: 'zh',
+        note: '阿里百炼预设复用 OpenAI-compatible ASR 引擎。请填写你的 DashScope API Key 和兼容 ASR 模型；如果所选模型不支持当前 realtime 或 transcription path，请改用自定义路径，或后续添加专用 provider engine。',
+      },
+      'custom-openai-compatible': {
+        label: '自定义 OpenAI-compatible',
+        provider: 'openai-compatible',
+        baseUrl: '',
+        model: '',
+        realtimePath: '/realtime',
+        transcriptionPath: '/audio/transcriptions',
+        streamingMode: 'chunked-fallback',
+        language: 'zh',
+        note: '用于兼容 OpenAI audio/transcriptions 或 realtime 风格接口的第三方服务；Base URL、路径和模型由用户维护。',
+      },
+    };
+
+    function getASRPresetDefinition(id) {
+      return asrProviderPresets[id] || asrProviderPresets.openai;
+    }
+
+    function updateASRPresetNote() {
+      var presetId = document.getElementById('asrProviderPreset').value || 'openai';
+      var preset = getASRPresetDefinition(presetId);
+      document.getElementById('asrProviderPresetNote').textContent = preset.note;
+      document.getElementById('asrProvider').value = preset.provider;
+    }
+
+    function applySelectedASRPreset() {
+      var presetId = document.getElementById('asrProviderPreset').value || 'openai';
+      var preset = getASRPresetDefinition(presetId);
+      document.getElementById('asrProvider').value = preset.provider;
+      document.getElementById('asrBaseUrl').value = preset.baseUrl;
+      document.getElementById('asrModel').value = preset.model;
+      document.getElementById('asrRealtimePath').value = preset.realtimePath;
+      document.getElementById('asrTranscriptionPath').value = preset.transcriptionPath;
+      document.getElementById('asrStreamingMode').value = preset.streamingMode;
+      document.getElementById('asrLanguage').value = preset.language;
+      updateASRPresetNote();
+    }
+
     async function loadASRConfig() {
       const config = await window.companion.loadASRConfig();
       document.getElementById('asrEnabled').checked = !!config.enabled;
       document.getElementById('asrHoldToTalkShortcut').value = config.holdToTalkShortcut || 'Ctrl+Shift+Space';
+      document.getElementById('asrProviderPreset').value = config.providerPreset || 'openai';
       document.getElementById('asrProvider').value = config.provider || 'openai-compatible';
-      document.getElementById('asrBaseUrl').value = config.baseUrl || 'https://api.openai.com/v1';
-      document.getElementById('asrApiKey').value = config.apiKey || '';
-      document.getElementById('asrModel').value = config.model || 'gpt-4o-mini-transcribe';
-      document.getElementById('asrRealtimePath').value = config.realtimePath || '/realtime';
-      document.getElementById('asrTranscriptionPath').value = config.transcriptionPath || '/audio/transcriptions';
-      document.getElementById('asrStreamingMode').value = config.streamingMode || 'realtime';
-      document.getElementById('asrLanguage').value = config.language || 'zh';
+      updateASRPresetNote();
+      const preset = getASRPresetDefinition(config.providerPreset || 'openai');
+      document.getElementById('asrBaseUrl').value = config.baseUrl ?? preset.baseUrl;
+      document.getElementById('asrApiKey').value = config.apiKey ?? '';
+      document.getElementById('asrModel').value = config.model ?? preset.model;
+      document.getElementById('asrRealtimePath').value = config.realtimePath ?? preset.realtimePath;
+      document.getElementById('asrTranscriptionPath').value = config.transcriptionPath ?? preset.transcriptionPath;
+      document.getElementById('asrStreamingMode').value = config.streamingMode ?? preset.streamingMode;
+      document.getElementById('asrLanguage').value = config.language ?? preset.language;
       document.getElementById('asrAutoSend').checked = !!config.autoSendFinalTranscript;
       document.getElementById('asrCacheEnabled').checked = config.cache?.enabled !== false;
       document.getElementById('asrCacheRetention').value = String(config.cache?.retentionMinutes ?? 30);
@@ -891,6 +969,7 @@
       return {
         enabled: document.getElementById('asrEnabled').checked,
         holdToTalkShortcut: document.getElementById('asrHoldToTalkShortcut').value.trim() || 'Ctrl+Shift+Space',
+        providerPreset: document.getElementById('asrProviderPreset').value || 'openai',
         provider: document.getElementById('asrProvider').value,
         baseUrl: document.getElementById('asrBaseUrl').value.trim(),
         apiKey: document.getElementById('asrApiKey').value,
@@ -1202,6 +1281,15 @@
     document.getElementById('toggleAliyunPw').addEventListener('click', function() {
       var input = document.getElementById('aliyunApiKey');
       input.type = input.type === 'password' ? 'text' : 'password';
+    });
+
+    document.getElementById('asrProviderPreset').addEventListener('change', function() {
+      applySelectedASRPreset();
+      showToast('已自动应用语音输入供应商推荐配置；API Key 不会自动填写', 'success');
+    });
+    document.getElementById('applyASRPresetBtn').addEventListener('click', function() {
+      applySelectedASRPreset();
+      showToast('已应用语音输入供应商推荐配置；API Key 不会自动填写', 'success');
     });
 
     document.getElementById('saveASRBtn').addEventListener('click', () => {

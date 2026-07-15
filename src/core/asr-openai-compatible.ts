@@ -72,14 +72,41 @@ function createRealtimeUrl(config: ASRConfig): string {
   return url.toString();
 }
 
-async function* chunkedFallback(input: ASRStreamInput): AsyncIterable<ASRTranscriptEvent> {
-  for await (const chunk of input.chunks) {
-    const text = await transcribeChunk(input.config, chunk);
-    if (text.trim()) {
-      yield { type: 'partial', text, sessionId: input.sessionId };
+function shouldJoinTranscriptPartsWithSpace(previous: string, next: string): boolean {
+  if (!previous || !next) return false;
+  return /[A-Za-z0-9]$/.test(previous) && /^[A-Za-z0-9]/.test(next);
+}
+
+export function joinTranscriptParts(parts: string[]): string {
+  let result = '';
+  for (const part of parts) {
+    if (!part) continue;
+    if (shouldJoinTranscriptPartsWithSpace(result, part)) {
+      result += ' ';
     }
+    result += part;
   }
-  yield { type: 'final', text: '', sessionId: input.sessionId };
+  return result;
+}
+
+async function* chunkedFallback(input: ASRStreamInput): AsyncIterable<ASRTranscriptEvent> {
+  const finalTextParts: string[] = [];
+
+  try {
+    for await (const chunk of input.chunks) {
+      const text = await transcribeChunk(input.config, chunk);
+      if (text.trim()) {
+        finalTextParts.push(text);
+        yield { type: 'partial', text, sessionId: input.sessionId };
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'ASR transcription failed';
+    yield { type: 'error', message, sessionId: input.sessionId, recoverable: false };
+    return;
+  }
+
+  yield { type: 'final', text: joinTranscriptParts(finalTextParts), sessionId: input.sessionId };
 }
 
 async function transcribeChunk(config: ASRConfig, chunk: VoiceAudioChunk): Promise<string> {
