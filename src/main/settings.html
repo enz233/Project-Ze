@@ -935,6 +935,7 @@
     let asrMicFrame = null;
     let asrMicLevelData = null;
     let asrMicStartPending = false;
+    let asrMicOwnsStream = false;
     const ASR_RECOGNITION_TEST_MS = 10000;
     let asrRecognitionRecorder = null;
     let asrRecognitionStream = null;
@@ -945,6 +946,7 @@
     let asrRecognitionChunkStartedAt = 0;
     let asrRecognitionUploads = [];
     let asrRecognitionRunning = false;
+    let asrRecognitionStopping = false;
     let asrRecognitionStartToken = 0;
 
     async function openCameraStream() {
@@ -1051,8 +1053,27 @@
       asrMicFrame = requestAnimationFrame(updateASRMicMeter);
     }
 
-    async function startASRMicMeter() {
+    function attachASRMicMeter(stream, ownsStream) {
+      if (!stream || asrMicStream) return;
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      asrMicStream = stream;
+      asrMicOwnsStream = !!ownsStream;
+      asrMicAudioContext = new AudioContextCtor();
+      asrMicAnalyser = asrMicAudioContext.createAnalyser();
+      asrMicAnalyser.fftSize = 1024;
+      asrMicLevelData = new Uint8Array(asrMicAnalyser.fftSize);
+      asrMicAudioContext.createMediaStreamSource(asrMicStream).connect(asrMicAnalyser);
+      updateASRMicMeter();
+    }
+
+    async function startASRMicMeter(stream) {
       if (asrMicStartPending || asrMicStream) return;
+      if (stream) {
+        attachASRMicMeter(stream, false);
+        document.getElementById('asrMicTestBtn').textContent = '测试麦克风音量';
+        setASRMicStatus('正在录音测试，请说话…', false);
+        return;
+      }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setASRMicStatus('当前环境不支持麦克风访问', true);
         return;
@@ -1063,33 +1084,29 @@
       micTestBtn.textContent = '请求麦克风权限...';
       setASRMicStatus('正在请求麦克风权限…', false);
       try {
-        asrMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-        asrMicAudioContext = new AudioContextCtor();
-        asrMicAnalyser = asrMicAudioContext.createAnalyser();
-        asrMicAnalyser.fftSize = 1024;
-        asrMicLevelData = new Uint8Array(asrMicAnalyser.fftSize);
-        asrMicAudioContext.createMediaStreamSource(asrMicStream).connect(asrMicAnalyser);
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        attachASRMicMeter(stream, true);
         asrMicStartPending = false;
         micTestBtn.disabled = false;
         micTestBtn.textContent = '停止麦克风测试';
         setASRMicStatus('正在监听麦克风，请说话…', false);
-        updateASRMicMeter();
       } catch (error) {
         const errorMessage = '麦克风启动失败：' + (error && error.message ? error.message : String(error));
-        stopASRMicMeter();
+        stopASRMicMeter({ preserveStatus: true });
         setASRMicStatus(errorMessage, true);
       }
     }
 
-    function stopASRMicMeter() {
+    function stopASRMicMeter(options) {
+      const preserveStatus = !!(options && options.preserveStatus);
       asrMicStartPending = false;
       if (asrMicFrame) cancelAnimationFrame(asrMicFrame);
       asrMicFrame = null;
-      if (asrMicStream) {
+      if (asrMicStream && asrMicOwnsStream) {
         asrMicStream.getTracks().forEach(track => track.stop());
       }
       asrMicStream = null;
+      asrMicOwnsStream = false;
       if (asrMicAudioContext) {
         asrMicAudioContext.close().catch(() => {});
       }
@@ -1099,7 +1116,9 @@
       setASRMicLevel(0);
       document.getElementById('asrMicTestBtn').disabled = false;
       document.getElementById('asrMicTestBtn').textContent = '测试麦克风音量';
-      setASRMicStatus('未开始测试', false);
+      if (!preserveStatus) {
+        setASRMicStatus('未开始测试', false);
+      }
     }
 
     function blobToBase64ForASRTest(blob) {
@@ -1199,7 +1218,7 @@
     }
 
     async function startASRRecognitionTest() {
-      if (asrRecognitionRunning) return;
+      if (asrRecognitionRunning || asrRecognitionStopping) return;
       const config = collectASRConfig();
       if (!validateASRRecognitionTestConfig(config)) return;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1231,7 +1250,7 @@
           await stopASRRecognitionTest(true);
           return;
         }
-        await startASRMicMeter();
+        await startASRMicMeter(asrRecognitionStream);
 
         const mimeType = getASRRecognitionMimeType();
         const session = await window.companion.voiceInput.start({ source: 'settings-test', mimeType });
@@ -1279,25 +1298,65 @@
           stopASRRecognitionTest(false);
         }, ASR_RECOGNITION_TEST_MS);
       } catch (error) {
-        setASRMicStatus('语音识别测试启动失败：' + (error && error.message ? error.message : String(error)), true);
-        await stopASRRecognitionTest(true);
+        const errorMessage = '语音识别测试启动失败：' + (error && error.message ? error.message : String(error));
+        await stopASRRecognitionTest(true, { preserveStatus: true });
+        setASRMicStatus(errorMessage, true);
       }
     }
 
-    async function stopASRRecognitionTest(cancel) {
-      if (!asrRecognitionRunning && !asrRecognitionSessionId && !asrRecognitionRecorder && !asrRecognitionStream) return;
+    function cleanupASRRecognitionLocalResources(options) {
+      const preserveStatus = !!(options && options.preserveStatus);
+      if (asrRecognitionProgressTimer) clearInterval(asrRecognitionProgressTimer);
+      asrRecognitionProgressTimer = null;
+      if (asrRecognitionStopTimer) clearTimeout(asrRecognitionStopTimer);
+      asrRecognitionStopTimer = null;
+      if (asrRecognitionRecorder && asrRecognitionRecorder.state !== 'inactive') {
+        try {
+          asrRecognitionRecorder.stop();
+        } catch (_error) {}
+      }
+      asrRecognitionRecorder = null;
+      stopASRMicMeter({ preserveStatus });
+      if (asrRecognitionStream) {
+        asrRecognitionStream.getTracks().forEach(track => track.stop());
+      }
+      asrRecognitionStream = null;
+    }
+
+    function cleanupASRRecognitionOnUnload() {
       const sessionId = asrRecognitionSessionId;
       asrRecognitionStartToken += 1;
       asrRecognitionRunning = false;
-      document.getElementById('asrRecognitionTestBtn').textContent = '测试语音识别 10 秒';
+      asrRecognitionStopping = true;
+      cleanupASRRecognitionLocalResources({ preserveStatus: true });
+      asrRecognitionUploads = [];
+      asrRecognitionSessionId = null;
+      if (sessionId && window.companion && window.companion.voiceInput && window.companion.voiceInput.cancel) {
+        try {
+          window.companion.voiceInput.cancel(sessionId).catch(() => {});
+        } catch (_error) {}
+      }
+    }
+
+    async function stopASRRecognitionTest(cancel, options) {
+      if (asrRecognitionStopping) return;
+      if (!asrRecognitionRunning && !asrRecognitionSessionId && !asrRecognitionRecorder && !asrRecognitionStream) return;
+      const preserveStatus = !!(options && options.preserveStatus);
+      const sessionId = asrRecognitionSessionId;
+      const recorder = asrRecognitionRecorder;
+      asrRecognitionStartToken += 1;
+      asrRecognitionStopping = true;
+      asrRecognitionRunning = false;
+      const testBtn = document.getElementById('asrRecognitionTestBtn');
+      testBtn.disabled = true;
+      testBtn.textContent = '正在停止...';
       if (asrRecognitionProgressTimer) clearInterval(asrRecognitionProgressTimer);
       asrRecognitionProgressTimer = null;
       if (asrRecognitionStopTimer) clearTimeout(asrRecognitionStopTimer);
       asrRecognitionStopTimer = null;
 
-      if (asrRecognitionRecorder && asrRecognitionRecorder.state !== 'inactive') {
+      if (recorder && recorder.state !== 'inactive') {
         await new Promise(function(resolve) {
-          const recorder = asrRecognitionRecorder;
           recorder.onstop = function() { resolve(); };
           try {
             recorder.stop();
@@ -1308,11 +1367,11 @@
       }
       asrRecognitionRecorder = null;
 
+      stopASRMicMeter({ preserveStatus });
       if (asrRecognitionStream) {
         asrRecognitionStream.getTracks().forEach(track => track.stop());
       }
       asrRecognitionStream = null;
-      stopASRMicMeter();
 
       const uploads = asrRecognitionUploads.slice();
       asrRecognitionUploads = [];
@@ -1322,7 +1381,7 @@
         if (sessionId) {
           if (cancel) {
             await window.companion.voiceInput.cancel(sessionId);
-            setASRRecognitionProgress(0, '已取消');
+            if (!preserveStatus) setASRRecognitionProgress(0, '已取消');
           } else {
             setASRRecognitionProgress(100, '正在识别…');
             await window.companion.voiceInput.stop(sessionId);
@@ -1335,6 +1394,9 @@
         }
       } finally {
         asrRecognitionSessionId = null;
+        asrRecognitionStopping = false;
+        testBtn.disabled = false;
+        testBtn.textContent = '测试语音识别 10 秒';
       }
     }
 
@@ -1658,6 +1720,7 @@
     });
 
     document.getElementById('asrRecognitionTestBtn').addEventListener('click', async function() {
+      if (asrRecognitionStopping) return;
       if (asrRecognitionRunning) {
         await stopASRRecognitionTest(true);
         return;
@@ -1744,7 +1807,7 @@
 
     window.addEventListener('beforeunload', function() {
       stopCameraPreview();
-      stopASRRecognitionTest(true);
+      cleanupASRRecognitionOnUnload();
       stopASRMicMeter();
     });
 
