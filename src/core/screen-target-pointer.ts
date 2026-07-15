@@ -1,7 +1,11 @@
 import { BrowserWindow } from 'electron';
 import { BubbleOrchestrator } from './bubble-orchestrator';
 import { MoveController } from './move-controller';
-import { ScreenAnalyzer, ScreenTargetLocateResult } from './screen-analyzer';
+import { ScreenAnalyzer, ScreenCaptureFrame, ScreenTargetLocateResult } from './screen-analyzer';
+import {
+  SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
+  compareScreenFingerprints,
+} from './screen-fingerprint';
 import { WindowActivityService } from './window-activity-service';
 
 export type PointerPose = 'point-right' | 'point-left' | 'point-up' | 'point-down';
@@ -136,6 +140,15 @@ export class ScreenTargetPointer {
         this.showBubble(failureMessage);
         this.finishSession();
         return { handled: true, moved: false, message: failureMessage, locateResult: result };
+      }
+
+      if (await this.hasFingerprintChangedBeforeMove(id, located.frame)) {
+        console.log('[ScreenTargetPointer][debug] screen changed before move:', { sessionId: id });
+        return this.screenChangedResult(result);
+      }
+
+      if (!this.isCurrent(id)) {
+        return this.cancelledResult('new-request');
       }
 
       const screenPoint = this.screenAnalyzer.mapPointToScreen(located.frame, result.point!);
@@ -278,6 +291,38 @@ export class ScreenTargetPointer {
   private hasScreenChanged(beforeTitle: string, afterTitle: string): boolean {
     if (!beforeTitle || !afterTitle) return false;
     return beforeTitle !== afterTitle;
+  }
+
+  private async hasFingerprintChangedBeforeMove(sessionId: number, beforeFrame: ScreenCaptureFrame): Promise<boolean> {
+    if (!beforeFrame.fingerprint) {
+      console.log('[ScreenTargetPointer][debug] fingerprint skip: missing before fingerprint', { sessionId });
+      return false;
+    }
+
+    const afterFrame = await this.screenAnalyzer.captureScreenFrame();
+    if (!afterFrame?.fingerprint) {
+      console.log('[ScreenTargetPointer][debug] fingerprint skip: missing after fingerprint', { sessionId });
+      return false;
+    }
+
+    const diff = compareScreenFingerprints(beforeFrame.fingerprint, afterFrame.fingerprint);
+    if (diff === null) {
+      console.log('[ScreenTargetPointer][debug] fingerprint skip: incomparable fingerprints', {
+        sessionId,
+        before: { width: beforeFrame.fingerprint.width, height: beforeFrame.fingerprint.height, values: beforeFrame.fingerprint.values.length },
+        after: { width: afterFrame.fingerprint.width, height: afterFrame.fingerprint.height, values: afterFrame.fingerprint.values.length },
+      });
+      return false;
+    }
+
+    const changed = diff >= SCREEN_FINGERPRINT_CHANGE_THRESHOLD;
+    console.log('[ScreenTargetPointer][debug] fingerprint diff before move:', {
+      sessionId,
+      diff,
+      threshold: SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
+      changed,
+    });
+    return changed;
   }
 
   private successMessage(result: ScreenTargetLocateResult): string {
