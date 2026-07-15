@@ -10,7 +10,7 @@ DONE
 - 更新 `package.json`，将 intent-router contract test 接入 `npm test`。
 
 ## 提交哈希
-TBD
+aef9bfc
 
 ## 运行的测试命令和结果
 - `npm test`（预期失败阶段）：build 和既有 contract tests 通过，新增 intent-router contract test 因 `Cannot find module '../dist/core/intent-classifier.js'` 失败，符合 brief 预期。
