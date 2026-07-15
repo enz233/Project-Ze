@@ -112,6 +112,13 @@ contextBridge.exposeInMainWorld('companion', {
   onASRConfigUpdated: (callback: (config: any) => void) => {
     ipcRenderer.on('asr-config-updated', (_event, config) => callback(config));
   },
+  cameraAwareness: {
+    getConfig: (): Promise<any> => ipcRenderer.invoke('camera-awareness:get-config'),
+    updateConfig: (partial: any): Promise<any> => ipcRenderer.invoke('camera-awareness:update-config', partial),
+    detectOnce: (frame: any): Promise<any> => ipcRenderer.invoke('camera-awareness:detect-once', frame),
+    processBackgroundFrame: (frame: any): Promise<any> => ipcRenderer.invoke('camera-awareness:process-background-frame', frame),
+    getSnapshot: (): Promise<any> => ipcRenderer.invoke('camera-awareness:get-snapshot'),
+  },
   voiceInput: {
     start: (options: any): Promise<any> => ipcRenderer.invoke('voice-input-start', options),
     appendAudioChunk: (payload: any): Promise<void> => ipcRenderer.invoke('voice-input-audio-chunk', payload),

@@ -22,6 +22,10 @@ import { MicroBehaviorManager } from '../core/micro-behavior-manager';
 import { WindowActivityService } from '../core/window-activity-service';
 import { MoveController, MoveToRequest } from '../core/move-controller';
 import { ScreenTargetPointer } from '../core/screen-target-pointer';
+import { CameraAwarenessConfigManager } from '../core/camera-awareness-config';
+import { CameraAwarenessManager } from '../core/camera-awareness-manager';
+import { CAMERA_AWARENESS_IPC, CameraFrameInput } from '../core/camera-awareness-types';
+import { VisionImageAnalyzer } from '../core/vision-image-analyzer';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -47,6 +51,9 @@ let microBehaviorManager: MicroBehaviorManager;
 let windowActivityService: WindowActivityService;
 let moveController: MoveController;
 let screenTargetPointer: ScreenTargetPointer;
+let cameraAwarenessConfigManager: CameraAwarenessConfigManager;
+let visionImageAnalyzer: VisionImageAnalyzer;
+let cameraAwarenessManager: CameraAwarenessManager;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -130,6 +137,13 @@ function createWindow(): void {
   aiConfigManager = new AIConfigManager();
   aiService = new AIService(aiConfigManager);
   screenAnalyzer = new ScreenAnalyzer(aiConfigManager);
+  visionImageAnalyzer = new VisionImageAnalyzer(aiConfigManager);
+  cameraAwarenessConfigManager = new CameraAwarenessConfigManager();
+  cameraAwarenessManager = new CameraAwarenessManager(
+    cameraAwarenessConfigManager,
+    visionImageAnalyzer,
+    { bubbleOrchestrator }
+  );
   chatManager = new ChatManager(mainWindow, aiConfigManager, aiService, stateManager, timeAwareness, screenAnalyzer);
   appearanceConfig = new AppearanceConfigManager();
   ttsConfigManager = new TTSConfigManager();
@@ -380,6 +394,53 @@ function setupIPC(): void {
     } catch (e: any) {
       return { success: false, message: '测试失败: ' + e.message };
     }
+  });
+
+  // 摄像头感知
+  ipcMain.handle(CAMERA_AWARENESS_IPC.getConfig, () => {
+    return cameraAwarenessManager?.getConfig();
+  });
+
+  ipcMain.handle(CAMERA_AWARENESS_IPC.updateConfig, (_event, partial: any) => {
+    return cameraAwarenessManager?.updateConfig(partial);
+  });
+
+  ipcMain.handle(CAMERA_AWARENESS_IPC.detectOnce, async (_event, frame: CameraFrameInput) => {
+    if (!cameraAwarenessManager) {
+      return {
+        presence: 'uncertain',
+        confidence: 0,
+        affect: 'unclear',
+        reason: 'api_error',
+        checkedAt: Date.now(),
+      };
+    }
+    return await cameraAwarenessManager.detectOnce(frame);
+  });
+
+  ipcMain.handle(CAMERA_AWARENESS_IPC.processBackgroundFrame, async (_event, frame: CameraFrameInput) => {
+    if (!cameraAwarenessManager) {
+      return {
+        status: 'unavailable',
+        lastDetection: null,
+        lastChangedAt: null,
+        lastReturnedAt: null,
+        backgroundDetectionRunning: false,
+        lastError: 'camera_awareness_uninitialized',
+      };
+    }
+    return await cameraAwarenessManager.processBackgroundFrame(frame);
+  });
+
+  ipcMain.handle(CAMERA_AWARENESS_IPC.getSnapshot, () => {
+    return cameraAwarenessManager?.getSnapshot() ?? {
+      status: 'unavailable',
+      lastDetection: null,
+      lastChangedAt: null,
+      lastReturnedAt: null,
+      backgroundDetectionRunning: false,
+      lastError: 'camera_awareness_uninitialized',
+    };
   });
 
   // TTS 语音

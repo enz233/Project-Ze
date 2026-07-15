@@ -142,6 +142,7 @@
     <button class="tab-btn active" data-tab="appearance">外观设置</button>
     <button class="tab-btn" data-tab="chat">聊天模型</button>
     <button class="tab-btn" data-tab="vision">屏幕分析</button>
+    <button class="tab-btn" data-tab="camera">摄像头感知</button>
     <button class="tab-btn" data-tab="tts">语音</button>
     <button class="tab-btn" data-tab="asr">语音输入</button>
     <button class="tab-btn" data-tab="other">其他</button>
@@ -270,6 +271,70 @@
       <div class="btn-row">
         <button class="btn btn-primary" id="saveVisionBtn">保存</button>
         <button class="btn btn-secondary" id="testVisionBtn">测试截屏分析</button>
+      </div>
+    </div>
+
+    <!-- 摄像头感知 -->
+    <div class="tab-content" id="tab-camera">
+      <h2>摄像头感知</h2>
+      <hr class="divider">
+      <div class="hint" style="margin-bottom: 12px; color: #666;">
+        可选的轻量陪伴能力：在你允许后截取低分辨率单帧，复用当前 Vision 配置判断是否有人在镜头前。
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="cameraAwarenessEnabled"> 启用摄像头感知</label>
+        <div class="hint">默认关闭。开启后才允许手动检测或后台低频检测。</div>
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="cameraBackgroundEnabled"> 后台低频检测</label>
+        <div class="hint">按设定间隔短暂获取单帧，不连续录制视频。</div>
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="cameraLightAffectEnabled"> 轻量状态线索</label>
+        <div class="hint">只使用 positive / neutral / low_energy / unclear 调整陪伴语气。</div>
+      </div>
+
+      <div class="field">
+        <label>检测间隔</label>
+        <select id="cameraDetectionIntervalMs">
+          <option value="30000">30 秒</option>
+          <option value="60000">1 分钟</option>
+          <option value="180000">3 分钟</option>
+          <option value="300000">5 分钟</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>离开判定</label>
+        <select id="cameraAbsentAfterMs">
+          <option value="60000">1 分钟</option>
+          <option value="120000">2 分钟</option>
+          <option value="300000">5 分钟</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="cameraReturnedReactionEnabled"> 回来时轻柔回应</label>
+        <div class="hint">只在后台检测确认从“离开”变为“回来”时触发，并经过气泡冷却。</div>
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="cameraDebugPreviewEnabled"> 调试预览</label>
+        <div class="hint">仅在设置页显示最近一次低分辨率预览，不保存到磁盘。</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="saveCameraAwarenessBtn">保存摄像头设置</button>
+        <button class="btn btn-secondary" id="testCameraAwarenessBtn">立即检测一次</button>
+      </div>
+
+      <div class="field" style="margin-top: 16px;">
+        <label>检测结果</label>
+        <div id="cameraAwarenessResult" class="hint" style="color:#555;">未检测</div>
+        <img id="cameraAwarenessPreview" alt="摄像头调试预览" style="display:none; max-width: 100%; margin-top: 8px; border:1px solid #ddd; border-radius:6px;" />
       </div>
     </div>
 
@@ -712,6 +777,73 @@
       document.getElementById('asrCacheMaxBytes').value = String(config.cache?.maxSessionBytes ?? 10485760);
     }
 
+    async function loadCameraAwarenessConfig() {
+      const config = await window.companion.cameraAwareness.getConfig();
+      if (!config) return;
+      document.getElementById('cameraAwarenessEnabled').checked = !!config.enabled;
+      document.getElementById('cameraBackgroundEnabled').checked = !!config.backgroundDetectionEnabled;
+      document.getElementById('cameraLightAffectEnabled').checked = config.lightAffectEnabled !== false;
+      document.getElementById('cameraDetectionIntervalMs').value = String(config.detectionIntervalMs || 60000);
+      document.getElementById('cameraAbsentAfterMs').value = String(config.absentAfterMs || 120000);
+      document.getElementById('cameraReturnedReactionEnabled').checked = config.returnedReactionEnabled !== false;
+      document.getElementById('cameraDebugPreviewEnabled').checked = !!config.debugPreviewEnabled;
+    }
+
+    function collectCameraAwarenessConfig() {
+      return {
+        enabled: document.getElementById('cameraAwarenessEnabled').checked,
+        backgroundDetectionEnabled: document.getElementById('cameraBackgroundEnabled').checked,
+        lightAffectEnabled: document.getElementById('cameraLightAffectEnabled').checked,
+        detectionIntervalMs: Number(document.getElementById('cameraDetectionIntervalMs').value || 60000),
+        absentAfterMs: Number(document.getElementById('cameraAbsentAfterMs').value || 120000),
+        returnedReactionEnabled: document.getElementById('cameraReturnedReactionEnabled').checked,
+        debugPreviewEnabled: document.getElementById('cameraDebugPreviewEnabled').checked,
+      };
+    }
+
+    function formatCameraDetection(result) {
+      if (!result) return '未检测';
+      return 'presence=' + result.presence + ', confidence=' + Math.round((result.confidence || 0) * 100) + '%, affect=' + result.affect + ', reason=' + result.reason;
+    }
+
+    async function captureCameraFrame(source) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('当前环境不支持摄像头访问');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 320 }, height: { ideal: 180 }, frameRate: { ideal: 1, max: 5 } },
+        audio: false,
+      });
+      try {
+        const video = document.createElement('video');
+        video.muted = true;
+        video.srcObject = stream;
+        await video.play();
+        await new Promise(function(resolve) { setTimeout(resolve, 250); });
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = Math.max(1, Math.round((video.videoHeight || 180) * (320 / (video.videoWidth || 320))));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        if (document.getElementById('cameraDebugPreviewEnabled').checked) {
+          const preview = document.getElementById('cameraAwarenessPreview');
+          preview.src = dataUrl;
+          preview.style.display = 'block';
+        }
+        return {
+          imageBase64: dataUrl,
+          mimeType: 'image/jpeg',
+          width: canvas.width,
+          height: canvas.height,
+          capturedAt: Date.now(),
+          source: source,
+        };
+      } finally {
+        stream.getTracks().forEach(function(track) { track.stop(); });
+      }
+    }
+
     function collectASRConfig() {
       return {
         enabled: document.getElementById('asrEnabled').checked,
@@ -1051,6 +1183,68 @@
       showToast('语音输入设置已保存', 'success');
     });
 
+    document.getElementById('saveCameraAwarenessBtn').addEventListener('click', async function() {
+      const config = collectCameraAwarenessConfig();
+      if (!Number.isFinite(config.detectionIntervalMs) || config.detectionIntervalMs < 30000) {
+        showToast('摄像头检测间隔不能小于 30 秒', 'error');
+        return;
+      }
+      if (!Number.isFinite(config.absentAfterMs) || config.absentAfterMs < 60000) {
+        showToast('离开判定不能小于 1 分钟', 'error');
+        return;
+      }
+      await window.companion.cameraAwareness.updateConfig(config);
+      showToast('摄像头感知设置已保存', 'success');
+    });
+
+    document.getElementById('testCameraAwarenessBtn').addEventListener('click', async function() {
+      var btn = this;
+      btn.disabled = true;
+      btn.textContent = '检测中...';
+      try {
+        const config = collectCameraAwarenessConfig();
+        await window.companion.cameraAwareness.updateConfig(config);
+        if (!config.enabled) {
+          showToast('请先启用摄像头感知', 'error');
+          return;
+        }
+        const frame = await captureCameraFrame('settings-test');
+        const result = await window.companion.cameraAwareness.detectOnce(frame);
+        document.getElementById('cameraAwarenessResult').textContent = formatCameraDetection(result);
+        showToast('摄像头检测完成', 'success');
+      } catch (e) {
+        showToast('摄像头检测失败: ' + (e.message || e), 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '立即检测一次';
+      }
+    });
+
+    let cameraBackgroundTimer = null;
+    async function runCameraBackgroundTick() {
+      const config = collectCameraAwarenessConfig();
+      if (!config.enabled || !config.backgroundDetectionEnabled) return;
+      try {
+        const frame = await captureCameraFrame('background');
+        const snapshot = await window.companion.cameraAwareness.processBackgroundFrame(frame);
+        if (snapshot && snapshot.lastDetection) {
+          document.getElementById('cameraAwarenessResult').textContent = formatCameraDetection(snapshot.lastDetection) + ', status=' + snapshot.status;
+        }
+      } catch (e) {
+        document.getElementById('cameraAwarenessResult').textContent = '后台检测失败：' + (e.message || e);
+      }
+    }
+
+    function restartCameraBackgroundTimer() {
+      if (cameraBackgroundTimer) clearInterval(cameraBackgroundTimer);
+      const config = collectCameraAwarenessConfig();
+      if (!config.enabled || !config.backgroundDetectionEnabled) return;
+      cameraBackgroundTimer = setInterval(runCameraBackgroundTick, config.detectionIntervalMs);
+    }
+    ['cameraAwarenessEnabled', 'cameraBackgroundEnabled', 'cameraDetectionIntervalMs'].forEach(function(id) {
+      document.getElementById(id).addEventListener('change', restartCameraBackgroundTimer);
+    });
+
     // 保存 TTS 配置
     document.getElementById('saveTtsBtn').addEventListener('click', function() {
       console.log('[Settings] TTS 保存按钮点击');
@@ -1094,6 +1288,7 @@
     loadAppearance();
     loadTTSConfig();
     loadASRConfig();
+    loadCameraAwarenessConfig().then(restartCameraBackgroundTimer);
     loadLogPath();
     loadChatInfo();
   </script>
