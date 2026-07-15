@@ -10,3 +10,4 @@ src/config/appearance.json
 src/config/tts.json
 src/config/asr.json
 !src/config/*.example.json
+.superpowers/

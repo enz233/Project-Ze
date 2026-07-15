@@ -60,6 +60,7 @@ src/
 - `bubble-manager.ts`：气泡发送、状态门禁、主动气泡短间隔控制。
 - `bubble-orchestrator.ts`：主进程气泡编排边界，接收带来源/优先级的气泡请求，并把实际投递委托给 `BubbleManager`。
 - `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务。
+- `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、指向锚点换算、移动调用、屏幕变化取消和指向气泡。
 - `emotion-system.ts` / `emotion-updater.ts`：情绪状态与更新。
 - `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
 - `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。
@@ -109,6 +110,7 @@ src/
 - **情感前缀**：根据状态给 AI 消息加情感上下文，切换后 4 秒保持上一个状态
 - **情境化主动回应**：本地规则先判断是否应该回应，AI 仅用于高价值场景短句改写，不用于决定是否打扰；阈值、分类、模板和 AI 改写 reason 已配置化
 - **TTS 架构**：`TTSManager` 保持唯一编排入口，读取配置并调用 `createTTSEngine(config)` 获取供应商引擎；供应商引擎实现 `TTSEngine.synthesize(text)` 并返回 base64 音频，Electron 播放、字幕、停止和 `playbackId` 完成确认仍只在 `TTSManager`、preload 和 renderer 链路中处理
+- **屏幕目标指示**：`.` 屏幕分析入口中命中明确“指出/在哪/帮我找”等关键词时，`ChatManager` 委托 `ScreenTargetPointer` 调用 Vision 结构化定位；置信度足够时通过 `MoveController` 把桌宠移动到目标旁边，并发送 `point-visual` 指向差分。普通聊天自然语言自动触发暂缓，避免隐私和误触发问题。
 
 ## IPC 通道一览
 
@@ -142,6 +144,7 @@ src/
 | move-visual | {active, direction, edge?, reason?} | 自动移动过程方向差分 |
 | voice-input-status | {phase, message, sessionId} | 语音输入状态 |
 | voice-input-transcript | partial/final/error event | 语音识别结果 |
+| point-visual | {active, pose?, reason?} | 屏幕目标指示期间的 point-* 指向差分，资源缺失时 renderer 回退到 dragged 方向差分 |
 
 ## 常见修改场景
 

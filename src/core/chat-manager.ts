@@ -8,6 +8,7 @@ import { EmotionSystem } from './emotion-system';
 import { EmotionUpdater } from './emotion-updater';
 import { TimeAwareness } from './time-awareness';
 import { ScreenAnalyzer } from './screen-analyzer';
+import { ScreenTargetPointer } from './screen-target-pointer';
 import { TTSManager } from './tts-manager';
 
 export class ChatManager {
@@ -20,6 +21,7 @@ export class ChatManager {
   private mainWindow: BrowserWindow;
   private screenAnalyzer: ScreenAnalyzer;
   private ttsManager: TTSManager | null = null;
+  private screenTargetPointer: ScreenTargetPointer | null = null;
   private isProcessing = false;
   private lastUserInteraction: number = Date.now();
   private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'speaking' | 'busy' | 'error', message: string = ''): void {
@@ -63,6 +65,10 @@ export class ChatManager {
 
   /** 发送用户消息并获取 AI 回复 */
   async sendMessage(userMessage: string): Promise<void> {
+    if (userMessage.startsWith('.')) {
+      this.screenTargetPointer?.cancel('new-request');
+    }
+
     if (this.isProcessing) {
       this.sendBubble('等一下，我还在想...');
       this.sendChatStatus('busy', '还在想上一句');
@@ -85,8 +91,18 @@ export class ChatManager {
       // 检查是否为屏幕分析请求（"." 开头）
       if (userMessage.startsWith('.')) {
         const screenMessage = userMessage.slice(1).trim() || '描述一下屏幕上有什么';
-        this.sendBubble('正在看屏幕...');
         this.sendChatStatus('screen', '正在看屏幕...');
+
+        if (this.screenTargetPointer?.isPointerRequest(screenMessage)) {
+          const pointerResult = await this.screenTargetPointer.handle(screenMessage);
+          const assistantMessage = pointerResult.message || '屏幕指示请求已取消';
+          this.memory.addMessage('user', userMessage);
+          this.memory.addMessage('assistant', assistantMessage);
+          this.memory.recordInteraction('screen-target-pointer', screenMessage, this.stateManager.getCurrentState());
+          return;
+        }
+
+        this.sendBubble('正在看屏幕...');
         const screenResult = await this.screenAnalyzer.analyze(screenMessage);
         this.sendBubble(screenResult);
         this.memory.addMessage('user', userMessage);
@@ -349,6 +365,11 @@ export class ChatManager {
   /** 设置 TTS 管理器 */
   setTTSManager(ttsManager: TTSManager): void {
     this.ttsManager = ttsManager;
+  }
+
+  /** 设置屏幕目标指示器 */
+  setScreenTargetPointer(pointer: ScreenTargetPointer): void {
+    this.screenTargetPointer = pointer;
   }
 
   /** 获取记忆模块（供 ObserverManager 使用） */

@@ -21,6 +21,7 @@ import { ProactiveReactionSystem } from '../core/proactive-reaction-system';
 import { MicroBehaviorManager } from '../core/micro-behavior-manager';
 import { WindowActivityService } from '../core/window-activity-service';
 import { MoveController, MoveToRequest } from '../core/move-controller';
+import { ScreenTargetPointer } from '../core/screen-target-pointer';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -45,6 +46,7 @@ let proactiveReactionSystem: ProactiveReactionSystem;
 let microBehaviorManager: MicroBehaviorManager;
 let windowActivityService: WindowActivityService;
 let moveController: MoveController;
+let screenTargetPointer: ScreenTargetPointer;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -142,6 +144,14 @@ function createWindow(): void {
       }
     },
   });
+  screenTargetPointer = new ScreenTargetPointer({
+    mainWindow,
+    screenAnalyzer,
+    moveController,
+    bubbleOrchestrator,
+    windowActivityService,
+  });
+  chatManager.setScreenTargetPointer(screenTargetPointer);
 
   // 连接情绪系统到 TransitionEngine
   transitionEngine.setEmotionUpdater(chatManager.getEmotionUpdater());
@@ -195,6 +205,7 @@ function setupIPC(): void {
   ipcMain.on('drag-start', () => {
     transitionEngine?.handleDragStart();
     moveController?.cancel('drag-start');
+    screenTargetPointer?.cancel('drag-start');
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
     const [winX, winY] = mainWindow.getPosition();
