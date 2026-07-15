@@ -1,5 +1,14 @@
 # Quiet Companion - 版本记录
 
+## v0.2.17 (2026-07-15)
+- 架构清理：移除旧主动响应路径，集中化活动上下文检测，并共享屏幕分析实例
+- TTS 架构重构：新增统一 TTS 引擎接口，供应商合成实现下沉到 `tts-*.ts` 引擎，`TTSManager` 专注播放、字幕、停止和 `playbackId` 确认
+- 修复 TTS 播放链路：`playbackId` 透传到 renderer，并归一化 inline TTS 音频数据格式
+- 新增通用 `JsonConfigStore<T>`，统一运行态 JSON 配置的默认值合并、读写和错误处理，TTS 配置已接入
+- 新增 `ChatHistoryStore`，将聊天历史持久化边界从 `ai-memory.ts` 拆出，降低 AI 记忆模块职责复杂度
+- 新增 `BubbleOrchestrator`，将主进程气泡请求编排与 `BubbleManager` 的状态门禁/IPC 投递职责分离
+- 补充 TTS 引擎、JSON 配置存储、AI 记忆存储、气泡编排和 renderer 动画保护设计/计划文档
+
 ## v0.2.16 (2026-07-13)
 - 主动回应阈值、冷却、分类关键词、模板和 AI 改写 reason 迁移到 `src/config/proactive-reactions.json`
 - 为后续 AI/微行为系统预留主动部件接口 `evaluateComponent()`，统一返回候选与调试状态
