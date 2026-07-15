@@ -80,8 +80,20 @@
   var spriteEl = document.getElementById('sprite') as HTMLImageElement;
   var bubbleEl = document.getElementById('bubble')!;
   var chatStatusEl = document.getElementById('chat-status');
+  var chatInputWrapEl = document.getElementById('chat-input-wrap') as HTMLDivElement;
+  var chatInputEl = document.getElementById('chat-input') as HTMLTextAreaElement;
+  var voiceInputBtnEl = document.getElementById('voice-input-btn') as HTMLButtonElement;
   var chatStatusTimer: ReturnType<typeof setTimeout> | null = null;
   var activeTtsAudio: HTMLAudioElement | null = null;
+
+  var voiceRecorder: MediaRecorder | null = null;
+  var voiceSessionId: string | null = null;
+  var voiceChunkStartedAt = 0;
+  var voiceChunkSequence = 0;
+  var voiceRecording = false;
+  var voiceAutoSend = false;
+  var voicePartialBase = '';
+  var voicePendingChunkUploads: Promise<void>[] = [];
 
   function init(): void {
     // @ts-ignore
@@ -243,58 +255,213 @@
   }
 
   function setupChatInput(): void {
-    var chatInput = document.getElementById('chat-input') as HTMLTextAreaElement;
-    if (!chatInput) return;
+    if (!chatInputEl || !chatInputWrapEl || !voiceInputBtnEl) return;
 
     // 右键伙伴打开输入框
     companionEl.addEventListener('contextmenu', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      openChatInput(chatInput, '');
+      openChatInput('');
+    });
+
+    voiceInputBtnEl.addEventListener('click', function () {
+      toggleVoiceInput();
+    });
+
+    document.addEventListener('keydown', function (e: KeyboardEvent) {
+      if (!chatInputWrapEl.classList.contains('hidden') && e.ctrlKey && e.shiftKey && e.code === 'Space' && !voiceRecording) {
+        e.preventDefault();
+        startVoiceInput('shortcut');
+      }
+    });
+
+    document.addEventListener('keyup', function (e: KeyboardEvent) {
+      if (e.code === 'Space' && voiceRecording) {
+        e.preventDefault();
+        stopVoiceInput();
+      }
     });
 
     // Ctrl+Enter 换行，Enter 发送
-    chatInput.addEventListener('keydown', function (e) {
+    chatInputEl.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.ctrlKey) {
         e.preventDefault();
-        var text = chatInput.value.trim();
-        if (text) {
-          // @ts-ignore
-          window.companion.sendUserMessage(text);
-          chatInput.value = '';
-          chatInput.classList.add('hidden');
-          updateChatStatus({ phase: 'thinking', message: '已发送，思考中...' });
-        }
+        sendChatInput();
       } else if (e.key === 'Escape') {
-        chatInput.classList.add('hidden');
-        chatInput.value = '';
+        if (voiceRecording) {
+          cancelVoiceInput();
+        }
+        closeChatInput(true);
         updateChatStatus({ phase: 'idle' });
       }
     });
 
     // 失焦关闭
-    chatInput.addEventListener('blur', function () {
+    chatInputEl.addEventListener('blur', function () {
       setTimeout(function () {
-        chatInput.classList.add('hidden');
-        chatInput.value = '';
+        if (voiceRecording || document.activeElement === voiceInputBtnEl) return;
+        closeChatInput(true);
       }, 200);
     });
   }
 
-  function openChatInput(chatInput: HTMLTextAreaElement, text: string): void {
-    chatInput.classList.remove('hidden');
-    chatInput.value = text;
-    chatInput.focus();
+  function openChatInput(text: string): void {
+    chatInputWrapEl.classList.remove('hidden');
+    chatInputEl.value = text;
+    chatInputEl.focus();
     if (text) {
-      chatInput.setSelectionRange(text.length, text.length);
+      chatInputEl.setSelectionRange(text.length, text.length);
     }
     updateChatStatus({ phase: 'idle', message: 'Enter 发送，Ctrl+Enter 换行' });
+  }
+
+  function closeChatInput(clearText: boolean): void {
+    chatInputWrapEl.classList.add('hidden');
+    if (clearText) {
+      chatInputEl.value = '';
+    }
+  }
+
+  function sendChatInput(): void {
+    var text = chatInputEl.value.trim();
+    if (!text) return;
+    // @ts-ignore
+    window.companion.sendUserMessage(text);
+    chatInputEl.value = '';
+    closeChatInput(false);
+    updateChatStatus({ phase: 'thinking', message: '已发送，思考中...' });
+  }
+
+  function setChatInputValue(text: string): void {
+    chatInputEl.value = text;
+    chatInputEl.dispatchEvent(new Event('input'));
+  }
+
+  function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var result = String(reader.result || '');
+        resolve(result.includes(',') ? result.split(',')[1] : result);
+      };
+      reader.onerror = function () { reject(reader.error); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function setVoiceRecording(active: boolean): void {
+    voiceRecording = active;
+    voiceInputBtnEl.classList.toggle('recording', active);
+    voiceInputBtnEl.textContent = active ? '■' : '🎙';
+  }
+
+  async function startVoiceInput(source: 'button' | 'shortcut'): Promise<void> {
+    if (voiceRecording) return;
+    try {
+      // @ts-ignore
+      var config = await window.companion.loadASRConfig();
+      voiceAutoSend = !!config.autoSendFinalTranscript;
+      var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      // @ts-ignore
+      var session = await window.companion.voiceInput.start({ source: source, mimeType: mimeType });
+      voiceSessionId = session.sessionId;
+      voiceChunkSequence = 0;
+      voicePendingChunkUploads = [];
+      voicePartialBase = chatInputEl.value;
+      voiceRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+      voiceRecorder.ondataavailable = function (event: BlobEvent) {
+        if (!voiceSessionId || !event.data || event.data.size === 0) return;
+        var chunkSessionId = voiceSessionId;
+        var chunkCapturedAt = Date.now();
+        var chunkDurationMs = chunkCapturedAt - voiceChunkStartedAt;
+        var upload = blobToBase64(event.data).then(function (base64) {
+          // @ts-ignore
+          return window.companion.voiceInput.appendAudioChunk({
+            sessionId: chunkSessionId,
+            chunk: {
+              mimeType: mimeType,
+              base64: base64,
+              capturedAt: chunkCapturedAt,
+              durationMs: chunkDurationMs,
+            },
+          });
+        }).catch(function (e) {
+          updateChatStatus({ phase: 'voice-error', message: '语音分片发送失败' });
+          console.error('[VoiceInput] append chunk failed', e);
+        });
+        voicePendingChunkUploads.push(upload);
+        voiceChunkSequence++;
+        voiceChunkStartedAt = Date.now();
+      };
+      voiceRecorder.onstop = function () {
+        stream.getTracks().forEach(function (track) { track.stop(); });
+      };
+      voiceChunkStartedAt = Date.now();
+      voiceRecorder.start(750);
+      setVoiceRecording(true);
+      updateChatStatus({ phase: 'voice-recording', message: '正在听你说话…' });
+    } catch (e) {
+      setVoiceRecording(false);
+      updateChatStatus({ phase: 'voice-error', message: '语音输入启动失败' });
+      console.error('[VoiceInput] start failed', e);
+    }
+  }
+
+  async function stopVoiceInput(): Promise<void> {
+    if (!voiceRecording || !voiceSessionId) return;
+    var sessionId = voiceSessionId;
+    var recorder = voiceRecorder;
+    setVoiceRecording(false);
+    if (recorder && recorder.state !== 'inactive') {
+      await new Promise<void>(function (resolve) {
+        var activeRecorder = recorder as MediaRecorder;
+        var previousOnStop = activeRecorder.onstop;
+        activeRecorder.onstop = function (event) {
+          if (typeof previousOnStop === 'function') previousOnStop.call(activeRecorder, event);
+          resolve();
+        };
+        activeRecorder.stop();
+      });
+    }
+    voiceRecorder = null;
+    voiceSessionId = null;
+    await Promise.all(voicePendingChunkUploads);
+    voicePendingChunkUploads = [];
+    // @ts-ignore
+    await window.companion.voiceInput.stop(sessionId);
+  }
+
+  async function cancelVoiceInput(): Promise<void> {
+    if (!voiceSessionId) return;
+    var sessionId = voiceSessionId;
+    setVoiceRecording(false);
+    if (voiceRecorder && voiceRecorder.state !== 'inactive') {
+      voiceRecorder.stop();
+    }
+    voiceRecorder = null;
+    voiceSessionId = null;
+    voicePendingChunkUploads = [];
+    // @ts-ignore
+    await window.companion.voiceInput.cancel(sessionId);
+  }
+
+  async function toggleVoiceInput(): Promise<void> {
+    if (voiceRecording) {
+      await stopVoiceInput();
+    } else {
+      await startVoiceInput('button');
+    }
   }
 
   function updateChatStatus(payload: any): void {
     if (!chatStatusEl || !payload) return;
     var phase = typeof payload.phase === 'string' ? payload.phase : 'idle';
     var message = typeof payload.message === 'string' ? payload.message : '';
+
+    if (phase === 'idle' || phase === 'voice-idle') {
+      phase = 'idle';
+    }
 
     if (chatStatusTimer) {
       clearTimeout(chatStatusTimer);
@@ -314,14 +481,17 @@
       else if (phase === 'screen') text = '正在看屏幕...';
       else if (phase === 'speaking') text = '播放回复中...';
       else if (phase === 'busy') text = '还在处理上一句';
-      else if (phase === 'error') text = '出错了';
+      else if (phase === 'error' || phase === 'voice-error') text = '出错了';
+      else if (phase === 'voice-recording') text = '正在录音';
+      else if (phase === 'voice-transcribing') text = '正在识别';
+      else if (phase === 'voice-finalizing') text = '正在整理识别结果';
       else text = '准备聊天';
     }
 
     chatStatusEl.textContent = text;
     chatStatusEl.classList.add('chat-status-visible', 'chat-status-' + phase);
 
-    if (phase === 'idle' || phase === 'error') {
+    if (phase === 'idle' || phase === 'error' || phase === 'voice-error') {
       chatStatusTimer = setTimeout(function () {
         if (!chatStatusEl) return;
         chatStatusEl.classList.add('hidden');
@@ -402,6 +572,32 @@
     // @ts-ignore
     window.companion.onChatStatus(function (payload: any) {
       updateChatStatus(payload);
+    });
+
+    // 主进程发来的语音输入状态
+    // @ts-ignore
+    window.companion.voiceInput.onStatus(function (payload: any) {
+      updateChatStatus(payload);
+    });
+
+    // 主进程发来的语音识别结果
+    // @ts-ignore
+    window.companion.voiceInput.onTranscript(function (payload: any) {
+      if (payload.type === 'partial') {
+        setChatInputValue(voicePartialBase + payload.text);
+        return;
+      }
+      if (payload.type === 'final') {
+        var finalText = payload.text || chatInputEl.value;
+        setChatInputValue(finalText);
+        voicePartialBase = finalText;
+        if (voiceAutoSend && finalText.trim()) {
+          sendChatInput();
+        }
+      }
+      if (payload.type === 'error') {
+        updateChatStatus({ phase: 'voice-error', message: payload.message || '语音识别失败' });
+      }
     });
 
     // 主进程发来的宠物大小更新

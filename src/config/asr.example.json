@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "provider": "openai-compatible",
+  "baseUrl": "https://api.openai.com/v1",
+  "apiKey": "",
+  "model": "gpt-4o-mini-transcribe",
+  "realtimePath": "/realtime",
+  "transcriptionPath": "/audio/transcriptions",
+  "streamingMode": "realtime",
+  "language": "zh",
+  "autoSendFinalTranscript": false,
+  "holdToTalkShortcut": "Ctrl+Shift+Space",
+  "cache": {
+    "enabled": true,
+    "retentionMinutes": 30,
+    "maxSessionBytes": 10485760
+  }
+}

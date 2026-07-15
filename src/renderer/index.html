@@ -12,7 +12,10 @@
   </div>
   <div id="bubble" class="hidden"></div>
   <div id="chat-status" class="hidden"></div>
-  <textarea id="chat-input" class="hidden" placeholder="和我说话吧..." rows="2"></textarea>
+  <div id="chat-input-wrap" class="hidden">
+    <textarea id="chat-input" placeholder="和我说话吧..." rows="2"></textarea>
+    <button id="voice-input-btn" class="voice-btn" title="语音输入：点击开始/结束，Ctrl+Shift+Space 长按说话">🎙</button>
+  </div>
   <script src="../../dist/renderer/renderer.js"></script>
 </body>
 </html>
