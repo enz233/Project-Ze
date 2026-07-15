@@ -56,6 +56,7 @@ src/
 - `window-activity-service.ts`：前台窗口、进程名和活动分类识别。
 - `proactive-reaction-system.ts`：主动回应候选判断与冷却记录。
 - `micro-behavior-manager.ts`：主动候选触发的微行为执行。
+- `move-controller.ts`：主进程自动移动控制器，提供 `moveTo` / `cancel` / `isMoving`，负责坐标 anchor、屏幕 clamp、平滑移动和 renderer 移动视觉事件。
 - `bubble-manager.ts`：气泡发送、状态门禁、主动气泡短间隔控制。
 - `bubble-orchestrator.ts`：主进程气泡编排边界，接收带来源/优先级的气泡请求，并把实际投递委托给 `BubbleManager`。
 - `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务。
@@ -116,6 +117,7 @@ src/
 | user-click | - | 点击 |
 | user-message | text | 发送消息给 AI |
 | window-move-by | {deltaX, deltaY} | 移动窗口 |
+| move-to | MoveToRequest | 调试/后续模块用：平滑移动桌宠到目标坐标 |
 | mouse-enter/leave | - | 鼠标进出 |
 | lonely-action | boolean | lonely 动画状态 |
 | state-finished | - | 动画状态结束 |
@@ -129,6 +131,7 @@ src/
 | state-update | {state, definition, ...} | 状态同步（500ms） |
 | sprites-path | string | 精灵图路径 |
 | show-bubble | text | 显示气泡 |
+| move-visual | {active, direction, edge?, reason?} | 自动移动过程方向差分 |
 
 ## 常见修改场景
 
