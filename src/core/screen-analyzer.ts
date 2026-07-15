@@ -1,11 +1,18 @@
 import { desktopCapturer, screen } from 'electron';
 import { AIConfigManager } from './ai-config';
+import {
+  SCREEN_FINGERPRINT_HEIGHT,
+  SCREEN_FINGERPRINT_WIDTH,
+  ScreenFingerprint,
+  createScreenFingerprintFromBitmap,
+} from './screen-fingerprint';
 
 export interface ScreenCaptureFrame {
   imageDataUri: string;
   origin: { x: number; y: number };
   screenSize: { width: number; height: number };
   imageSize: { width: number; height: number };
+  fingerprint?: ScreenFingerprint;
 }
 
 export interface ScreenTargetLocateResult {
@@ -84,13 +91,24 @@ export class ScreenAnalyzer {
 
       const matchedDisplay = displays.find((display) => String(display.id) === String(matchedSource.display_id)) ?? primaryDisplay;
       const resized = matchedSource.thumbnail.resize({ width: 1280, height: 720 });
+      const fingerprintImage = matchedSource.thumbnail.resize({
+        width: SCREEN_FINGERPRINT_WIDTH,
+        height: SCREEN_FINGERPRINT_HEIGHT,
+      });
+      const fingerprintSize = fingerprintImage.getSize();
+      const fingerprint = createScreenFingerprintFromBitmap(
+        fingerprintImage.toBitmap(),
+        fingerprintSize.width,
+        fingerprintSize.height
+      ) ?? undefined;
       const imageSize = resized.getSize();
       const base64 = resized.toPNG().toString('base64');
-      const frame = {
+      const frame: ScreenCaptureFrame = {
         imageDataUri: `data:image/png;base64,${base64}`,
         origin: { x: matchedDisplay.bounds.x, y: matchedDisplay.bounds.y },
         screenSize: { width: matchedDisplay.bounds.width, height: matchedDisplay.bounds.height },
         imageSize: { width: imageSize.width, height: imageSize.height },
+        fingerprint,
       };
 
       console.log('[ScreenAnalyzer][debug] capture frame:', {
@@ -99,6 +117,9 @@ export class ScreenAnalyzer {
         origin: frame.origin,
         screenSize: frame.screenSize,
         imageSize: frame.imageSize,
+        fingerprint: frame.fingerprint
+          ? { width: frame.fingerprint.width, height: frame.fingerprint.height, values: frame.fingerprint.values.length }
+          : null,
       });
 
       return frame;
