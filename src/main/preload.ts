@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('companion', {
   moveTo: (request: any): Promise<any> => {
     return ipcRenderer.invoke('move-to', request);
   },
+  teleportTo: (request: any): Promise<any> => {
+    return ipcRenderer.invoke('teleport-to', request);
+  },
   onMoveVisual: (callback: (payload: any) => void) => {
     ipcRenderer.on('move-visual', (_event, payload) => callback(payload));
   },

@@ -50,6 +50,9 @@
 - Windows 前台窗口检测改用 Win32 GetForegroundWindow/GetWindowText
 - 修复 AI 连接测试 undefined 兜底和部分动画状态卡住风险
 
+## Unreleased
+- Move 模块优化：接入 src/assets/sprites/move/ 专用差分，自动移动改为可指定轴顺序的 X/Y 单轴分段移动，并新增 teleportTo 直接切换接口
+
 ## v0.2.1 (2026-05-30)
 - AI记忆系统：对话历史持久化，每50条自动生成摘要
 - 情感前缀：根据状态给AI消息加情感提示，切换后4秒保持上一个状态

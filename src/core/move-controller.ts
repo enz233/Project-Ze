@@ -3,6 +3,8 @@ import { BrowserWindow, screen } from 'electron';
 export type MoveAnchor = 'top-left' | 'center';
 export type MoveDirection = 'left' | 'right' | 'up' | 'down';
 export type MoveCancelReason = 'drag-start' | 'new-move' | 'manual' | 'window-destroyed';
+export type MoveAxisOrder = 'x-then-y' | 'y-then-x' | 'longer-axis-first';
+export type MoveVisibilityMode = 'fully-visible';
 
 export interface MoveToRequest {
   x: number;
@@ -11,6 +13,8 @@ export interface MoveToRequest {
   durationMs?: number;
   speedPxPerSec?: number;
   reason?: string;
+  axisOrder?: MoveAxisOrder;
+  visibilityMode?: MoveVisibilityMode;
 }
 
 export interface MoveResult {
@@ -32,9 +36,16 @@ interface MoveControllerOptions {
 }
 
 interface ActiveMove {
-  timer: ReturnType<typeof setInterval>;
+  timers: ReturnType<typeof setInterval>[];
   resolve: (result: MoveResult) => void;
   reason?: string;
+}
+
+interface MoveSegment {
+  x: number;
+  y: number;
+  distance: number;
+  direction: MoveDirection;
 }
 
 const DEFAULT_SPEED_PX_PER_SEC = 500;
@@ -59,7 +70,7 @@ export class MoveController {
   }
 
   async moveTo(request: MoveToRequest): Promise<MoveResult> {
-    if (!Number.isFinite(request.x) || !Number.isFinite(request.y)) {
+    if (!this.isValidRequest(request)) {
       return this.result(false, false);
     }
 
@@ -75,52 +86,148 @@ export class MoveController {
     const target = this.resolveTarget(request);
     const dx = target.x - startX;
     const dy = target.y - startY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    const totalDistance = Math.abs(dx) + Math.abs(dy);
 
-    if (distance < 1) {
+    if (totalDistance < 1) {
       this.window.setPosition(target.x, target.y);
       this.sendVisual({ active: false, reason: request.reason });
       return { success: true, cancelled: false, finalPosition: target };
     }
 
-    const durationMs = this.resolveDuration(distance, request);
-    const startedAt = Date.now();
-    let lastDirection = this.directionFromDelta(dx, dy);
-    this.sendVisual({ active: true, direction: lastDirection, reason: request.reason });
+    const segments = this.buildSegments({ x: startX, y: startY }, target, request.axisOrder);
+    const totalDurationMs = this.resolveDuration(totalDistance, request);
 
     return new Promise<MoveResult>((resolve) => {
-      const timer = setInterval(() => {
-        if (!this.window || this.window.isDestroyed()) {
-          this.finish(false, true, 'window-destroyed');
-          return;
-        }
-
-        const elapsed = Date.now() - startedAt;
-        const t = Math.min(1, elapsed / durationMs);
-        const eased = this.easeInOut(t);
-        const nextX = Math.round(startX + dx * eased);
-        const nextY = Math.round(startY + dy * eased);
-        this.window.setPosition(nextX, nextY);
-
-        const remainingDirection = this.directionFromDelta(target.x - nextX, target.y - nextY);
-        if (remainingDirection !== lastDirection) {
-          lastDirection = remainingDirection;
-          this.sendVisual({ active: true, direction: lastDirection, reason: request.reason });
-        }
-
-        if (t >= 1) {
-          this.window.setPosition(target.x, target.y);
-          this.finish(true, false);
-        }
-      }, FRAME_MS);
-
-      this.activeMove = { timer, resolve, reason: request.reason };
+      const activeMove: ActiveMove = { timers: [], resolve, reason: request.reason };
+      this.activeMove = activeMove;
+      this.runSegment(activeMove, segments, 0, target, totalDurationMs, totalDistance, request.reason);
     });
+  }
+
+  teleportTo(request: MoveToRequest): MoveResult {
+    if (!this.isValidRequest(request)) {
+      return this.result(false, false);
+    }
+
+    if (!this.window || this.window.isDestroyed()) {
+      return this.result(false, true, 'window-destroyed');
+    }
+
+    if (this.activeMove) {
+      this.cancel('new-move');
+    }
+
+    const target = this.resolveTarget(request);
+    this.window.setPosition(target.x, target.y);
+    this.sendVisual({ active: false, reason: request.reason });
+    return { success: true, cancelled: false, finalPosition: target };
   }
 
   cancel(reason: MoveCancelReason = 'manual'): void {
     if (!this.activeMove) return;
     this.finish(false, true, reason);
+  }
+
+  private runSegment(
+    activeMove: ActiveMove,
+    segments: MoveSegment[],
+    index: number,
+    target: { x: number; y: number },
+    totalDurationMs: number,
+    totalDistance: number,
+    reason?: string,
+  ): void {
+    if (this.activeMove !== activeMove) return;
+
+    const segment = segments[index];
+    if (!segment) {
+      this.window.setPosition(target.x, target.y);
+      this.finish(true, false);
+      return;
+    }
+
+    if (!this.window || this.window.isDestroyed()) {
+      this.finish(false, true, 'window-destroyed');
+      return;
+    }
+
+    const [startX, startY] = this.window.getPosition();
+    const dx = segment.x - startX;
+    const dy = segment.y - startY;
+    const durationMs = this.resolveSegmentDuration(segment.distance, totalDistance, totalDurationMs, segments.length);
+    const startedAt = Date.now();
+
+    this.sendVisual({ active: true, direction: segment.direction, reason });
+
+    const timer = setInterval(() => {
+      if (this.activeMove !== activeMove) {
+        clearInterval(timer);
+        return;
+      }
+
+      if (!this.window || this.window.isDestroyed()) {
+        this.finish(false, true, 'window-destroyed');
+        return;
+      }
+
+      const elapsed = Date.now() - startedAt;
+      const t = Math.min(1, elapsed / durationMs);
+      const eased = this.easeInOut(t);
+      const nextX = Math.round(startX + dx * eased);
+      const nextY = Math.round(startY + dy * eased);
+      this.window.setPosition(nextX, nextY);
+
+      if (t >= 1) {
+        clearInterval(timer);
+        activeMove.timers = activeMove.timers.filter((activeTimer) => activeTimer !== timer);
+        this.window.setPosition(segment.x, segment.y);
+        this.runSegment(activeMove, segments, index + 1, target, totalDurationMs, totalDistance, reason);
+      }
+    }, FRAME_MS);
+
+    activeMove.timers.push(timer);
+  }
+
+  private buildSegments(
+    start: { x: number; y: number },
+    target: { x: number; y: number },
+    axisOrder: MoveAxisOrder = 'longer-axis-first',
+  ): MoveSegment[] {
+    const dx = target.x - start.x;
+    const dy = target.y - start.y;
+    const xSegment: MoveSegment | null = Math.abs(dx) >= 1
+      ? {
+          x: target.x,
+          y: start.y,
+          distance: Math.abs(dx),
+          direction: dx >= 0 ? 'right' : 'left',
+        }
+      : null;
+    const ySegment: MoveSegment | null = Math.abs(dy) >= 1
+      ? {
+          x: target.x,
+          y: target.y,
+          distance: Math.abs(dy),
+          direction: dy >= 0 ? 'down' : 'up',
+        }
+      : null;
+
+    if (xSegment && ySegment) {
+      if (axisOrder === 'x-then-y') return [xSegment, ySegment];
+      if (axisOrder === 'y-then-x') return [
+        { ...ySegment, x: start.x },
+        { ...xSegment, y: target.y },
+      ];
+      if (Math.abs(dx) >= Math.abs(dy)) return [xSegment, ySegment];
+      return [
+        { ...ySegment, x: start.x },
+        { ...xSegment, y: target.y },
+      ];
+    }
+
+    if (xSegment) return [{ ...xSegment, y: target.y }];
+    if (ySegment) return [{ ...ySegment, x: target.x }];
+    return [];
   }
 
   private resolveTarget(request: MoveToRequest): { x: number; y: number } {
@@ -157,13 +264,34 @@ export class MoveController {
     return this.clamp((distance / speed) * 1000, MIN_AUTO_DURATION_MS, MAX_AUTO_DURATION_MS);
   }
 
+  private resolveSegmentDuration(
+    segmentDistance: number,
+    totalDistance: number,
+    totalDurationMs: number,
+    segmentCount: number,
+  ): number {
+    if (segmentCount <= 1 || totalDistance <= 0) return totalDurationMs;
+    return Math.max(FRAME_MS, Math.round(totalDurationMs * (segmentDistance / totalDistance)));
+  }
+
   private finish(success: boolean, cancelled: boolean, cancelReason?: MoveCancelReason): void {
     if (!this.activeMove) return;
     const active = this.activeMove;
-    clearInterval(active.timer);
+    active.timers.forEach((timer) => clearInterval(timer));
+    active.timers = [];
     this.activeMove = null;
-    this.sendVisual({ active: false, reason: active.reason });
-    active.resolve(this.result(success, cancelled, cancelReason));
+    try {
+      this.sendVisual({ active: false, reason: active.reason });
+    } finally {
+      active.resolve(this.result(success, cancelled, cancelReason));
+    }
+  }
+
+  private isValidRequest(request: MoveToRequest): request is MoveToRequest {
+    return typeof request === 'object'
+      && request !== null
+      && Number.isFinite(request.x)
+      && Number.isFinite(request.y);
   }
 
   private result(success: boolean, cancelled: boolean, cancelReason?: MoveCancelReason): MoveResult {
@@ -172,11 +300,6 @@ export class MoveController {
     }
     const [x, y] = this.window.getPosition();
     return { success, cancelled, cancelReason, finalPosition: { x, y } };
-  }
-
-  private directionFromDelta(dx: number, dy: number): MoveDirection {
-    if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'right' : 'left';
-    return dy >= 0 ? 'down' : 'up';
   }
 
   private easeInOut(t: number): number {

@@ -69,6 +69,25 @@ html, body {
   cursor: grabbing;
 }
 
+#sprite.companion-move-flip {
+  transform: scaleX(-1);
+}
+
+@keyframes move-down-sway {
+  0%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+  25% { transform: translateX(-50%) translateY(1px) rotate(-1deg); }
+  75% { transform: translateX(-50%) translateY(1px) rotate(1deg); }
+}
+
+#companion.move-visual.companion-move-down,
+#companion.move-visual.sleepy.companion-move-down,
+#companion.move-visual.sleeping.companion-move-down,
+#companion.move-visual.lonely.companion-move-down,
+#companion.move-visual.tried.companion-move-down,
+#companion.move-visual.comfortable.companion-move-down {
+  animation: move-down-sway 0.6s ease-in-out infinite;
+}
+
 /* 犯困 - 轻微摇晃+下垂 */
 @keyframes sleepy-sway {
   0%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
@@ -229,20 +248,6 @@ html, body {
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
   border-top: 5px solid rgba(255, 255, 255, 0.92);
-}
-
-#sprite.companion-move-flip {
-  transform: scaleX(-1);
-}
-
-@keyframes move-down-sway {
-  0%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
-  25% { transform: translateX(-50%) translateY(1px) rotate(-1deg); }
-  75% { transform: translateX(-50%) translateY(1px) rotate(1deg); }
-}
-
-#companion.companion-move-down {
-  animation: move-down-sway 0.6s ease-in-out infinite;
 }
 
 /* 聊天输入框 */

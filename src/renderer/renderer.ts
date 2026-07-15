@@ -191,7 +191,7 @@
       // @ts-ignore
       window.companion.sendTtsStop();
       // 点击立即显示 dragged
-      setSprite('dragged');
+      setSprite('dragged', undefined, true);
       companionEl.className = 'dragged';
       subtitleActive = false; // 清除字幕标记
       showBubble('！');
@@ -739,6 +739,7 @@
     currentMoveDirection = null;
     moveFrameIndex = 0;
     moveUpForward = true;
+    companionEl.classList.remove('move-visual');
     companionEl.classList.remove('companion-move-down');
     spriteEl.classList.remove('companion-move-flip');
     if (restoreVisual) {
@@ -754,7 +755,7 @@
     }
     moveFrameIndex = 0;
     moveUpForward = true;
-    companionEl.className = '';
+    companionEl.className = 'move-visual';
     spriteEl.classList.remove('companion-move-flip');
 
     if (direction === 'down') {
@@ -880,8 +881,9 @@
     }
   }
 
-  function setSprite(name: string, fallback?: string): void {
+  function setSprite(name: string, fallback?: string, force?: boolean): void {
     if (!SPRITE_DIR) return;
+    if (isMoveVisualActive && !force) return;
     // 根据名字前缀确定子目录
     var folder = 'basic/misc';
     if (name.indexOf('idle') === 0) folder = 'basic/idle';
@@ -896,7 +898,7 @@
     console.log('[Sprite]', name);
     spriteEl.onerror = fallback ? function () {
       spriteEl.onerror = null;
-      setSprite(fallback);
+      setSprite(fallback, undefined, force);
     } : null;
     spriteEl.onload = function () {
       spriteEl.onerror = null;

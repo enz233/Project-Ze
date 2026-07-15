@@ -262,7 +262,20 @@ function setupIPC(): void {
     if (!moveController) {
       return { success: false, cancelled: false, finalPosition: { x: 0, y: 0 } };
     }
+    if (isDragging) {
+      return { success: false, cancelled: true, cancelReason: 'drag-start', finalPosition: getMainWindowPosition() };
+    }
     return await moveController.moveTo(request);
+  });
+
+  ipcMain.handle('teleport-to', async (_event, request: MoveToRequest) => {
+    if (!moveController) {
+      return { success: false, cancelled: false, finalPosition: { x: 0, y: 0 } };
+    }
+    if (isDragging) {
+      return { success: false, cancelled: true, cancelReason: 'drag-start', finalPosition: getMainWindowPosition() };
+    }
+    return moveController.teleportTo(request);
   });
 
   ipcMain.on('mouse-enter', () => {
@@ -469,6 +482,12 @@ function stopDragPoll(): void {
     clearInterval(dragPollTimer);
     dragPollTimer = null;
   }
+}
+
+function getMainWindowPosition(): { x: number; y: number } {
+  if (!mainWindow || mainWindow.isDestroyed()) return { x: 0, y: 0 };
+  const [x, y] = mainWindow.getPosition();
+  return { x, y };
 }
 
 setupIPC();
