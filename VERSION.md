@@ -5,6 +5,7 @@
 ## Unreleased
 - 屏幕目标指示视觉：使用 `src/assets/sprites/point/` 八方向 point 差分，按目标相对方向选择姿态，并在约 7 秒后只恢复普通视觉、不移动回原位
 - 屏幕目标指示稳定性：新增 Vision 定位前后一次基于 `ScreenCaptureFrame.fingerprint` 的轻量截图 fingerprint diff，diff threshold 为 `0.20`，屏幕明显变化时在移动前取消旧坐标；不引入 wheel IPC、全局输入 hook 或持续截图监控
+- 屏幕目标指示诊断：为 fingerprint 检查增加前后帧摘要、diff 分布、截图耗时和定位耗时日志，便于确认滚动未取消时是 diff 过低、截图未更新还是检测时机错过
 - Move 自动移动修复：起点尊重当前窗口真实位置，移动期间锁定窗口尺寸并只对最终目标做 workArea clamp，避免贴近边缘时起点偏移或窗口尺寸膨胀导致视觉 Y 轴持续下沉
 - Move 模块优化：接入 src/assets/sprites/move/ 专用差分，自动移动改为可指定轴顺序的 X/Y 单轴分段移动，并新增 teleportTo 直接切换接口
 - ASR 设置新增供应商预设：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible；阿里百炼当前作为 OpenAI-compatible 预设接入，不新增专用 ASR 引擎。

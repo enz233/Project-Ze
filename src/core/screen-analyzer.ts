@@ -5,7 +5,15 @@ import {
   SCREEN_FINGERPRINT_WIDTH,
   ScreenFingerprint,
   createScreenFingerprintFromBitmap,
+  summarizeScreenFingerprint,
 } from './screen-fingerprint';
+
+const SCREEN_POINTER_DEBUG = process.env.PROJECT_ZE_SCREEN_POINTER_DEBUG === '1';
+
+function debugScreenAnalyzer(message: string, data: Record<string, unknown>): void {
+  if (!SCREEN_POINTER_DEBUG) return;
+  console.log(message, data);
+}
 
 export interface ScreenCaptureFrame {
   imageDataUri: string;
@@ -122,9 +130,7 @@ export class ScreenAnalyzer {
         origin: frame.origin,
         screenSize: frame.screenSize,
         imageSize: frame.imageSize,
-        fingerprint: frame.fingerprint
-          ? { width: frame.fingerprint.width, height: frame.fingerprint.height, values: frame.fingerprint.values.length }
-          : null,
+        fingerprint: summarizeScreenFingerprint(frame.fingerprint),
       });
 
       return frame;
@@ -278,11 +284,4 @@ export class ScreenAnalyzer {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`API 请求失败 (${response.status}): ${error}`);
-    }
-
-    const data = await response.json() as any;
-    return data.choices?.[0]?.message?.content ?? '（无响应）';
-  }
-}
+      con

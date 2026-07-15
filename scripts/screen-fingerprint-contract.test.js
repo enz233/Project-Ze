@@ -3,6 +3,8 @@ const {
   SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
   createScreenFingerprintFromBitmap,
   compareScreenFingerprints,
+  describeScreenFingerprintDiff,
+  summarizeScreenFingerprint,
 } = require('../dist/core/screen-fingerprint');
 
 function rgba(width, height, fill) {
@@ -47,5 +49,22 @@ assert(compareScreenFingerprints(black, split) >= SCREEN_FINGERPRINT_CHANGE_THRE
 assert.strictEqual(createScreenFingerprintFromBitmap(Buffer.alloc(3), 16, 9), null, 'invalid bitmap length should return null');
 assert.strictEqual(compareScreenFingerprints(black, null), null, 'missing fingerprint should return null diff');
 assert.strictEqual(compareScreenFingerprints({ width: 1, height: 1, values: [0] }, black), null, 'mismatched dimensions should return null diff');
+
+const blackSummary = summarizeScreenFingerprint(black);
+assert.strictEqual(blackSummary.width, 16);
+assert.strictEqual(blackSummary.height, 9);
+assert.strictEqual(blackSummary.values, 16 * 9);
+assert.strictEqual(blackSummary.min, 0);
+assert.strictEqual(blackSummary.max, 0);
+assert.strictEqual(blackSummary.mean, 0);
+assert.strictEqual(blackSummary.sample.length, 8);
+assert.strictEqual(typeof blackSummary.hash, 'string');
+assert.strictEqual(blackSummary.hash.length, 8);
+
+const splitDiffSummary = describeScreenFingerprintDiff(black, split);
+assert(splitDiffSummary.average >= SCREEN_FINGERPRINT_CHANGE_THRESHOLD, 'diff summary average should match threshold behavior');
+assert(splitDiffSummary.max >= 0.99, 'diff summary should include max cell diff');
+assert(splitDiffSummary.cellsAbove020 > 0, 'diff summary should count changed cells');
+assert.strictEqual(describeScreenFingerprintDiff(black, null), null, 'missing fingerprint should return null diff summary');
 
 console.log('screen-fingerprint-contract tests passed');

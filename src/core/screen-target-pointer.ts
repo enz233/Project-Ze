@@ -5,6 +5,8 @@ import { ScreenAnalyzer, ScreenCaptureFrame, ScreenTargetLocateResult } from './
 import {
   SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
   compareScreenFingerprints,
+  describeScreenFingerprintDiff,
+  summarizeScreenFingerprint,
 } from './screen-fingerprint';
 import { WindowActivityService } from './window-activity-service';
 
@@ -126,13 +128,17 @@ export class ScreenTargetPointer {
 
     try {
       this.state = 'locating';
+      const locateStartedAt = Date.now();
       const located = await this.screenAnalyzer.locateTarget(screenMessage);
+      const locateElapsedMs = Date.now() - locateStartedAt;
       console.log('[ScreenTargetPointer][debug] located:', {
         sessionId: id,
+        locateElapsedMs,
         frame: {
           origin: located.frame.origin,
           screenSize: located.frame.screenSize,
           imageSize: located.frame.imageSize,
+          fingerprint: summarizeScreenFingerprint(located.frame.fingerprint),
         },
         result: located.result,
       });
@@ -320,23 +326,51 @@ export class ScreenTargetPointer {
   }
 
   private async hasFingerprintChangedBeforeMove(sessionId: number, beforeFrame: ScreenCaptureFrame): Promise<boolean> {
+    const beforeSummary = summarizeScreenFingerprint(beforeFrame.fingerprint);
+    console.log('[ScreenTargetPointer][debug] fingerprint before move check start:', {
+      sessionId,
+      beforeFrame: {
+        origin: beforeFrame.origin,
+        screenSize: beforeFrame.screenSize,
+        imageSize: beforeFrame.imageSize,
+        fingerprint: beforeSummary,
+      },
+    });
+
     if (!beforeFrame.fingerprint) {
-      console.log('[ScreenTargetPointer][debug] fingerprint skip: missing before fingerprint', { sessionId });
+      console.log('[ScreenTargetPointer][debug] fingerprint skip: missing before fingerprint', { sessionId, beforeSummary });
       return false;
     }
 
+    const recaptureStartedAt = Date.now();
     const afterFrame = await this.screenAnalyzer.captureScreenFrame();
+    const recaptureElapsedMs = Date.now() - recaptureStartedAt;
+    const afterSummary = summarizeScreenFingerprint(afterFrame?.fingerprint);
+    console.log('[ScreenTargetPointer][debug] fingerprint after recapture:', {
+      sessionId,
+      recaptureElapsedMs,
+      afterFrame: afterFrame
+        ? {
+          origin: afterFrame.origin,
+          screenSize: afterFrame.screenSize,
+          imageSize: afterFrame.imageSize,
+          fingerprint: afterSummary,
+        }
+        : null,
+    });
+
     if (!afterFrame?.fingerprint) {
-      console.log('[ScreenTargetPointer][debug] fingerprint skip: missing after fingerprint', { sessionId });
+      console.log('[ScreenTargetPointer][debug] fingerprint skip: missing after fingerprint', { sessionId, recaptureElapsedMs, afterSummary });
       return false;
     }
 
     const diff = compareScreenFingerprints(beforeFrame.fingerprint, afterFrame.fingerprint);
+    const diffSummary = describeScreenFingerprintDiff(beforeFrame.fingerprint, afterFrame.fingerprint);
     if (diff === null) {
       console.log('[ScreenTargetPointer][debug] fingerprint skip: incomparable fingerprints', {
         sessionId,
-        before: { width: beforeFrame.fingerprint.width, height: beforeFrame.fingerprint.height, values: beforeFrame.fingerprint.values.length },
-        after: { width: afterFrame.fingerprint.width, height: afterFrame.fingerprint.height, values: afterFrame.fingerprint.values.length },
+        before: beforeSummary,
+        after: afterSummary,
       });
       return false;
     }
@@ -347,6 +381,9 @@ export class ScreenTargetPointer {
       diff,
       threshold: SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
       changed,
+      diffSummary,
+      before: beforeSummary,
+      after: afterSummary,
     });
     return changed;
   }
