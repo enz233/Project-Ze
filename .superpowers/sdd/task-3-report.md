@@ -19,7 +19,8 @@ DONE
 
 ## 提交 hash
 
-- `d1561d9d14b0028f20708d90bf6bd5ed818c0916`
+- subagent 原始实现提交：`d1561d9d14b0028f20708d90bf6bd5ed818c0916`
+- controller 应用实现提交：`77beaf3`
 - Message: `feat: cancel screen pointer on fingerprint change`
 
 ## 运行的命令和结果
@@ -67,7 +68,8 @@ DONE
 
 ## 提交 hash
 
-- `0e62c06`
+- subagent 原始 stale-session 修复提交：`67f6761efc1fe271c97f8373e384353e40f085fb`
+- controller 应用 stale-session 修复提交：`67f6761`
 
 ## 运行的命令和结果
 

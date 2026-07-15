@@ -4,11 +4,14 @@
 完成。已按 reviewer Important finding 修复 `captureScreenFrame()` 中屏幕指纹生成缺少局部容错的问题。
 
 ## 修改文件
-- `C:/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/agent-a5ca836d61956e005/src/core/screen-analyzer.ts`
-- `C:/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/agent-a5ca836d61956e005/.superpowers/sdd/task-2-report.md`
+- `C:/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/screen-fingerprint-stability/src/core/screen-analyzer.ts`
+- `C:/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/screen-fingerprint-stability/.superpowers/sdd/task-2-report.md`
 
 ## 提交 hash
-待提交后见最终回复。
+- subagent 原始实现提交：`40c596df53faeb74984459f7250e18d62c00ee81`
+- controller 应用实现提交：`dcb9773`
+- subagent 原始容错修复提交：`49ccad3` / report-only 更新 `76bac0f`
+- controller 应用容错修复提交：`4e623e0`
 
 ## 运行命令和结果
 - `npm run build`：PASS（`tsc` 成功；npm 输出既有 `electron_mirror` 配置 warning）
