@@ -90,16 +90,6 @@ export class MoveController {
     const dy = target.y - startY;
     const totalDistance = Math.abs(dx) + Math.abs(dy);
 
-    this.debugMove(request.reason, 'moveTo:init', {
-      request,
-      startPosition: { x: startX, y: startY },
-      startBounds,
-      startDisplay: this.debugDisplayForPoint(startX, startY),
-      target,
-      targetDisplay: this.debugDisplayForPoint(target.x, target.y),
-      delta: { x: dx, y: dy },
-      totalDistance,
-    });
 
     if (totalDistance < 1) {
       this.setWindowPosition(target.x, target.y);
@@ -108,7 +98,6 @@ export class MoveController {
     }
 
     const segments = this.buildSegments({ x: startX, y: startY }, target, request.axisOrder);
-    this.debugMove(request.reason, 'moveTo:segments', { segments });
     const totalDurationMs = this.resolveDuration(totalDistance, request);
 
     return new Promise<MoveResult>((resolve) => {
@@ -171,20 +160,10 @@ export class MoveController {
     }
 
     const [startX, startY] = this.window.getPosition();
-    const startBounds = this.window.getBounds();
     const dx = segment.x - startX;
     const dy = segment.y - startY;
     const durationMs = this.resolveSegmentDuration(segment.distance, totalDistance, totalDurationMs, segments.length);
     const startedAt = Date.now();
-
-    this.debugMove(reason, 'segment:start', {
-      index,
-      segment,
-      startPosition: { x: startX, y: startY },
-      startBounds,
-      delta: { x: dx, y: dy },
-      durationMs,
-    });
 
     this.sendVisual({ active: true, direction: segment.direction, reason });
 
@@ -210,13 +189,6 @@ export class MoveController {
         clearInterval(timer);
         activeMove.timers = activeMove.timers.filter((activeTimer) => activeTimer !== timer);
         this.setWindowPosition(segment.x, segment.y, activeMove);
-        const [endX, endY] = this.window.getPosition();
-        this.debugMove(reason, 'segment:end', {
-          index,
-          requestedEnd: { x: segment.x, y: segment.y },
-          actualEnd: { x: endX, y: endY },
-          bounds: this.window.getBounds(),
-        });
         this.runSegment(activeMove, segments, index + 1, target, totalDurationMs, totalDistance, reason);
       }
     }, FRAME_MS);
@@ -270,22 +242,13 @@ export class MoveController {
     const bounds = this.window.getBounds();
     let targetX = request.x;
     let targetY = request.y;
-    const rawTarget = { x: targetX, y: targetY };
 
     if ((request.anchor || 'top-left') === 'center') {
       targetX = request.x - bounds.width / 2;
       targetY = request.y - bounds.height / 2;
     }
 
-    const target = this.clampToWorkArea(targetX, targetY, bounds.width, bounds.height);
-    this.debugMove(request.reason, 'resolveTarget', {
-      anchor: request.anchor || 'top-left',
-      rawTarget,
-      adjustedTarget: { x: targetX, y: targetY },
-      bounds,
-      resolvedTarget: target,
-    });
-    return target;
+    return this.clampToWorkArea(targetX, targetY, bounds.width, bounds.height);
   }
 
   private clampToWorkArea(x: number, y: number, width: number, height: number): { x: number; y: number } {
@@ -355,21 +318,6 @@ export class MoveController {
       return;
     }
     this.window.setPosition(x, y);
-  }
-
-  private debugMove(reason: string | undefined, label: string, data: unknown): void {
-    if (reason !== 'settings-debug') return;
-    console.log('[MoveDebug]', label, data);
-  }
-
-  private debugDisplayForPoint(x: number, y: number): unknown {
-    const display = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) });
-    return {
-      id: display.id,
-      bounds: display.bounds,
-      workArea: display.workArea,
-      scaleFactor: display.scaleFactor,
-    };
   }
 
   private easeInOut(t: number): number {
