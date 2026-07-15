@@ -38,19 +38,18 @@ interface ScreenTargetPointerOptions {
 const POINTER_KEYWORDS = [
   '指出',
   '指给我',
-  '在哪',
-  '在哪里',
+  '指一下',
   '帮我找',
   '找一下',
-  '哪个按钮',
-  '下载在哪',
-  '怎么点',
-  '指一下',
-  '位置',
+  '帮我指出',
+  '请指出',
+  '帮我指',
+  '指给我看',
 ];
 
 const CONFIDENCE_THRESHOLD = 0.72;
 const POINT_HOLD_MS = 5000;
+const MOVE_SCREEN_MONITOR_MS = 150;
 const DEFAULT_POSES: Record<PointerPose, PointerPoseConfig> = {
   'point-right': { pose: 'point-right', pointerOffset: { x: 220, y: 135 } },
   'point-left': { pose: 'point-left', pointerOffset: { x: 30, y: 135 } },
@@ -67,6 +66,7 @@ export class ScreenTargetPointer {
   private sessionId = 0;
   private state: ScreenPointingSessionState = 'done';
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
+  private moveMonitorTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: ScreenTargetPointerOptions) {
     this.mainWindow = options.mainWindow;
@@ -77,7 +77,8 @@ export class ScreenTargetPointer {
   }
 
   isPointerRequest(message: string): boolean {
-    const normalized = message.trim().toLowerCase();
+    if (!message.startsWith('.')) return false;
+    const normalized = message.slice(1).trim().toLowerCase();
     if (!normalized) return false;
     return POINTER_KEYWORDS.some(keyword => normalized.includes(keyword.toLowerCase()));
   }
@@ -87,13 +88,14 @@ export class ScreenTargetPointer {
       return { handled: false, moved: false, message: '' };
     }
 
+    const screenMessage = message.slice(1).trim();
     const id = this.startSession();
     const beforeTitle = await this.windowActivityService.getActiveWindowTitle();
     this.showBubble('我看看哦，先别动屏幕~');
 
     try {
       this.state = 'locating';
-      const located = await this.screenAnalyzer.locateTarget(message);
+      const located = await this.screenAnalyzer.locateTarget(screenMessage);
       if (!this.isCurrent(id)) {
         return this.cancelledResult('new-request');
       }
@@ -105,7 +107,7 @@ export class ScreenTargetPointer {
 
       const result = located.result;
       if (!this.canMove(result)) {
-        const failureMessage = this.failureMessage(message, result);
+        const failureMessage = this.failureMessage(screenMessage, result);
         this.showBubble(failureMessage);
         this.finishSession();
         return { handled: true, moved: false, message: failureMessage, locateResult: result };
@@ -119,6 +121,11 @@ export class ScreenTargetPointer {
       };
 
       this.state = 'moving';
+      let screenChangedDuringMove = false;
+      this.startMoveScreenMonitor(id, beforeTitle, () => {
+        screenChangedDuringMove = true;
+        this.moveController.cancel('manual');
+      });
       const moveResult = await this.moveController.moveTo({
         x: moveTopLeft.x,
         y: moveTopLeft.y,
@@ -127,13 +134,14 @@ export class ScreenTargetPointer {
         speedPxPerSec: 520,
       });
 
+      this.clearMoveMonitor();
+
       if (!this.isCurrent(id)) {
         return this.cancelledResult('new-request');
       }
 
-      const afterMoveTitle = await this.windowActivityService.getActiveWindowTitle();
-      if (this.hasScreenChanged(beforeTitle, afterMoveTitle)) {
-        return this.cancelWithMessage('screen-changed');
+      if (screenChangedDuringMove) {
+        return this.screenChangedResult(result);
       }
 
       if (moveResult.cancelled) {
@@ -167,6 +175,7 @@ export class ScreenTargetPointer {
     this.moveController.cancel('manual');
     this.clearPointVisual();
     this.clearHoldTimer();
+    this.clearMoveMonitor();
     if (reason === 'screen-changed') {
       this.showBubble(this.screenChangedMessage());
     } else if (reason === 'drag-start') {
@@ -184,6 +193,7 @@ export class ScreenTargetPointer {
   private finishSession(): void {
     this.state = 'done';
     this.clearHoldTimer();
+    this.clearMoveMonitor();
   }
 
   private isCurrent(id: number): boolean {
@@ -191,7 +201,12 @@ export class ScreenTargetPointer {
   }
 
   private canMove(result: ScreenTargetLocateResult): boolean {
-    return result.found === true && !!result.point && result.confidence >= CONFIDENCE_THRESHOLD;
+    return result.found === true
+      && Number.isFinite(result.confidence)
+      && result.confidence >= CONFIDENCE_THRESHOLD
+      && !!result.point
+      && Number.isFinite(result.point.x)
+      && Number.isFinite(result.point.y);
   }
 
   private choosePose(screenPoint: { x: number; y: number }): PointerPoseConfig {
@@ -244,6 +259,14 @@ export class ScreenTargetPointer {
     return { handled: true, moved: false, message: this.screenChangedMessage(), cancelReason: reason };
   }
 
+  private screenChangedResult(result?: ScreenTargetLocateResult): ScreenTargetPointerResult {
+    const messageText = this.screenChangedMessage();
+    this.clearPointVisual();
+    this.finishSession();
+    this.showBubble(messageText);
+    return { handled: true, moved: false, message: messageText, locateResult: result, cancelReason: 'screen-changed' };
+  }
+
   private cancelledResult(reason: ScreenTargetPointerCancelReason): ScreenTargetPointerResult {
     return { handled: true, moved: false, message: '', cancelReason: reason };
   }
@@ -264,6 +287,35 @@ export class ScreenTargetPointer {
 
   private clearPointVisual(): void {
     this.sendPointVisual({ active: false, reason: 'screen-target-pointer' });
+  }
+
+  private startMoveScreenMonitor(id: number, beforeTitle: string, onChanged: () => void): void {
+    this.clearMoveMonitor();
+    let polling = false;
+    this.moveMonitorTimer = setInterval(() => {
+      if (polling || !this.isCurrent(id) || this.state !== 'moving') return;
+      polling = true;
+      this.windowActivityService.getActiveWindowTitle()
+        .then(currentTitle => {
+          if (this.isCurrent(id) && this.state === 'moving' && this.hasScreenChanged(beforeTitle, currentTitle)) {
+            onChanged();
+            this.clearMoveMonitor();
+          }
+        })
+        .catch(error => {
+          console.error('[ScreenTargetPointer] 监控活动窗口失败:', error?.message || error);
+        })
+        .finally(() => {
+          polling = false;
+        });
+    }, MOVE_SCREEN_MONITOR_MS);
+  }
+
+  private clearMoveMonitor(): void {
+    if (this.moveMonitorTimer) {
+      clearInterval(this.moveMonitorTimer);
+      this.moveMonitorTimer = null;
+    }
   }
 
   private schedulePointClear(id: number): void {
