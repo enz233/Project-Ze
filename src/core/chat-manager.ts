@@ -87,6 +87,7 @@ export class ChatManager {
       // 检查是否为屏幕分析请求（"." 开头）
       if (userMessage.startsWith('.')) {
         const screenMessage = userMessage.slice(1).trim() || '描述一下屏幕上有什么';
+        this.screenTargetPointer?.cancel('new-request');
         this.sendChatStatus('screen', '正在看屏幕...');
 
         if (this.screenTargetPointer?.isPointerRequest(screenMessage)) {
