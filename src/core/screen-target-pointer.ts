@@ -38,9 +38,14 @@ interface ScreenTargetPointerOptions {
 const POINTER_KEYWORDS = [
   '指出',
   '指给我',
-  '指一下',
+  '在哪',
+  '在哪里',
   '帮我找',
   '找一下',
+  '哪个按钮',
+  '下载在哪',
+  '怎么点',
+  '指一下',
   '帮我指出',
   '请指出',
   '帮我指',
@@ -161,6 +166,7 @@ export class ScreenTargetPointer {
       this.sendPointVisual({ active: true, pose: pose.pose, reason: 'screen-target-pointer' });
       const successMessage = this.successMessage(result);
       this.showBubble(successMessage);
+      this.startPointScreenMonitor(id, beforeTitle);
       this.schedulePointClear(id);
       return { handled: true, moved: true, message: successMessage, locateResult: result };
     } catch (error: any) {
@@ -295,14 +301,29 @@ export class ScreenTargetPointer {
   }
 
   private startMoveScreenMonitor(id: number, beforeTitle: string, onChanged: () => void): void {
+    this.startScreenMonitor(id, beforeTitle, 'moving', onChanged);
+  }
+
+  private startPointScreenMonitor(id: number, beforeTitle: string): void {
+    this.startScreenMonitor(id, beforeTitle, 'pointing', () => {
+      this.cancel('screen-changed');
+    });
+  }
+
+  private startScreenMonitor(
+    id: number,
+    beforeTitle: string,
+    expectedState: ScreenPointingSessionState,
+    onChanged: () => void
+  ): void {
     this.clearMoveMonitor();
     let polling = false;
     this.moveMonitorTimer = setInterval(() => {
-      if (polling || !this.isCurrent(id) || this.state !== 'moving') return;
+      if (polling || !this.isCurrent(id) || this.state !== expectedState) return;
       polling = true;
       this.windowActivityService.getActiveWindowTitle()
         .then(currentTitle => {
-          if (this.isCurrent(id) && this.state === 'moving' && this.hasScreenChanged(beforeTitle, currentTitle)) {
+          if (this.isCurrent(id) && this.state === expectedState && this.hasScreenChanged(beforeTitle, currentTitle)) {
             onChanged();
             this.clearMoveMonitor();
           }
