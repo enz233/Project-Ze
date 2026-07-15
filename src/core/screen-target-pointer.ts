@@ -140,7 +140,8 @@ export class ScreenTargetPointer {
         return this.cancelledResult('new-request');
       }
 
-      if (screenChangedDuringMove) {
+      const afterMoveTitle = await this.windowActivityService.getActiveWindowTitle();
+      if (screenChangedDuringMove || this.hasScreenChanged(beforeTitle, afterMoveTitle)) {
         return this.screenChangedResult(result);
       }
 
