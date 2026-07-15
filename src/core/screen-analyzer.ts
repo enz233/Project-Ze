@@ -2,6 +2,10 @@ import { app, desktopCapturer, screen } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AIConfigManager } from './ai-config';
+import {
+  ScreenVisionPurpose,
+  getScreenVisionImageDetail,
+} from './screen-vision-request';
 import { computeScreenCaptureThumbnailSize } from './screen-capture-frame';
 import {
   buildScreenPointerDebugFileName,
@@ -74,7 +78,7 @@ export class ScreenAnalyzer {
     }
 
     try {
-      const response = await this.callVisionAPI(frame.imageDataUri, userMessage, config);
+      const response = await this.callVisionAPI(frame.imageDataUri, userMessage, config, 'screen-analysis');
       return response;
     } catch (error: any) {
       console.error('[ScreenAnalyzer] Vision API 调用失败:', error.message);
@@ -214,7 +218,8 @@ export class ScreenAnalyzer {
       {
         ...config,
         visionSystemPrompt: '你是屏幕目标定位助手，只能输出 JSON，不要输出 Markdown。',
-      }
+      },
+      'target-locate'
     );
 
     return {
@@ -304,7 +309,8 @@ export class ScreenAnalyzer {
   private async callVisionAPI(
     imageDataUri: string,
     userMessage: string,
-    config: any
+    config: any,
+    purpose: ScreenVisionPurpose = 'screen-analysis'
   ): Promise<string> {
     const messages = [
       {
@@ -319,7 +325,7 @@ export class ScreenAnalyzer {
             type: 'image_url',
             image_url: {
               url: imageDataUri,
-              detail: 'low',
+              detail: getScreenVisionImageDetail(purpose),
             },
           },
         ],
