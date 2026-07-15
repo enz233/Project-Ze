@@ -32,3 +32,10 @@
 
 ## Concerns
 - `npm test` 输出 npm 配置警告：`electron_mirror` / `electron-mirror` 为未知配置；测试本身通过。
+
+## Task 3 Fix Report
+
+Status: DONE after review fixes.
+Changes: invalid fallback intents now downgrade to unknown with no capabilities; all low-confidence fallback results downgrade to unknown with no capabilities; normal_chat fallback capabilities are sanitized to llm only when accepted; added invalid enum and low-confidence sensitive capability contract tests.
+Tests: npm test PASS; git diff --check PASS.
+Concerns: none.
