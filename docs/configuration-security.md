@@ -17,6 +17,7 @@ Project-Ze 的真实运行时配置不应提交到仓库。应用运行时会把
 - [src/config/chat-history.example.json](../src/config/chat-history.example.json)
 - [src/config/ai-memory.example.json](../src/config/ai-memory.example.json)
 - [src/config/appearance.example.json](../src/config/appearance.example.json)
+- [src/config/asr.example.json](../src/config/asr.example.json)
 
 这些文件必须保持：
 
@@ -34,6 +35,7 @@ Project-Ze 的真实运行时配置不应提交到仓库。应用运行时会把
 - `src/config/chat-history.json`
 - `src/config/ai-memory.json`
 - `src/config/appearance.json`
+- `src/config/asr.json`
 
 如果需要创建本地配置，可以复制 example 文件并改名，例如：
 
@@ -59,9 +61,12 @@ tts.json
 appearance.json
 chat-history.json
 ai-memory.json
+asr.json
 ```
 
 这些文件属于用户本地数据，不应作为项目源码提交。
+
+ASR API Key 与语音缓存属于本地运行态数据，不应提交；音频缓存位于 Electron `userData/cache/voice-input/`，只保留短期 runtime 文件。
 
 ## API key rotation
 

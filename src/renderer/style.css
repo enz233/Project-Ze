@@ -246,11 +246,22 @@ html, body {
 }
 
 /* 聊天输入框 */
-#chat-input {
+#chat-input-wrap {
   position: absolute;
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 100;
+}
+
+#chat-input-wrap.hidden {
+  display: none;
+}
+
+#chat-input-wrap #chat-input {
   width: 180px;
   min-height: 30px;
   padding: 6px 12px;
@@ -263,7 +274,6 @@ html, body {
   color: #333;
   outline: none;
   transition: all 0.2s ease;
-  z-index: 100;
 }
 
 #chat-input::placeholder {
@@ -275,6 +285,29 @@ html, body {
   border-color: rgba(100, 150, 255, 0.8);
   background: rgba(255, 255, 255, 1);
   box-shadow: 0 2px 8px rgba(100, 150, 255, 0.2);
+}
+
+.voice-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.voice-btn.recording {
+  background: #ffebee;
+  color: #c62828;
+  animation: voice-pulse 1s infinite;
+}
+
+@keyframes voice-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }
 
 #chat-status {
@@ -304,7 +337,10 @@ html, body {
 
 #chat-status.chat-status-thinking::before,
 #chat-status.chat-status-screen::before,
-#chat-status.chat-status-speaking::before {
+#chat-status.chat-status-speaking::before,
+#chat-status.chat-status-voice-recording::before,
+#chat-status.chat-status-voice-transcribing::before,
+#chat-status.chat-status-voice-finalizing::before {
   content: '';
   display: inline-block;
   width: 6px;
@@ -316,7 +352,8 @@ html, body {
   vertical-align: 1px;
 }
 
-#chat-status.chat-status-error {
+#chat-status.chat-status-error,
+#chat-status.chat-status-voice-error {
   background: rgba(180, 72, 72, 0.7);
 }
 

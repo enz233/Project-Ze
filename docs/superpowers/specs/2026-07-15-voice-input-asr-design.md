@@ -154,7 +154,9 @@ type ASRTranscriptEvent =
 
 ### Provider engines
 
-First implementation should include an OpenAI-compatible ASR engine and leave room for provider-specific engines.
+First implementation supports OpenAI-compatible ASR only. Provider-specific Aliyun or custom engines remain future work and should not be exposed as selectable runtime providers until an engine exists.
+
+Realtime browser/Electron WebSocket clients cannot attach arbitrary `Authorization` headers. The OpenAI-compatible realtime path sends the API key through the `openai-insecure-api-key.<key>` subprotocol and an initial `session.auth` message; providers that require HTTP upgrade headers must use the chunked transcription fallback or a provider-specific Node-side socket implementation.
 
 ```txt
 asr-engine.ts            shared interfaces + createASREngine(config)

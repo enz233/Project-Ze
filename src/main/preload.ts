@@ -97,6 +97,27 @@ contextBridge.exposeInMainWorld('companion', {
   saveTTSConfig: (config: any) => {
     ipcRenderer.send('save-tts-config', config);
   },
+  loadASRConfig: (): Promise<any> => {
+    return ipcRenderer.invoke('load-asr-config');
+  },
+  saveASRConfig: (config: any) => {
+    ipcRenderer.send('save-asr-config', config);
+  },
+  onASRConfigUpdated: (callback: (config: any) => void) => {
+    ipcRenderer.on('asr-config-updated', (_event, config) => callback(config));
+  },
+  voiceInput: {
+    start: (options: any): Promise<any> => ipcRenderer.invoke('voice-input-start', options),
+    appendAudioChunk: (payload: any): Promise<void> => ipcRenderer.invoke('voice-input-audio-chunk', payload),
+    stop: (sessionId: string): Promise<void> => ipcRenderer.invoke('voice-input-stop', sessionId),
+    cancel: (sessionId: string): Promise<void> => ipcRenderer.invoke('voice-input-cancel', sessionId),
+    onStatus: (callback: (payload: any) => void) => {
+      ipcRenderer.on('voice-input-status', (_event, payload) => callback(payload));
+    },
+    onTranscript: (callback: (payload: any) => void) => {
+      ipcRenderer.on('voice-input-transcript', (_event, payload) => callback(payload));
+    },
+  },
   testTTS: (): Promise<any> => {
     return ipcRenderer.invoke('test-tts');
   },

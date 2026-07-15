@@ -1,10 +1,11 @@
 {
   "name": "project-ze",
-  "version": "0.2.17",
+  "version": "0.3.0",
   "description": "An open-source desktop AI companion powered by LLM / 一个基于大语言模型的桌面 AI 伙伴",
   "main": "dist/main/main.js",
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node scripts/voice-input-contract.test.js",
     "start": "npm run build && electron .",
     "dev": "tsc && electron .",
     "dist": "npm run build && electron-builder",
@@ -30,6 +31,7 @@
       "src/config/states.json",
       "src/config/proactive-reactions.json",
       "src/config/micro-behaviors.json",
+      "src/config/asr.example.json",
       "src/assets/**/*",
       "src/renderer/index.html",
       "src/renderer/style.css",

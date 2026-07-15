@@ -2,6 +2,13 @@
 
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
+## v0.3.0 (2026-07-15)
+- 新增语音输入 ASR：右键输入框麦克风按钮点击开始/结束，`Ctrl+Shift+Space` 长按说话
+- 新增 ASR 引擎抽象和 OpenAI-compatible provider，主流程通过 `ASREngine.stream(...)` 接收 partial/final transcript
+- 新增 `VoiceInputManager` 和 `VoiceAudioCache`，预留短期音频缓存与 `audioRef` 复用边界
+- 设置界面新增语音输入配置，支持供应商、Base URL、API Key、模型、流式模式、语言、自动发送和缓存参数
+- 文档补充语音输入交互、配置安全、IPC 和模块职责
+
 ## Unreleased
 - Renderer 动画守卫修复：为 blink、sleepy、lonely、bubble/subtitle timeout 链加入 handle 清理与 generation 检查，避免 stale callback 覆盖新状态或 guard flag 卡住
 

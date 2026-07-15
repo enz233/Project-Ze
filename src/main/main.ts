@@ -13,6 +13,9 @@ import { AppearanceConfigManager } from '../core/appearance-config';
 import { ScreenAnalyzer } from '../core/screen-analyzer';
 import { TTSConfigManager } from '../core/tts-config';
 import { TTSManager } from '../core/tts-manager';
+import { ASRConfigManager } from '../core/asr-config';
+import { VoiceAudioCache } from '../core/voice-audio-cache';
+import { VoiceInputManager } from '../core/voice-input-manager';
 import { ObserverManager } from '../core/observer-manager';
 import { ProactiveReactionSystem } from '../core/proactive-reaction-system';
 import { MicroBehaviorManager } from '../core/micro-behavior-manager';
@@ -34,6 +37,9 @@ let appearanceConfig: AppearanceConfigManager;
 let screenAnalyzer: ScreenAnalyzer;
 let ttsConfigManager: TTSConfigManager;
 let ttsManager: TTSManager;
+let asrConfigManager: ASRConfigManager;
+let voiceAudioCache: VoiceAudioCache;
+let voiceInputManager: VoiceInputManager;
 let observerManager: ObserverManager;
 let proactiveReactionSystem: ProactiveReactionSystem;
 let microBehaviorManager: MicroBehaviorManager;
@@ -126,6 +132,9 @@ function createWindow(): void {
   appearanceConfig = new AppearanceConfigManager();
   ttsConfigManager = new TTSConfigManager();
   ttsManager = new TTSManager(mainWindow, ttsConfigManager);
+  asrConfigManager = new ASRConfigManager();
+  voiceAudioCache = new VoiceAudioCache(asrConfigManager.get().cache);
+  voiceInputManager = new VoiceInputManager(mainWindow, asrConfigManager, voiceAudioCache);
   moveController = new MoveController(mainWindow, {
     sendVisual: (event) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -356,6 +365,33 @@ function setupIPC(): void {
 
   ipcMain.on('save-tts-config', (_event, config: any) => {
     ttsConfigManager?.update(config);
+  });
+
+  ipcMain.handle('load-asr-config', () => {
+    return asrConfigManager.get();
+  });
+
+  ipcMain.on('save-asr-config', (_event, config: any) => {
+    asrConfigManager.update(config);
+    const updatedConfig = asrConfigManager.get();
+    voiceAudioCache?.updateConfig(updatedConfig.cache);
+    mainWindow?.webContents.send('asr-config-updated', updatedConfig);
+  });
+
+  ipcMain.handle('voice-input-start', async (_event, options: any) => {
+    return voiceInputManager.startSession(options);
+  });
+
+  ipcMain.handle('voice-input-audio-chunk', async (_event, payload: any) => {
+    await voiceInputManager.appendAudioChunk(payload.sessionId, payload.chunk);
+  });
+
+  ipcMain.handle('voice-input-stop', async (_event, sessionId: string) => {
+    await voiceInputManager.stopSession(sessionId);
+  });
+
+  ipcMain.handle('voice-input-cancel', async (_event, sessionId: string) => {
+    await voiceInputManager.cancelSession(sessionId);
   });
 
   ipcMain.handle('test-tts', async () => {

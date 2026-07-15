@@ -10,6 +10,27 @@
 - `Esc` 关闭输入框。
 - 消息发送后输入框自动收起，并显示轻量状态提示。
 
+## Voice input
+
+语音输入复用现有右键聊天输入框，不新增聊天面板。
+
+- 麦克风按钮：点击开始录音，再点结束。
+- 快捷键：`Ctrl+Shift+Space` 长按说话，松开结束。
+- partial transcript 会流式写入 textarea。
+- 默认不自动发送；最终文本保留在输入框里，用户按 `Enter` 发送。
+- 设置中可开启“识别完成后自动发送”。
+
+流程：
+
+```txt
+Renderer MediaRecorder
+  → preload voiceInput facade
+  → VoiceInputManager
+  → ASREngine.stream(...)
+  → voice-input-transcript
+  → renderer textarea
+```
+
 ## Runtime status flow
 
 主进程通过 IPC 向渲染进程发送聊天状态：
