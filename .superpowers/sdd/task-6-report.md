@@ -23,6 +23,13 @@ Result: PASS. `tsc` completed successfully.
 
 Note: npm printed the existing warning about unknown project config `electron_mirror`.
 
+Working tree check before the docs commit showed only the expected documentation files:
+
+```text
+ M PROJECT_INDEX.md
+ M VERSION.md
+```
+
 ## Commit
 
 - `d3369ba` — `docs: document screen target pointer system`
