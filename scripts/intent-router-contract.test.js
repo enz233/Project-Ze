@@ -66,11 +66,85 @@ async function testRuleClassifierCameraCheckIsExplicitOneShot() {
   assert.deepStrictEqual(decision.requiredCapabilities, ['camera_frame']);
 }
 
+async function testRouterAllowsExplicitScreenSummaryFromTextChat() {
+  const { IntentRouter } = load('core/intent-router.js');
+  const router = new IntentRouter();
+
+  const routed = await router.route({
+    source: 'text_chat',
+    text: '帮我看看这个页面',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(routed.decision.intent, 'screen_summary');
+  assert.strictEqual(routed.permission.status, 'allowed');
+}
+
+async function testRouterDeniesAmbiguousSensitiveFallback() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const { IntentRouter } = load('core/intent-router.js');
+  const classifier = new IntentClassifier({
+    enableLlmFallback: true,
+    llmFallback: async () => ({
+      intent: 'camera_check_once',
+      confidence: 0.9,
+      reason: 'bad fallback tries camera without explicit request',
+      explicitness: 'ambiguous',
+      requires: ['camera_frame'],
+    }),
+  });
+  const router = new IntentRouter({ classifier, cameraEnabled: () => true });
+
+  const routed = await router.route({
+    source: 'text_chat',
+    text: '这个好像有点怪',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(routed.decision.intent, 'camera_check_once');
+  assert.strictEqual(routed.permission.status, 'denied');
+  assert.match(routed.permission.reason, /explicit/);
+}
+
+async function testRouterRequiresCameraConfigForCameraCheck() {
+  const { IntentRouter } = load('core/intent-router.js');
+  const router = new IntentRouter({ cameraEnabled: () => false });
+
+  const routed = await router.route({
+    source: 'text_chat',
+    text: '检测一下摄像头状态',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(routed.decision.intent, 'camera_check_once');
+  assert.strictEqual(routed.permission.status, 'denied');
+  assert.match(routed.permission.reason, /camera awareness is disabled/);
+}
+
+async function testRouterRecordsDebugSnapshot() {
+  const { IntentRouter } = load('core/intent-router.js');
+  const router = new IntentRouter({ debugLimit: 2 });
+
+  await router.route({ source: 'text_chat', text: '你好', userInitiated: true });
+  await router.route({ source: 'text_chat', text: '帮我看看这个页面', userInitiated: true });
+  await router.route({ source: 'voice_asr', text: '指出下载按钮', userInitiated: true });
+
+  const snapshot = router.getDebugSnapshot();
+  assert.strictEqual(snapshot.recent.length, 2);
+  assert.strictEqual(snapshot.recent[0].intent, 'screen_summary');
+  assert.strictEqual(snapshot.recent[1].intent, 'screen_target_pointer');
+  assert.strictEqual(snapshot.recent[1].permissionStatus, 'allowed');
+}
+
 async function run() {
   await testRuleClassifierNormalChatDoesNotNeedSensitiveCapabilities();
   await testRuleClassifierScreenSummaryFromNaturalLanguage();
   await testRuleClassifierScreenTargetExtractsTarget();
   await testRuleClassifierCameraCheckIsExplicitOneShot();
+  await testRouterAllowsExplicitScreenSummaryFromTextChat();
+  await testRouterDeniesAmbiguousSensitiveFallback();
+  await testRouterRequiresCameraConfigForCameraCheck();
+  await testRouterRecordsDebugSnapshot();
   console.log('intent-router contract tests passed');
 }
 
