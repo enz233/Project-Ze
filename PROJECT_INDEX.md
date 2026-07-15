@@ -1,6 +1,6 @@
 # Project-Ze / Quiet Companion 项目索引
 
-> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.2.17
+> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.3.0
 
 ## 项目概述
 
@@ -64,6 +64,10 @@ src/
 - `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
 - `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。
 - `chat-history-store.ts`：聊天历史持久化边界，负责 `chat-history.json` 的读写、最近消息读取和摘要计数；`ai-memory.ts` 仍作为记忆 facade 负责摘要、关系、习惯和 prompt 组装。
+- `asr-config.ts`：ASR 运行态配置，使用 `JsonConfigStore<T>` 保存到 Electron `userData/config/asr.json`。
+- `asr-engine.ts` / `asr-openai-compatible.ts`：ASR 引擎接口与 OpenAI-compatible provider，主流程只依赖 `ASREngine.stream(...)`。
+- `voice-input-manager.ts`：语音输入 session 编排，连接音频 chunk、ASR engine、音频缓存和 transcript/status IPC。
+- `voice-audio-cache.ts`：短期语音缓存边界，保存 runtime-only 音频 chunk 并返回 `audioRef`。
 
 ## 8 个状态
 
@@ -123,6 +127,10 @@ src/
 | state-finished | - | 动画状态结束 |
 | open-settings | - | 打开设置窗口 |
 | renderer-log | level, message | 日志转发 |
+| voice-input-start | {source, mimeType} | 开始语音输入 session |
+| voice-input-audio-chunk | {sessionId, chunk} | 发送录音 chunk |
+| voice-input-stop | sessionId | 停止并 finalizing 语音输入 |
+| voice-input-cancel | sessionId | 取消语音输入 |
 
 ### 主 → 渲染
 | 通道 | 数据 | 说明 |
@@ -132,6 +140,8 @@ src/
 | sprites-path | string | 精灵图路径 |
 | show-bubble | text | 显示气泡 |
 | move-visual | {active, direction, edge?, reason?} | 自动移动过程方向差分 |
+| voice-input-status | {phase, message, sessionId} | 语音输入状态 |
+| voice-input-transcript | partial/final/error event | 语音识别结果 |
 
 ## 常见修改场景
 
@@ -162,6 +172,7 @@ src/
 
 | 版本 | 日期 | 主要内容 |
 |------|------|---------|
+| v0.3.0 | 2026-07-15 | 语音输入 ASR：麦克风按钮、长按快捷键、流式识别、ASR 配置、音频缓存接口 |
 | v0.1.0 | 2026-05-23 | 初始版本，7 状态系统 |
 | v0.1.1 | 2026-05-24 | curious 眨眼，修复重复触发 |
 | v0.1.2 | 2026-05-24 | 拖拽方向差分，绝对定位 |
