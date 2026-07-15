@@ -66,6 +66,8 @@
   var dragTransitionDone = false;
   var dragFirstMove = false;
   var isDragVisualActive = false; // 拖拽视觉是否激活（mousedown到mouseup之间）
+  var isMoveVisualActive = false;
+  var currentMoveDirection: string | null = null;
   var sleepyAnimRunning = false;
   var justDragged = false; // 刚完成拖拽，忽略接下来的 click
 
@@ -390,6 +392,12 @@
       playMicroBehavior(payload);
     });
 
+    // 主进程发来的自动移动视觉
+    // @ts-ignore
+    window.companion.onMoveVisual(function (payload: any) {
+      updateMoveVisual(payload);
+    });
+
     // 主进程发来的聊天处理状态
     // @ts-ignore
     window.companion.onChatStatus(function (payload: any) {
@@ -435,6 +443,32 @@
   }
 
   var microBehaviorTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function updateMoveVisual(payload: any): void {
+    if (!payload || !payload.active) {
+      if (!isMoveVisualActive) return;
+      isMoveVisualActive = false;
+      currentMoveDirection = null;
+      lastVisualState = '';
+      updateVisual(currentState, null);
+      return;
+    }
+
+    if (isDragVisualActive) return;
+
+    var direction = payload.direction || 'right';
+    if (direction !== 'left' && direction !== 'right' && direction !== 'up' && direction !== 'down') {
+      direction = 'right';
+    }
+
+    isMoveVisualActive = true;
+    companionEl.className = 'dragged';
+
+    if (direction !== currentMoveDirection) {
+      currentMoveDirection = direction;
+      setSprite('dragged_' + direction);
+    }
+  }
 
   function playMicroBehavior(payload: any): void {
     if (!payload || typeof payload.behavior !== 'string') return;
@@ -846,6 +880,8 @@
     if (isBlinking && (state === 'idle' || state === 'curious' || state === 'sleepy') && state === prevState) return;
     // 拖拽期间不覆盖精灵图
     if (isDragVisualActive) return;
+    // 自动移动期间不覆盖移动方向差分
+    if (isMoveVisualActive) return;
     // 拖拽已结束但主进程还在发旧的 dragged 状态，忽略
     if (state === 'dragged' && !isDragVisualActive) return;
 
