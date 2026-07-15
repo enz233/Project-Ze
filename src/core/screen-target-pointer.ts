@@ -10,6 +10,13 @@ import {
 } from './screen-fingerprint';
 import { WindowActivityService } from './window-activity-service';
 
+const SCREEN_POINTER_DEBUG = process.env.PROJECT_ZE_SCREEN_POINTER_DEBUG === '1';
+
+function debugScreenTargetPointer(message: string, data: Record<string, unknown>): void {
+  if (!SCREEN_POINTER_DEBUG) return;
+  console.log(message, data);
+}
+
 export type PointerPose =
   | 'point-right'
   | 'point-right_down'
@@ -118,10 +125,10 @@ export class ScreenTargetPointer {
     const screenMessage = this.normalizePointerMessage(message);
     const id = this.startSession();
     const beforeTitle = await this.windowActivityService.getActiveWindowTitle();
-    console.log('[ScreenTargetPointer][debug] session start:', {
+    debugScreenTargetPointer('[ScreenTargetPointer][debug] session start:', {
       sessionId: id,
-      message: screenMessage,
-      beforeTitle,
+      messageLength: screenMessage.length,
+      beforeTitlePresent: !!beforeTitle,
       windowBounds: this.mainWindow.getBounds(),
     });
     this.showBubble('我看看哦，先别动屏幕~');
@@ -131,7 +138,7 @@ export class ScreenTargetPointer {
       const locateStartedAt = Date.now();
       const located = await this.screenAnalyzer.locateTarget(screenMessage);
       const locateElapsedMs = Date.now() - locateStartedAt;
-      console.log('[ScreenTargetPointer][debug] located:', {
+      debugScreenTargetPointer('[ScreenTargetPointer][debug] located:', {
         sessionId: id,
         locateElapsedMs,
         frame: {
@@ -140,7 +147,13 @@ export class ScreenTargetPointer {
           imageSize: located.frame.imageSize,
           fingerprint: summarizeScreenFingerprint(located.frame.fingerprint),
         },
-        result: located.result,
+        result: {
+          found: located.result.found,
+          confidence: located.result.confidence,
+          hasPoint: !!located.result.point,
+          labelLength: located.result.label?.length ?? 0,
+          reasonLength: located.result.reason?.length ?? 0,
+        },
       });
       if (!this.isCurrent(id)) {
         return this.cancelledResult('new-request');
@@ -148,7 +161,7 @@ export class ScreenTargetPointer {
 
       const afterLocateTitle = await this.windowActivityService.getActiveWindowTitle();
       if (this.hasScreenChanged(beforeTitle, afterLocateTitle)) {
-        console.log('[ScreenTargetPointer][debug] screen changed after locate:', { sessionId: id, beforeTitle, afterLocateTitle });
+        debugScreenTargetPointer('[ScreenTargetPointer][debug] screen changed after locate:', { sessionId: id, beforeTitlePresent: !!beforeTitle, afterTitlePresent: !!afterLocateTitle });
         return this.cancelWithMessage('screen-changed');
       }
 
@@ -165,7 +178,7 @@ export class ScreenTargetPointer {
         return this.cancelledResult('new-request');
       }
       if (fingerprintChanged) {
-        console.log('[ScreenTargetPointer][debug] screen changed before move:', { sessionId: id });
+        debugScreenTargetPointer('[ScreenTargetPointer][debug] screen changed before move:', { sessionId: id });
         return this.screenChangedResult(result);
       }
 
@@ -175,7 +188,7 @@ export class ScreenTargetPointer {
         x: screenPoint.x - pose.pointerOffset.x,
         y: screenPoint.y - pose.pointerOffset.y,
       };
-      console.log('[ScreenTargetPointer][debug] move target:', {
+      debugScreenTargetPointer('[ScreenTargetPointer][debug] move target:', {
         sessionId: id,
         screenPoint,
         pose,
@@ -205,17 +218,22 @@ export class ScreenTargetPointer {
 
       const afterMoveTitle = await this.windowActivityService.getActiveWindowTitle();
       if (screenChangedDuringMove || this.hasScreenChanged(beforeTitle, afterMoveTitle)) {
-        console.log('[ScreenTargetPointer][debug] screen changed after move:', {
+        debugScreenTargetPointer('[ScreenTargetPointer][debug] screen changed after move:', {
           sessionId: id,
-          beforeTitle,
-          afterMoveTitle,
+          beforeTitlePresent: !!beforeTitle,
+          afterTitlePresent: !!afterMoveTitle,
           screenChangedDuringMove,
-          moveResult,
+          moveCancelled: moveResult.cancelled,
         });
         return this.screenChangedResult(result);
       }
 
-      console.log('[ScreenTargetPointer][debug] move finished:', { sessionId: id, moveResult, afterMoveTitle });
+      debugScreenTargetPointer('[ScreenTargetPointer][debug] move finished:', {
+        sessionId: id,
+        moveCancelled: moveResult.cancelled,
+        finalPosition: moveResult.finalPosition,
+        afterTitlePresent: !!afterMoveTitle,
+      });
 
       if (moveResult.cancelled) {
         const messageText = '好啦好啦，我不挡你~';
@@ -244,7 +262,7 @@ export class ScreenTargetPointer {
 
   cancel(reason: ScreenTargetPointerCancelReason = 'manual'): void {
     if (this.state === 'done' || this.state === 'cancelled') return;
-    console.log('[ScreenTargetPointer][debug] cancel:', { sessionId: this.sessionId, state: this.state, reason });
+    debugScreenTargetPointer('[ScreenTargetPointer][debug] cancel:', { sessionId: this.sessionId, state: this.state, reason });
     this.sessionId++;
     this.state = 'cancelled';
     this.moveController.cancel('manual');
@@ -293,7 +311,7 @@ export class ScreenTargetPointer {
     const poseKey = this.poseFromDelta(dx, dy);
     const pose = DEFAULT_POSES[poseKey];
 
-    console.log('[ScreenTargetPointer][debug] choose pose:', {
+    debugScreenTargetPointer('[ScreenTargetPointer][debug] choose pose:', {
       screenPoint,
       windowBounds: bounds,
       windowCenter: { x: windowCenterX, y: windowCenterY },
@@ -327,7 +345,7 @@ export class ScreenTargetPointer {
 
   private async hasFingerprintChangedBeforeMove(sessionId: number, beforeFrame: ScreenCaptureFrame): Promise<boolean> {
     const beforeSummary = summarizeScreenFingerprint(beforeFrame.fingerprint);
-    console.log('[ScreenTargetPointer][debug] fingerprint before move check start:', {
+    debugScreenTargetPointer('[ScreenTargetPointer][debug] fingerprint before move check start:', {
       sessionId,
       beforeFrame: {
         origin: beforeFrame.origin,
@@ -338,7 +356,7 @@ export class ScreenTargetPointer {
     });
 
     if (!beforeFrame.fingerprint) {
-      console.log('[ScreenTargetPointer][debug] fingerprint skip: missing before fingerprint', { sessionId, beforeSummary });
+      debugScreenTargetPointer('[ScreenTargetPointer][debug] fingerprint skip: missing before fingerprint', { sessionId, beforeSummary });
       return false;
     }
 
@@ -346,7 +364,7 @@ export class ScreenTargetPointer {
     const afterFrame = await this.screenAnalyzer.captureScreenFrame();
     const recaptureElapsedMs = Date.now() - recaptureStartedAt;
     const afterSummary = summarizeScreenFingerprint(afterFrame?.fingerprint);
-    console.log('[ScreenTargetPointer][debug] fingerprint after recapture:', {
+    debugScreenTargetPointer('[ScreenTargetPointer][debug] fingerprint after recapture:', {
       sessionId,
       recaptureElapsedMs,
       afterFrame: afterFrame
@@ -360,14 +378,14 @@ export class ScreenTargetPointer {
     });
 
     if (!afterFrame?.fingerprint) {
-      console.log('[ScreenTargetPointer][debug] fingerprint skip: missing after fingerprint', { sessionId, recaptureElapsedMs, afterSummary });
+      debugScreenTargetPointer('[ScreenTargetPointer][debug] fingerprint skip: missing after fingerprint', { sessionId, recaptureElapsedMs, afterSummary });
       return false;
     }
 
     const diff = compareScreenFingerprints(beforeFrame.fingerprint, afterFrame.fingerprint);
     const diffSummary = describeScreenFingerprintDiff(beforeFrame.fingerprint, afterFrame.fingerprint);
     if (diff === null) {
-      console.log('[ScreenTargetPointer][debug] fingerprint skip: incomparable fingerprints', {
+      debugScreenTargetPointer('[ScreenTargetPointer][debug] fingerprint skip: incomparable fingerprints', {
         sessionId,
         before: beforeSummary,
         after: afterSummary,
@@ -376,7 +394,7 @@ export class ScreenTargetPointer {
     }
 
     const changed = diff >= SCREEN_FINGERPRINT_CHANGE_THRESHOLD;
-    console.log('[ScreenTargetPointer][debug] fingerprint diff before move:', {
+    debugScreenTargetPointer('[ScreenTargetPointer][debug] fingerprint diff before move:', {
       sessionId,
       diff,
       threshold: SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
@@ -474,11 +492,11 @@ export class ScreenTargetPointer {
       this.windowActivityService.getActiveWindowTitle()
         .then(currentTitle => {
           if (this.isCurrent(id) && this.state === expectedState && this.hasScreenChanged(beforeTitle, currentTitle)) {
-            console.log('[ScreenTargetPointer][debug] screen monitor changed:', {
+            debugScreenTargetPointer('[ScreenTargetPointer][debug] screen monitor changed:', {
               sessionId: id,
               expectedState,
-              beforeTitle,
-              currentTitle,
+              beforeTitlePresent: !!beforeTitle,
+              currentTitlePresent: !!currentTitle,
             });
             onChanged();
             this.clearMoveMonitor();
