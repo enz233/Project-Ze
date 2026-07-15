@@ -428,6 +428,7 @@
     currentMoveDirection = null;
     moveFrameIndex = 0;
     moveUpForward = true;
+    companionEl.classList.remove('move-visual');
     companionEl.classList.remove('companion-move-down');
     spriteEl.classList.remove('companion-move-flip');
   }
@@ -437,6 +438,7 @@
     currentMoveDirection = direction;
     moveFrameIndex = 0;
     moveUpForward = true;
+    companionEl.classList.remove('move-visual');
     companionEl.classList.remove('companion-move-down');
     spriteEl.classList.remove('companion-move-flip');
 
@@ -468,6 +470,7 @@
     }
 
     if (direction === 'down') {
+      companionEl.classList.add('move-visual');
       companionEl.classList.add('companion-move-down');
       setMoveSprite('down', 'down_0');
     }
@@ -991,6 +994,7 @@
       // sleepy 眨眼：sleepy_1 → sleepy_blink → sleepy_1
       setSprite('sleepy_blink');
       setTimeout(function () {
+        if (currentState !== 'sleepy') { isBlinking = false; return; }
         setSprite('sleepy_1');
         isBlinking = false;
       }, speed * 2);

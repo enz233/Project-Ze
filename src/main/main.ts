@@ -64,7 +64,11 @@ function createWindow(): void {
   // 默认穿透，鼠标进入角色时恢复交互
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
   moveController = new MoveController(mainWindow, {
-    sendVisual: (event) => mainWindow?.webContents.send('move-visual', event),
+    sendVisual: (event) => {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send('move-visual', event);
+      }
+    },
   });
   mainWindow.loadFile(path.join(__dirname, '..', '..', 'src', 'renderer', 'index.html'));
 
@@ -223,11 +227,13 @@ function setupIPC(): void {
 
   ipcMain.handle('move-to', async (_event, request: MoveToRequest) => {
     if (!moveController) return { success: false, cancelled: false, finalPosition: { x: 0, y: 0 } };
+    if (isDragging) return { success: false, cancelled: true, cancelReason: 'drag-start', finalPosition: getMainWindowPosition() };
     return moveController.moveTo(request);
   });
 
   ipcMain.handle('teleport-to', async (_event, request: MoveToRequest) => {
     if (!moveController) return { success: false, cancelled: false, finalPosition: { x: 0, y: 0 } };
+    if (isDragging) return { success: false, cancelled: true, cancelReason: 'drag-start', finalPosition: getMainWindowPosition() };
     return moveController.teleportTo(request);
   });
 
@@ -391,6 +397,12 @@ function toggleDebugWindow(): void {
     getLogger().setDebugWindow(null);
   });
   getLogger().setDebugWindow(debugWindow);
+}
+
+function getMainWindowPosition(): { x: number; y: number } {
+  if (!mainWindow || mainWindow.isDestroyed()) return { x: 0, y: 0 };
+  const [x, y] = mainWindow.getPosition();
+  return { x, y };
 }
 
 function stopDragPoll(): void {

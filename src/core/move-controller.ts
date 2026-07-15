@@ -70,7 +70,7 @@ export class MoveController {
   }
 
   async moveTo(request: MoveToRequest): Promise<MoveResult> {
-    if (!Number.isFinite(request.x) || !Number.isFinite(request.y)) {
+    if (!this.isValidRequest(request)) {
       return this.result(false, false);
     }
 
@@ -105,7 +105,7 @@ export class MoveController {
   }
 
   teleportTo(request: MoveToRequest): MoveResult {
-    if (!Number.isFinite(request.x) || !Number.isFinite(request.y)) {
+    if (!this.isValidRequest(request)) {
       return this.result(false, false);
     }
 
@@ -280,8 +280,18 @@ export class MoveController {
     active.timers.forEach((timer) => clearInterval(timer));
     active.timers = [];
     this.activeMove = null;
-    this.sendVisual({ active: false, reason: active.reason });
-    active.resolve(this.result(success, cancelled, cancelReason));
+    try {
+      this.sendVisual({ active: false, reason: active.reason });
+    } finally {
+      active.resolve(this.result(success, cancelled, cancelReason));
+    }
+  }
+
+  private isValidRequest(request: MoveToRequest): request is MoveToRequest {
+    return typeof request === 'object'
+      && request !== null
+      && Number.isFinite(request.x)
+      && Number.isFinite(request.y);
   }
 
   private result(success: boolean, cancelled: boolean, cancelReason?: MoveCancelReason): MoveResult {

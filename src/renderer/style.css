@@ -79,12 +79,12 @@ html, body {
   75% { transform: translateX(-50%) translateY(1px) rotate(1deg); }
 }
 
-#companion.companion-move-down,
-#companion.sleepy.companion-move-down,
-#companion.sleeping.companion-move-down,
-#companion.lonely.companion-move-down,
-#companion.tried.companion-move-down,
-#companion.comfortable.companion-move-down {
+#companion.move-visual.companion-move-down,
+#companion.move-visual.sleepy.companion-move-down,
+#companion.move-visual.sleeping.companion-move-down,
+#companion.move-visual.lonely.companion-move-down,
+#companion.move-visual.tried.companion-move-down,
+#companion.move-visual.comfortable.companion-move-down {
   animation: move-down-sway 0.6s ease-in-out infinite;
 }
 
