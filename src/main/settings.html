@@ -611,6 +611,39 @@
         <input type="text" id="asrLanguage" placeholder="zh">
       </div>
 
+      <h2 style="margin-top: 20px;">语音输入测试</h2>
+      <hr class="divider">
+      <div class="hint" style="margin-bottom: 10px; color: #666;">
+        麦克风音量测试只检查本地输入；语音识别测试会录音约 10 秒并调用当前 ASR 配置，可能产生 API 调用。
+      </div>
+
+      <div class="field">
+        <label>麦克风音量</label>
+        <div id="asrMicStatus" class="hint">未开始测试</div>
+        <div style="height: 10px; background: #e0e0e0; border-radius: 999px; overflow: hidden; margin-top: 6px;">
+          <div id="asrMicLevelBar" style="height: 100%; width: 0%; background: #6aa3ff; transition: width 0.08s linear;"></div>
+        </div>
+        <div class="hint" id="asrMicLevelText">音量：0%</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="asrMicTestBtn">测试麦克风音量</button>
+        <button class="btn btn-primary" id="asrRecognitionTestBtn">测试语音识别 10 秒</button>
+      </div>
+
+      <div class="field" style="margin-top: 12px;">
+        <label>识别测试进度</label>
+        <div style="height: 8px; background: #e0e0e0; border-radius: 999px; overflow: hidden;">
+          <div id="asrRecognitionProgressBar" style="height: 100%; width: 0%; background: #81c784; transition: width 0.1s linear;"></div>
+        </div>
+        <div class="hint" id="asrRecognitionProgressText">未开始</div>
+      </div>
+
+      <div class="field">
+        <label>识别结果</label>
+        <textarea id="asrRecognitionResult" rows="4" readonly placeholder="测试识别到的文字会显示在这里"></textarea>
+      </div>
+
       <div class="field">
         <label><input type="checkbox" id="asrAutoSend"> 识别完成后自动发送</label>
         <div class="hint">默认关闭；关闭时需要按 Enter 发送。</div>
