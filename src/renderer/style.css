@@ -302,6 +302,19 @@ html, body {
   cursor: pointer;
   font-size: 14px;
   flex: 0 0 auto;
+  transition: opacity 0.2s ease, filter 0.2s ease, transform 0.2s ease;
+}
+
+.voice-btn.disabled {
+  opacity: 0.45;
+  filter: grayscale(1);
+  background: rgba(230, 230, 230, 0.82);
+  color: rgba(90, 90, 90, 0.9);
+  box-shadow: none;
+}
+
+.voice-btn.disabled:hover {
+  opacity: 0.72;
 }
 
 .voice-btn.recording {

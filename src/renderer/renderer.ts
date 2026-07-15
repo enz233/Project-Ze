@@ -97,6 +97,7 @@
   var voiceChunkSequence = 0;
   var voiceRecording = false;
   var voiceAutoSend = false;
+  var voiceInputEnabled = false;
   var voiceHoldToTalkShortcut = 'Ctrl+Shift+Space';
   var voicePartialBase = '';
   var voicePendingChunkUploads: Promise<void>[] = [];
@@ -301,17 +302,12 @@
   function setupChatInput(): void {
     if (!chatInputEl || !chatInputWrapEl || !voiceInputBtnEl) return;
 
-    // @ts-ignore
-    window.companion.loadASRConfig().then(function (config: any) {
-      voiceHoldToTalkShortcut = config && config.holdToTalkShortcut ? config.holdToTalkShortcut : 'Ctrl+Shift+Space';
-    }).catch(function () {
-      voiceHoldToTalkShortcut = 'Ctrl+Shift+Space';
-    });
+    refreshVoiceInputConfig();
     // @ts-ignore
     if (window.companion.onASRConfigUpdated) {
       // @ts-ignore
       window.companion.onASRConfigUpdated(function (config: any) {
-        voiceHoldToTalkShortcut = config && config.holdToTalkShortcut ? config.holdToTalkShortcut : 'Ctrl+Shift+Space';
+        applyVoiceInputConfig(config);
       });
     }
 
@@ -329,6 +325,10 @@
     document.addEventListener('keydown', function (e: KeyboardEvent) {
       if (!chatInputWrapEl.classList.contains('hidden') && eventMatchesShortcut(e, voiceHoldToTalkShortcut) && !voiceRecording) {
         e.preventDefault();
+        if (!voiceInputEnabled) {
+          showVoiceInputDisabledHint();
+          return;
+        }
         startVoiceInput('shortcut');
       }
     });
@@ -366,6 +366,7 @@
   function openChatInput(text: string): void {
     chatInputWrapEl.classList.remove('hidden');
     chatInputEl.value = text;
+    refreshVoiceInputConfig();
     chatInputEl.focus();
     if (text) {
       chatInputEl.setSelectionRange(text.length, text.length);
@@ -407,6 +408,33 @@
     });
   }
 
+  function applyVoiceInputConfig(config: any): void {
+    voiceInputEnabled = !!(config && config.enabled);
+    voiceHoldToTalkShortcut = config && config.holdToTalkShortcut ? config.holdToTalkShortcut : 'Ctrl+Shift+Space';
+    voiceInputBtnEl.classList.toggle('disabled', !voiceInputEnabled);
+    voiceInputBtnEl.setAttribute('aria-disabled', voiceInputEnabled ? 'false' : 'true');
+    voiceInputBtnEl.title = voiceInputEnabled
+      ? '语音输入：点击开始/结束，' + voiceHoldToTalkShortcut + ' 长按说话'
+      : '语音输入未启用：点击查看提示，F11 设置里可开启';
+  }
+
+  function refreshVoiceInputConfig(): void {
+    // @ts-ignore
+    window.companion.loadASRConfig().then(function (config: any) {
+      applyVoiceInputConfig(config);
+    }).catch(function () {
+      voiceInputEnabled = false;
+      voiceHoldToTalkShortcut = 'Ctrl+Shift+Space';
+      voiceInputBtnEl.classList.add('disabled');
+      voiceInputBtnEl.setAttribute('aria-disabled', 'true');
+      voiceInputBtnEl.title = '语音输入配置读取失败，请到 F11 设置检查';
+    });
+  }
+
+  function showVoiceInputDisabledHint(): void {
+    updateChatStatus({ phase: 'voice-error', message: '语音输入未启用，请按 F11 到设置里开启' });
+  }
+
   function setVoiceRecording(active: boolean): void {
     voiceRecording = active;
     voiceInputBtnEl.classList.toggle('recording', active);
@@ -419,7 +447,8 @@
       // @ts-ignore
       var config = await window.companion.loadASRConfig();
       if (!config || !config.enabled) {
-        updateChatStatus({ phase: 'voice-error', message: '语音输入未启用' });
+        applyVoiceInputConfig(config);
+        showVoiceInputDisabledHint();
         return;
       }
       voiceAutoSend = !!config.autoSendFinalTranscript;
