@@ -1,4 +1,9 @@
-# Quiet Companion - 版本记录
+# Project-Ze - 版本记录
+
+> 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
+
+## Unreleased
+- Renderer 动画守卫修复：为 blink、sleepy、lonely、bubble/subtitle timeout 链加入 handle 清理与 generation 检查，避免 stale callback 覆盖新状态或 guard flag 卡住
 
 ## v0.2.17 (2026-07-15)
 - 架构清理：移除旧主动响应路径，集中化活动上下文检测，并共享屏幕分析实例
@@ -7,7 +12,7 @@
 - 新增通用 `JsonConfigStore<T>`，统一运行态 JSON 配置的默认值合并、读写和错误处理，TTS 配置已接入
 - 新增 `ChatHistoryStore`，将聊天历史持久化边界从 `ai-memory.ts` 拆出，降低 AI 记忆模块职责复杂度
 - 新增 `BubbleOrchestrator`，将主进程气泡请求编排与 `BubbleManager` 的状态门禁/IPC 投递职责分离
-- 补充 TTS 引擎、JSON 配置存储、AI 记忆存储、气泡编排和 renderer 动画保护设计/计划文档
+- 补充 TTS 引擎、JSON 配置存储、AI 记忆存储、气泡编排设计/计划文档和 renderer 动画保护设计/实现记录
 
 ## v0.2.16 (2026-07-13)
 - 主动回应阈值、冷却、分类关键词、模板和 AI 改写 reason 迁移到 `src/config/proactive-reactions.json`

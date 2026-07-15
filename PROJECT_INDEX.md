@@ -1,4 +1,4 @@
-# Quiet Companion 项目索引
+# Project-Ze / Quiet Companion 项目索引
 
 > 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.2.17
 
@@ -150,12 +150,9 @@ src/
 - 回复格式：`chat-manager.ts` 的 RESPONSE_FORMAT_PROMPT
 - 情感前缀：`chat-manager.ts` 的 EMOTION_PROMPTS
 
-## 已知待修复（中优先级）
-
-- test-ai-connection 返回 undefined 时 renderer 报错（v0.2.12 已加兜底）
-
 ## 已解决问题
 
+- v0.2.12：test-ai-connection 返回 undefined 时 renderer 已加兜底。
 - v0.2.17 后：renderer 动画守卫已加入 timeout handle 清理和 generation 检查，修复 blink `isBlinking` 阻塞、lonely 退出旧回调、气泡 fade timeout 无法取消、`sleepyAnimRunning` 卡住风险。
 
 ## 版本历史

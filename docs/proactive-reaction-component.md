@@ -18,15 +18,19 @@ Project-Ze 的主动回应系统是一个轻量“主动部件”，用于判断
 ObserverManager
   → ContextCollector.collect()
   → ProactiveReactionSystem.evaluateComponent(snapshot)
-  → optional AI wording in ObserverManager
+  → MicroBehaviorManager.performForCandidate(candidate)
+  → optional AI wording if bubble is allowed
+  → BubbleOrchestrator.requestBubble(...)
   → BubbleManager.tryShowProactiveBubble(...)
 ```
+
+主进程气泡请求先进入 `BubbleOrchestrator` 做来源/优先级的轻量编排，再交给 `BubbleManager` 执行状态门禁、冷却和 `show-bubble` IPC 投递。
 
 ## 配置
 
 主动回应的阈值、分类关键词、文案模板和允许 AI 改写的 reason 位于：
 
-- [src/config/proactive-reactions.json](src/config/proactive-reactions.json)
+- [src/config/proactive-reactions.json](../src/config/proactive-reactions.json)
 
 配置项包括：
 
@@ -40,7 +44,7 @@ ObserverManager
 
 核心文件：
 
-- [src/core/proactive-reaction-system.ts](src/core/proactive-reaction-system.ts)
+- [src/core/proactive-reaction-system.ts](../src/core/proactive-reaction-system.ts)
 
 主要接口：
 
@@ -64,7 +68,7 @@ getDebugSnapshot(): ProactiveDebugSnapshot
 }
 ```
 
-`candidate` 只表示“本地规则认为可以考虑回应”。最终是否显示仍应通过 `BubbleManager.tryShowProactiveBubble`。
+`candidate` 只表示“本地规则认为可以考虑回应”。最终是否显示仍应通过 `BubbleOrchestrator` 编排，并由 `BubbleManager.tryShowProactiveBubble` 做状态门禁和投递。
 
 ### recordDirectInteraction
 
@@ -112,13 +116,14 @@ ObserverManager
   → ProactiveReactionSystem.evaluateComponent(snapshot)
   → MicroBehaviorManager.performForCandidate(candidate)
   → optional AI wording if bubble is allowed
+  → BubbleOrchestrator.requestBubble(...)
   → BubbleManager.tryShowProactiveBubble(...) if needed
 ```
 
 核心文件：
 
-- [src/core/micro-behavior-manager.ts](src/core/micro-behavior-manager.ts)
-- [src/config/micro-behaviors.json](src/config/micro-behaviors.json)
+- [src/core/micro-behavior-manager.ts](../src/core/micro-behavior-manager.ts)
+- [src/config/micro-behaviors.json](../src/config/micro-behaviors.json)
 
 第一版微行为只通过 IPC 和 CSS 做轻量表现，不新增素材，也不接管 `StateManager` 状态。
 
