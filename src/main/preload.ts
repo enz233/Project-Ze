@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld('companion', {
   sendWindowMoveBy: (data: { deltaX: number; deltaY: number }) => {
     ipcRenderer.send('window-move-by', data);
   },
+  moveTo: (request: any): Promise<any> => {
+    return ipcRenderer.invoke('move-to', request);
+  },
+  onMoveVisual: (callback: (payload: any) => void) => {
+    ipcRenderer.on('move-visual', (_event, payload) => callback(payload));
+  },
   sendMouseEnter: () => {
     ipcRenderer.send('mouse-enter');
   },

@@ -17,6 +17,7 @@ import { ObserverManager } from '../core/observer-manager';
 import { ProactiveReactionSystem } from '../core/proactive-reaction-system';
 import { MicroBehaviorManager } from '../core/micro-behavior-manager';
 import { WindowActivityService } from '../core/window-activity-service';
+import { MoveController, MoveToRequest } from '../core/move-controller';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -37,6 +38,7 @@ let observerManager: ObserverManager;
 let proactiveReactionSystem: ProactiveReactionSystem;
 let microBehaviorManager: MicroBehaviorManager;
 let windowActivityService: WindowActivityService;
+let moveController: MoveController;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -124,6 +126,13 @@ function createWindow(): void {
   appearanceConfig = new AppearanceConfigManager();
   ttsConfigManager = new TTSConfigManager();
   ttsManager = new TTSManager(mainWindow, ttsConfigManager);
+  moveController = new MoveController(mainWindow, {
+    sendVisual: (event) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('move-visual', event);
+      }
+    },
+  });
 
   // 连接情绪系统到 TransitionEngine
   transitionEngine.setEmotionUpdater(chatManager.getEmotionUpdater());
@@ -176,6 +185,7 @@ function setupIPC(): void {
 
   ipcMain.on('drag-start', () => {
     transitionEngine?.handleDragStart();
+    moveController?.cancel('drag-start');
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
     const [winX, winY] = mainWindow.getPosition();
@@ -226,6 +236,13 @@ function setupIPC(): void {
     if (!mainWindow || mainWindow.isDestroyed() || isDragging) return;
     const [x, y] = mainWindow.getPosition();
     mainWindow.setPosition(x + data.deltaX, y + data.deltaY);
+  });
+
+  ipcMain.handle('move-to', async (_event, request: MoveToRequest) => {
+    if (!moveController) {
+      return { success: false, cancelled: false, finalPosition: { x: 0, y: 0 } };
+    }
+    return await moveController.moveTo(request);
   });
 
   ipcMain.on('mouse-enter', () => {
