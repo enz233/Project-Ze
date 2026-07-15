@@ -20,6 +20,13 @@ export interface IntentRouterOptions {
 
 const DEFAULT_DEBUG_LIMIT = 10;
 
+const REQUIRED_CAPABILITIES_BY_INTENT: Partial<Record<IntentDecision['intent'], IntentCapability[]>> = {
+  screen_summary: ['screen_capture', 'vision', 'llm'],
+  screen_target_pointer: ['screen_capture', 'vision', 'move_pointer'],
+  camera_check_once: ['camera_frame'],
+  proactive_control: ['config_write'],
+};
+
 export class IntentRouter {
   private readonly classifier: IntentClassifier;
   private readonly cameraEnabled: () => boolean;
@@ -29,11 +36,11 @@ export class IntentRouter {
   constructor(options: IntentRouterOptions = {}) {
     this.classifier = options.classifier ?? new IntentClassifier();
     this.cameraEnabled = options.cameraEnabled ?? (() => false);
-    this.debugLimit = options.debugLimit ?? DEFAULT_DEBUG_LIMIT;
+    this.debugLimit = normalizeDebugLimit(options.debugLimit);
   }
 
   async route(request: IntentRequest): Promise<IntentRoutedDecision> {
-    const decision = await this.classifier.classify(request);
+    const decision = this.normalizeRequiredCapabilities(await this.classifier.classify(request));
     const permission = this.applyPermissionPolicy(request, decision);
     const routed = { request, decision, permission };
     this.recordRoute(routed);
@@ -56,6 +63,18 @@ export class IntentRouter {
     last.executorStatus = result.status;
     last.executorMessage = result.message;
     last.executorError = result.error;
+  }
+
+  private normalizeRequiredCapabilities(decision: IntentDecision): IntentDecision {
+    const requiredCapabilities = uniqueCapabilities([
+      ...decision.requiredCapabilities,
+      ...(REQUIRED_CAPABILITIES_BY_INTENT[decision.intent] ?? []),
+    ]);
+    if (requiredCapabilities.length === decision.requiredCapabilities.length
+      && requiredCapabilities.every((capability, index) => capability === decision.requiredCapabilities[index])) {
+      return decision;
+    }
+    return { ...decision, requiredCapabilities };
   }
 
   private applyPermissionPolicy(request: IntentRequest, decision: IntentDecision): IntentPermissionResult {
@@ -132,4 +151,14 @@ export class IntentRouter {
     });
     while (this.recent.length > this.debugLimit) this.recent.shift();
   }
+}
+
+function normalizeDebugLimit(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_DEBUG_LIMIT;
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return Math.floor(value);
+}
+
+function uniqueCapabilities(capabilities: IntentCapability[]): IntentCapability[] {
+  return capabilities.filter((capability, index) => capabilities.indexOf(capability) === index);
 }

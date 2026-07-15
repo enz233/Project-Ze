@@ -136,6 +136,69 @@ async function testRouterRecordsDebugSnapshot() {
   assert.strictEqual(snapshot.recent[1].permissionStatus, 'allowed');
 }
 
+async function testRouterAddsCameraCapabilityBeforePermissionGate() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const { IntentRouter } = load('core/intent-router.js');
+  const classifier = new IntentClassifier({
+    enableLlmFallback: true,
+    llmFallback: async () => ({
+      intent: 'camera_check_once',
+      confidence: 0.95,
+      reason: 'bad fallback omits camera requirement',
+      explicitness: 'explicit',
+      requires: [],
+    }),
+  });
+  const router = new IntentRouter({ classifier, cameraEnabled: () => false });
+
+  const routed = await router.route({
+    source: 'text_chat',
+    text: '摄像头这个好像有点怪',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(routed.decision.intent, 'camera_check_once');
+  assert.strictEqual(routed.permission.status, 'denied');
+  assert.match(routed.permission.reason, /camera awareness is disabled/);
+  assert.deepStrictEqual(routed.permission.deniedCapabilities, ['camera_frame']);
+}
+
+async function testRouterDebugSnapshotUsesIntentRequiredCapabilities() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const { IntentRouter } = load('core/intent-router.js');
+  const classifier = new IntentClassifier({
+    enableLlmFallback: true,
+    llmFallback: async () => ({
+      intent: 'screen_summary',
+      confidence: 0.95,
+      reason: 'bad fallback omits screen requirements',
+      explicitness: 'explicit',
+      requires: [],
+    }),
+  });
+  const router = new IntentRouter({ classifier });
+
+  await router.route({ source: 'text_chat', text: '页面这个好像有点怪', userInitiated: true });
+
+  const snapshot = router.getDebugSnapshot();
+  assert.strictEqual(snapshot.recent.length, 1);
+  assert.ok(snapshot.recent[0].requiredCapabilities.includes('screen_capture'));
+  assert.ok(snapshot.recent[0].requiredCapabilities.includes('vision'));
+}
+
+async function testRouterNegativeDebugLimitDoesNotHangAndKeepsNoRecentRecords() {
+  const { IntentRouter } = load('core/intent-router.js');
+  const router = new IntentRouter({ debugLimit: -1 });
+
+  const routed = await Promise.race([
+    router.route({ source: 'text_chat', text: '你好', userInitiated: true }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('route hung with negative debugLimit')), 500)),
+  ]);
+
+  assert.strictEqual(routed.permission.status, 'allowed');
+  assert.strictEqual(router.getDebugSnapshot().recent.length, 0);
+}
+
 async function run() {
   await testRuleClassifierNormalChatDoesNotNeedSensitiveCapabilities();
   await testRuleClassifierScreenSummaryFromNaturalLanguage();
@@ -145,6 +208,9 @@ async function run() {
   await testRouterDeniesAmbiguousSensitiveFallback();
   await testRouterRequiresCameraConfigForCameraCheck();
   await testRouterRecordsDebugSnapshot();
+  await testRouterAddsCameraCapabilityBeforePermissionGate();
+  await testRouterDebugSnapshotUsesIntentRequiredCapabilities();
+  await testRouterNegativeDebugLimitDoesNotHangAndKeepsNoRecentRecords();
   console.log('intent-router contract tests passed');
 }
 
