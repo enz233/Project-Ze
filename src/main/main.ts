@@ -474,8 +474,8 @@ function setupIPC(): void {
     return updatedConfig;
   });
 
-  ipcMain.handle('voice-input-start', async (_event, options: any) => {
-    return voiceInputManager.startSession(options);
+  ipcMain.handle('voice-input-start', async (event, options: any) => {
+    return voiceInputManager.startSession(options, event.sender);
   });
 
   ipcMain.handle('voice-input-audio-chunk', async (_event, payload: any) => {

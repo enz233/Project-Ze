@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, WebContents } from 'electron';
 import { ASRConfigManager } from './asr-config';
 import { ASRTranscriptEvent, VoiceAudioChunk, createASREngine } from './asr-engine';
 import { VoiceAudioCache } from './voice-audio-cache';
@@ -6,7 +6,7 @@ import { VoiceAudioCache } from './voice-audio-cache';
 export type VoiceInputPhase = 'voice-idle' | 'voice-recording' | 'voice-transcribing' | 'voice-finalizing' | 'voice-error';
 
 export interface VoiceInputStartOptions {
-  source: 'button' | 'shortcut';
+  source: 'button' | 'shortcut' | 'settings-test';
   mimeType: string;
 }
 
@@ -25,11 +25,12 @@ export interface VoiceInputDebugSnapshot {
 
 interface ActiveVoiceSession {
   sessionId: string;
-  source: 'button' | 'shortcut';
+  source: 'button' | 'shortcut' | 'settings-test';
   mimeType: string;
   sequence: number;
   chunks: VoiceAudioChunk[];
   stopped: boolean;
+  targetWebContents?: WebContents;
 }
 
 export function createVoiceSessionId(): string {
@@ -49,7 +50,7 @@ export class VoiceInputManager {
     private audioCache: VoiceAudioCache
   ) {}
 
-  async startSession(options: VoiceInputStartOptions): Promise<VoiceInputSessionInfo> {
+  async startSession(options: VoiceInputStartOptions, targetWebContents?: WebContents): Promise<VoiceInputSessionInfo> {
     if (this.active) {
       await this.cancelSession(this.active.sessionId);
     }
@@ -59,7 +60,7 @@ export class VoiceInputManager {
       throw new Error('Voice input is disabled');
     }
     const sessionId = createVoiceSessionId();
-    this.active = { sessionId, source: options.source, mimeType: options.mimeType, sequence: 0, chunks: [], stopped: false };
+    this.active = { sessionId, source: options.source, mimeType: options.mimeType, sequence: 0, chunks: [], stopped: false, targetWebContents };
     await this.audioCache.createSession(sessionId);
     this.setPhase('voice-recording', '正在录音');
     return { sessionId, phase: this.phase };
@@ -98,8 +99,8 @@ export class VoiceInputManager {
     const audioRef = await this.audioCache.finalize(sessionId, session.mimeType);
     this.lastFinal = finalText;
     this.emitTranscript({ type: 'final', text: finalText, sessionId, audioRef: audioRef.relativeDir });
-    this.active = null;
     this.setPhase('voice-idle', '语音识别完成');
+    this.active = null;
   }
 
   async cancelSession(sessionId: string): Promise<void> {
@@ -126,18 +127,25 @@ export class VoiceInputManager {
     return this.active;
   }
 
+  private sendToActiveTarget(channel: string, payload: any): void {
+    const target = this.active?.targetWebContents && !this.active.targetWebContents.isDestroyed()
+      ? this.active.targetWebContents
+      : this.mainWindow.webContents;
+    target.send(channel, payload);
+  }
+
   private setPhase(phase: VoiceInputPhase, message: string): void {
     this.phase = phase;
-    this.mainWindow.webContents.send('voice-input-status', { phase, message, sessionId: this.active?.sessionId ?? null });
+    this.sendToActiveTarget('voice-input-status', { phase, message, sessionId: this.active?.sessionId ?? null });
   }
 
   private setError(message: string): void {
     this.lastError = message;
     this.phase = 'voice-error';
-    this.mainWindow.webContents.send('voice-input-status', { phase: 'voice-error', message, sessionId: this.active?.sessionId ?? null });
+    this.sendToActiveTarget('voice-input-status', { phase: 'voice-error', message, sessionId: this.active?.sessionId ?? null });
   }
 
   private emitTranscript(event: ASRTranscriptEvent): void {
-    this.mainWindow.webContents.send('voice-input-transcript', event);
+    this.sendToActiveTarget('voice-input-transcript', event);
   }
 }

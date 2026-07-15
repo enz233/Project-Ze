@@ -94,6 +94,7 @@
 
   var voiceRecorder: MediaRecorder | null = null;
   var voiceSessionId: string | null = null;
+  var voiceLastSessionId: string | null = null;
   var voiceChunkStartedAt = 0;
   var voiceChunkSequence = 0;
   var voiceRecording = false;
@@ -510,6 +511,7 @@
       // @ts-ignore
       var session = await window.companion.voiceInput.start({ source: source, mimeType: mimeType });
       voiceSessionId = session.sessionId;
+      voiceLastSessionId = session.sessionId;
       voiceChunkSequence = 0;
       voicePendingChunkUploads = [];
       voicePartialBase = chatInputEl.value;
@@ -728,12 +730,17 @@
     // 主进程发来的语音输入状态
     // @ts-ignore
     window.companion.voiceInput.onStatus(function (payload: any) {
+      var activeOrLastSessionId = voiceSessionId || voiceLastSessionId;
+      if (payload && activeOrLastSessionId && payload.sessionId !== activeOrLastSessionId) return;
       updateChatStatus(payload);
     });
 
     // 主进程发来的语音识别结果
     // @ts-ignore
     window.companion.voiceInput.onTranscript(function (payload: any) {
+      var activeOrLastSessionId = voiceSessionId || voiceLastSessionId;
+      if (payload && activeOrLastSessionId && payload.sessionId !== activeOrLastSessionId) return;
+      if (!activeOrLastSessionId) return;
       if (payload.type === 'partial') {
         debugVoiceInput('transcript partial', { textLength: String(payload.text || '').length });
         keepChatInputOpen();
@@ -749,9 +756,11 @@
         if (voiceAutoSend && finalText.trim()) {
           sendChatInput();
         }
+        voiceLastSessionId = null;
       }
       if (payload.type === 'error') {
         updateChatStatus({ phase: 'voice-error', message: payload.message || '语音识别失败' });
+        voiceLastSessionId = null;
       }
     });
 
