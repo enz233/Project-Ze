@@ -25,5 +25,12 @@
 - 未引入 wheel IPC、renderer wheel listener、全局 hook、持续截图监控、移动/指向期间轮询、桌宠区域排除。
 - 未改变 Vision prompt、坐标映射、MoveController、自动点击/滚动/重试或普通聊天触发。
 
+## 后续文档追踪
+
+- release note / `PROJECT_INDEX.md` 文档更新由 Task 4 处理：controller 提交 `00f0b26`。
+- 文档阈值与 `ScreenCaptureFrame.fingerprint` 明确化由 Task 4 review fix 处理：controller 提交 `7e9c068`。
+- Task 4 报告元数据更新：controller 提交 `0114afe`。
+- 最终 review metadata / `VERSION.md` Unreleased 顺序修复：controller 提交 `7390855`。
+
 ## concerns
 无功能性 concerns。仅测试输出包含 npm 对现有 `electron_mirror` / `electron-mirror` 配置的 warning，未影响 build/test 结果。

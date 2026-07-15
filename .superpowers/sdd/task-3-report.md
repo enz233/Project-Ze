@@ -69,7 +69,7 @@ DONE
 ## 提交 hash
 
 - subagent 原始 stale-session 修复提交：`67f6761efc1fe271c97f8373e384353e40f085fb`
-- controller 应用 stale-session 修复提交：`67f6761`
+- controller 应用 stale-session 修复提交：`67f6761efc1fe271c97f8373e384353e40f085fb`（同一提交对象，controller 分支直接包含该提交；短 hash `67f6761`）
 
 ## 运行的命令和结果
 
@@ -85,6 +85,13 @@ DONE
 - 根因核对：旧代码在等待 pre-move fingerprint 截图后，先根据结果调用 `screenChangedResult(result)`，之后才检查 `isCurrent(id)`，导致 stale session 可在新请求切入后发出 `screen-changed`。
 - 修复核对：异步结果只保存一次，随后立即检查会话是否仍 current，再根据结果取消。
 - 范围核对：未新增截图次数、IPC/global hook、持续监控、移动/指向轮询、pet exclusion；未修改 Vision prompt、坐标映射、MoveController、点击/滚动/重试或普通聊天触发。
+
+## 后续文档追踪
+
+- release note / `PROJECT_INDEX.md` 文档更新由 Task 4 处理：controller 提交 `00f0b26`。
+- 文档阈值与 `ScreenCaptureFrame.fingerprint` 明确化由 Task 4 review fix 处理：controller 提交 `7e9c068`。
+- Task 4 报告元数据更新：controller 提交 `0114afe`。
+- 最终 review metadata / `VERSION.md` Unreleased 顺序修复：controller 提交 `7390855`。
 
 ## Concerns
 
