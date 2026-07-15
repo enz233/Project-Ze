@@ -24,8 +24,41 @@ function testAsrConfigDefaults() {
   });
 }
 
+function testAsrEngineFactoryAndParser() {
+  const { createASREngine } = load('core/asr-engine.js');
+  const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+  const { normalizeTranscriptEvent } = load('core/asr-openai-compatible.js');
+
+  const engine = createASREngine(DEFAULT_ASR_CONFIG);
+  assert.strictEqual(engine.provider, 'openai-compatible');
+  assert.strictEqual(engine.supportsStreaming(DEFAULT_ASR_CONFIG), true);
+
+  assert.deepStrictEqual(
+    normalizeTranscriptEvent({ type: 'partial', text: '你好' }, 's1'),
+    { type: 'partial', text: '你好', sessionId: 's1' }
+  );
+
+  assert.deepStrictEqual(
+    normalizeTranscriptEvent({ type: 'final', text: '你好 Ze' }, 's1'),
+    { type: 'final', text: '你好 Ze', sessionId: 's1' }
+  );
+
+  assert.deepStrictEqual(
+    normalizeTranscriptEvent({ type: 'transcript.delta', delta: '正在说' }, 's1'),
+    { type: 'partial', text: '正在说', sessionId: 's1' }
+  );
+
+  assert.deepStrictEqual(
+    normalizeTranscriptEvent({ type: 'transcript.completed', transcript: '完成' }, 's1'),
+    { type: 'final', text: '完成', sessionId: 's1' }
+  );
+
+  assert.strictEqual(normalizeTranscriptEvent({ type: 'unknown' }, 's1'), null);
+}
+
 function run() {
   testAsrConfigDefaults();
+  testAsrEngineFactoryAndParser();
   console.log('voice-input-contract tests passed');
 }
 
