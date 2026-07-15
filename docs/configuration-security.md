@@ -68,6 +68,8 @@ asr.json
 
 ASR API Key 与语音缓存属于本地运行态数据，不应提交；音频缓存位于 Electron `userData/cache/voice-input/`，只保留短期 runtime 文件。
 
+ASR 供应商预设不会写入真实密钥。OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 的 ASR API Key 都只能保存在本地运行态 `asr.json`，不得提交到仓库；`src/config/asr.example.json` 必须保持 `apiKey` 为空。阿里百炼预设使用 DashScope compatible-mode Base URL，但模型名和 API Key 由用户在本地设置中填写。
+
 ## API key rotation
 
 如果真实 API Key 曾经出现在仓库、日志、聊天记录、截图或工具输出中，应视为已经暴露。

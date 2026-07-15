@@ -10,6 +10,7 @@
 - 文档补充语音输入交互、配置安全、IPC 和模块职责
 
 ## Unreleased
+- ASR 设置新增供应商预设：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible；阿里百炼当前作为 OpenAI-compatible 预设接入，不新增专用 ASR 引擎。
 - Renderer 动画守卫修复：为 blink、sleepy、lonely、bubble/subtitle timeout 链加入 handle 清理与 generation 检查，避免 stale callback 覆盖新状态或 guard flag 卡住
 
 ## v0.2.17 (2026-07-15)
