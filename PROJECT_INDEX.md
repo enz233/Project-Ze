@@ -15,6 +15,7 @@ src/
 │   ├── transition-engine.ts # 转移引擎（tick循环、触发条件）
 │   ├── time-awareness.ts   # 时间感知（时段判断、问候语）
 │   ├── bubble-manager.ts   # 气泡管理（问候、活动监视）
+│   ├── move-controller.ts  # 自动移动（anchor、clamp、X/Y 单轴分段、视觉事件）
 │   ├── ai-config.ts        # AI 配置（持久化到 userData/config/）
 │   ├── ai-service.ts       # AI 服务（fetch 调用 OpenAI 兼容 API）
 │   ├── ai-memory.ts        # AI 记忆（对话历史+摘要持久化）
@@ -35,15 +36,17 @@ src/
 │   ├── chat-history.json   # 对话历史（运行时生成，gitignore）
 │   └── ai-memory.json      # AI 记忆摘要（运行时生成，gitignore）
 └── assets/
-    └── sprites/basic/      # 差分图（按状态分文件夹）
-        ├── idle/           # idle.png, idle_blink_1/2.png
-        ├── curious/        # （复用 idle 精灵图）
-        ├── dragged/        # dragged.png, dragged_1/2.png, dragged_left/right/up/down.png
-        ├── sleepy/         # sleepy.png, sleepy_1/2/3.png, sleepy_blink.png
-        ├── sleeping/       # sleeping.png, sleep_1/2/3.png
-        ├── lonely/         # lonely.png, lonely_0~4.png, lonely_c_0~5.png
-        ├── comfortable/    # comfortable.png
-        └── tried/          # tried_0~4.png
+    └── sprites/
+        ├── basic/           # 状态差分图（按状态分文件夹）
+        │   ├── idle/        # idle.png, idle_blink_1/2.png
+        │   ├── curious/     # （复用 idle 精灵图）
+        │   ├── dragged/     # dragged.png, dragged_1/2.png, dragged_left/right/up/down.png
+        │   ├── sleepy/      # sleepy.png, sleepy_1/2/3.png, sleepy_blink.png
+        │   ├── sleeping/    # sleeping.png, sleep_1/2/3.png
+        │   ├── lonely/      # lonely.png, lonely_0~4.png, lonely_c_0~5.png
+        │   ├── comfortable/ # comfortable.png
+        │   └── tried/       # tried_0~4.png
+        └── move/            # 自动移动差分：move_1~5、up_1~2、down_0
 ```
 
 ## 8 个状态
@@ -61,10 +64,14 @@ src/
 
 ## 关键技术点
 
+### core 模块速查
+- **move-controller**：提供 `moveTo` / `teleportTo` / `cancel` / `isMoving`；负责坐标 anchor、屏幕 clamp、按 X/Y 单轴分段平滑移动、axisOrder 和 renderer 移动视觉事件。
+
 ### 渲染进程 renderer.ts
 - **IIFE 模式**：不是模块，用 `(function(){...})()` 包裹
 - **精灵图路径**：`setSprite(name)` 自动根据名字前缀匹配子目录
 - **updateVisual**：通过 `lastVisualState` 防重复，`isDragVisualActive` 防拖拽覆盖
+- **自动移动差分**：`move-visual` 播放 `src/assets/sprites/move/`，左右 `move_1~5` 300ms 循环，右移镜像，上移 `up_1/up_2` 往返，下移 `down_0` 摆动
 - **眨眼系统**：idle/curious/sleepy 各有不同频率，用 setTimeout 链
 - **拖拽**：左键触发，mousedown 立即显示 dragged，鼠标移动时更新方向差分
 - **右键对话**：contextmenu 事件打开输入框
@@ -97,6 +104,7 @@ src/
 | lonely-action | boolean | lonely 动画状态 |
 | state-finished | - | 动画状态结束 |
 | open-settings | - | 打开设置窗口 |
+| teleport-to | MoveToRequest | 调试/后续模块用：直接切换桌宠到目标坐标，仍执行 clamp，不播放 move 动画 |
 | renderer-log | level, message | 日志转发 |
 
 ### 主 → 渲染
