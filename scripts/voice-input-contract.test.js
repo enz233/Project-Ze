@@ -1,4 +1,6 @@
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 
 function load(modulePath) {
   return require(`../dist/${modulePath}`);
@@ -73,6 +75,93 @@ function testAsrProviderPresets() {
 
   const engine = createASREngine(applied);
   assert.strictEqual(engine.provider, 'openai-compatible');
+}
+
+function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
+  const {
+    DEFAULT_ASR_CONFIG,
+    ASR_PROVIDER_PRESETS,
+    applyASRProviderPreset,
+    normalizeASRConfigForLoad,
+  } = load('core/asr-config.js');
+
+  const customLegacy = normalizeASRConfigForLoad({
+    ...DEFAULT_ASR_CONFIG,
+    providerPreset: undefined,
+    baseUrl: 'https://example.test/v1',
+    model: 'custom-transcribe',
+  });
+  assert.strictEqual(customLegacy.providerPreset, 'custom-openai-compatible');
+  assert.strictEqual(customLegacy.baseUrl, 'https://example.test/v1');
+  assert.strictEqual(customLegacy.model, 'custom-transcribe');
+
+  const openAiLegacy = normalizeASRConfigForLoad({
+    ...DEFAULT_ASR_CONFIG,
+    providerPreset: undefined,
+  });
+  assert.strictEqual(openAiLegacy.providerPreset, 'openai');
+
+  const invalidApplied = applyASRProviderPreset(DEFAULT_ASR_CONFIG, 'missing-preset');
+  assert.strictEqual(invalidApplied.providerPreset, 'openai');
+  assert.strictEqual(invalidApplied.baseUrl, ASR_PROVIDER_PRESETS.openai.baseUrl);
+}
+
+function testAsrPresetKeyIsPersistedInsteadOfDefinitionId() {
+  const { DEFAULT_ASR_CONFIG, ASR_PROVIDER_PRESETS, applyASRProviderPreset } = load('core/asr-config.js');
+  const originalId = ASR_PROVIDER_PRESETS['aliyun-bailian'].id;
+  try {
+    ASR_PROVIDER_PRESETS['aliyun-bailian'].id = 'openai';
+    const applied = applyASRProviderPreset(DEFAULT_ASR_CONFIG, 'aliyun-bailian');
+    assert.strictEqual(applied.providerPreset, 'aliyun-bailian');
+  } finally {
+    ASR_PROVIDER_PRESETS['aliyun-bailian'].id = originalId;
+  }
+}
+
+function testSettingsAsrPresetContractMatchesCoreDefinitions() {
+  const { ASR_PROVIDER_PRESETS } = load('core/asr-config.js');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf-8');
+  for (const [id, preset] of Object.entries(ASR_PROVIDER_PRESETS)) {
+    assert.ok(html.includes(`<option value="${id}"`), `settings.html missing ASR preset option ${id}`);
+    for (const value of [preset.baseUrl, preset.model, preset.realtimePath, preset.transcriptionPath, preset.streamingMode, preset.language]) {
+      if (value) assert.ok(html.includes(value), `settings.html missing ASR preset value ${id}: ${value}`);
+    }
+  }
+  assert.match(html, /<select id="asrProvider"[^>]*disabled/);
+  assert.match(html, /asrProviderPreset'\)\.addEventListener\('change', function\(\) \{\s*applySelectedASRPreset\(\);/);
+}
+
+async function testChunkedFallbackFinalConcatenatesAllChunks() {
+  const { OpenAICompatibleASREngine } = load('core/asr-openai-compatible.js');
+  const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+  const originalFetch = globalThis.fetch;
+  const responses = ['第一段', '第二段'];
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ text: responses.shift() }),
+  });
+  try {
+    async function* chunks() {
+      yield { sessionId: 's1', sequence: 1, mimeType: 'audio/webm', base64: 'AAAA', capturedAt: Date.now() };
+      yield { sessionId: 's1', sequence: 2, mimeType: 'audio/webm', base64: 'BBBB', capturedAt: Date.now() };
+    }
+    const engine = new OpenAICompatibleASREngine();
+    const events = [];
+    for await (const event of engine.stream({
+      sessionId: 's1',
+      config: { ...DEFAULT_ASR_CONFIG, streamingMode: 'chunked-fallback', apiKey: 'test-key' },
+      chunks: chunks(),
+    })) {
+      events.push(event);
+    }
+    assert.deepStrictEqual(events, [
+      { type: 'partial', text: '第一段', sessionId: 's1' },
+      { type: 'partial', text: '第二段', sessionId: 's1' },
+      { type: 'final', text: '第一段第二段', sessionId: 's1' },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 }
 
 function testAsrEngineFactoryAndParser() {
@@ -220,9 +309,13 @@ function testVoiceIpcChannelNames() {
 async function run() {
   testAsrConfigDefaults();
   testAsrProviderPresets();
+  testAsrPresetBackwardCompatibilityAndInvalidFallback();
+  testAsrPresetKeyIsPersistedInsteadOfDefinitionId();
+  testSettingsAsrPresetContractMatchesCoreDefinitions();
   testAsrEngineFactoryAndParser();
   await testRealtimeTerminalEventHelper();
   await testRealtimeStreamWaitsForPostCommitFinal();
+  await testChunkedFallbackFinalConcatenatesAllChunks();
   testVoiceAudioCachePaths();
   testVoiceInputManagerExports();
   testVoiceIpcChannelNames();

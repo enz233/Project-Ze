@@ -79,11 +79,43 @@ export const ASR_PROVIDER_PRESETS: Record<ASRProviderPreset, ASRProviderPresetDe
   },
 };
 
-export function applyASRProviderPreset(config: ASRConfig, preset: ASRProviderPreset): ASRConfig {
+const DEFAULT_ASR_PROVIDER_PRESET: ASRProviderPreset = 'openai';
+
+function isASRProviderPreset(value: unknown): value is ASRProviderPreset {
+  return typeof value === 'string' && value in ASR_PROVIDER_PRESETS;
+}
+
+function matchesPresetManagedFields(config: ASRConfig, preset: ASRProviderPreset): boolean {
   const definition = ASR_PROVIDER_PRESETS[preset];
+  return config.provider === definition.provider
+    && config.baseUrl === definition.baseUrl
+    && config.model === definition.model
+    && config.realtimePath === definition.realtimePath
+    && config.transcriptionPath === definition.transcriptionPath
+    && config.streamingMode === definition.streamingMode
+    && config.language === definition.language;
+}
+
+export function inferASRProviderPreset(config: ASRConfig): ASRProviderPreset {
+  if (matchesPresetManagedFields(config, 'openai')) return 'openai';
+  if (matchesPresetManagedFields(config, 'aliyun-bailian')) return 'aliyun-bailian';
+  return 'custom-openai-compatible';
+}
+
+export function normalizeASRConfigForLoad(config: Partial<ASRConfig>): ASRConfig {
+  const normalized: ASRConfig = { ...DEFAULT_ASR_CONFIG, ...config };
+  normalized.providerPreset = isASRProviderPreset(config.providerPreset)
+    ? config.providerPreset
+    : inferASRProviderPreset(normalized);
+  return normalized;
+}
+
+export function applyASRProviderPreset(config: ASRConfig, preset: ASRProviderPreset): ASRConfig {
+  const presetKey = isASRProviderPreset(preset) ? preset : DEFAULT_ASR_PROVIDER_PRESET;
+  const definition = ASR_PROVIDER_PRESETS[presetKey];
   return {
     ...config,
-    providerPreset: definition.id,
+    providerPreset: presetKey,
     provider: definition.provider,
     baseUrl: definition.baseUrl,
     model: definition.model,
@@ -91,25 +123,22 @@ export function applyASRProviderPreset(config: ASRConfig, preset: ASRProviderPre
     transcriptionPath: definition.transcriptionPath,
     streamingMode: definition.streamingMode,
     language: definition.language,
-    apiKey: config.apiKey,
-    enabled: config.enabled,
-    autoSendFinalTranscript: config.autoSendFinalTranscript,
-    holdToTalkShortcut: config.holdToTalkShortcut,
-    cache: config.cache,
   };
 }
 
+const OPENAI_ASR_PRESET = ASR_PROVIDER_PRESETS.openai;
+
 export const DEFAULT_ASR_CONFIG: ASRConfig = {
   enabled: false,
-  providerPreset: 'openai',
-  provider: 'openai-compatible',
-  baseUrl: 'https://api.openai.com/v1',
+  providerPreset: DEFAULT_ASR_PROVIDER_PRESET,
+  provider: OPENAI_ASR_PRESET.provider,
+  baseUrl: OPENAI_ASR_PRESET.baseUrl,
   apiKey: '',
-  model: 'gpt-4o-mini-transcribe',
-  realtimePath: '/realtime',
-  transcriptionPath: '/audio/transcriptions',
-  streamingMode: 'realtime',
-  language: 'zh',
+  model: OPENAI_ASR_PRESET.model,
+  realtimePath: OPENAI_ASR_PRESET.realtimePath,
+  transcriptionPath: OPENAI_ASR_PRESET.transcriptionPath,
+  streamingMode: OPENAI_ASR_PRESET.streamingMode,
+  language: OPENAI_ASR_PRESET.language,
   autoSendFinalTranscript: false,
   holdToTalkShortcut: 'Ctrl+Shift+Space',
   cache: {
@@ -127,6 +156,7 @@ export class ASRConfigManager {
       fileName: 'asr.json',
       defaults: DEFAULT_ASR_CONFIG,
       namespace: 'ASRConfig',
+      normalize: normalizeASRConfigForLoad,
     });
   }
 

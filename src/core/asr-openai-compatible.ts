@@ -73,13 +73,16 @@ function createRealtimeUrl(config: ASRConfig): string {
 }
 
 async function* chunkedFallback(input: ASRStreamInput): AsyncIterable<ASRTranscriptEvent> {
+  const finalTextParts: string[] = [];
+
   for await (const chunk of input.chunks) {
     const text = await transcribeChunk(input.config, chunk);
     if (text.trim()) {
+      finalTextParts.push(text);
       yield { type: 'partial', text, sessionId: input.sessionId };
     }
   }
-  yield { type: 'final', text: '', sessionId: input.sessionId };
+  yield { type: 'final', text: finalTextParts.join(''), sessionId: input.sessionId };
 }
 
 async function transcribeChunk(config: ASRConfig, chunk: VoiceAudioChunk): Promise<string> {

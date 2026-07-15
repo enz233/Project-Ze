@@ -6,17 +6,20 @@ export interface JsonConfigStoreOptions<T extends object> {
   fileName: string;
   defaults: T;
   namespace: string;
+  normalize?: (value: Partial<T>) => T;
 }
 
 export class JsonConfigStore<T extends object> {
   private configPath: string;
   private defaults: T;
   private namespace: string;
+  private normalize: (value: Partial<T>) => T;
   private value: T;
 
   constructor(options: JsonConfigStoreOptions<T>) {
     this.defaults = options.defaults;
     this.namespace = options.namespace;
+    this.normalize = options.normalize ?? ((value: Partial<T>) => ({ ...this.defaults, ...value }));
 
     const configDir = path.join(app.getPath('userData'), 'config');
     if (!fs.existsSync(configDir)) {
@@ -48,11 +51,11 @@ export class JsonConfigStore<T extends object> {
     try {
       if (fs.existsSync(this.configPath)) {
         const raw = fs.readFileSync(this.configPath, 'utf-8');
-        return { ...this.defaults, ...JSON.parse(raw) };
+        return this.normalize(JSON.parse(raw));
       }
     } catch (e) {
       console.error(`[${this.namespace}] 加载失败:`, e);
     }
-    return { ...this.defaults };
+    return this.normalize({});
   }
 }
