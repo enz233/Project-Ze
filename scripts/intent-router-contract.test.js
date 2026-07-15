@@ -199,6 +199,71 @@ async function testRouterNegativeDebugLimitDoesNotHangAndKeepsNoRecentRecords() 
   assert.strictEqual(router.getDebugSnapshot().recent.length, 0);
 }
 
+async function testLlmFallbackCanClassifyAmbiguousPageRequest() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const classifier = new IntentClassifier({
+    enableLlmFallback: true,
+    llmFallback: async () => JSON.stringify({
+      intent: 'screen_summary',
+      confidence: 0.81,
+      reason: '用户用“这里”指代当前页面并要求解释',
+      explicitness: 'explicit',
+      requires: ['screen_capture', 'vision', 'llm'],
+    }),
+  });
+
+  const decision = await classifier.classify({
+    source: 'text_chat',
+    text: '这里帮我看一下',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(decision.intent, 'screen_summary');
+  assert.strictEqual(decision.usedLlmFallback, true);
+  assert.deepStrictEqual(decision.requiredCapabilities, ['screen_capture', 'vision', 'llm']);
+}
+
+async function testLlmFallbackMissingTargetDowngradesToUnknown() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const classifier = new IntentClassifier({
+    enableLlmFallback: true,
+    llmFallback: async () => ({
+      intent: 'screen_target_pointer',
+      confidence: 0.9,
+      reason: 'missing target should be unsafe',
+      explicitness: 'explicit',
+      requires: ['screen_capture', 'vision', 'move_pointer'],
+    }),
+  });
+
+  const decision = await classifier.classify({
+    source: 'text_chat',
+    text: '这个按钮帮我看看',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(decision.intent, 'unknown');
+  assert.deepStrictEqual(decision.requiredCapabilities, []);
+}
+
+async function testLlmFallbackInvalidJsonFallsBackToDraft() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const classifier = new IntentClassifier({
+    enableLlmFallback: true,
+    llmFallback: async () => '{not json',
+  });
+
+  const decision = await classifier.classify({
+    source: 'text_chat',
+    text: '这个设置帮我看一下',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(decision.intent, 'unknown');
+  assert.strictEqual(decision.usedLlmFallback, true);
+  assert.match(decision.reason, /LLM fallback failed/);
+}
+
 async function run() {
   await testRuleClassifierNormalChatDoesNotNeedSensitiveCapabilities();
   await testRuleClassifierScreenSummaryFromNaturalLanguage();
@@ -211,6 +276,9 @@ async function run() {
   await testRouterAddsCameraCapabilityBeforePermissionGate();
   await testRouterDebugSnapshotUsesIntentRequiredCapabilities();
   await testRouterNegativeDebugLimitDoesNotHangAndKeepsNoRecentRecords();
+  await testLlmFallbackCanClassifyAmbiguousPageRequest();
+  await testLlmFallbackMissingTargetDowngradesToUnknown();
+  await testLlmFallbackInvalidJsonFallsBackToDraft();
   console.log('intent-router contract tests passed');
 }
 

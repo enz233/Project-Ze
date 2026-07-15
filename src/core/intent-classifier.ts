@@ -140,6 +140,10 @@ export class IntentClassifier {
       return decision('unknown', 0.2, 'LLM fallback requested target pointer without target', 'ambiguous', [], true);
     }
 
+    if (confidence < this.lowConfidenceThreshold && intent !== 'normal_chat') {
+      return decision('unknown', confidence, 'LLM fallback confidence below safe threshold', 'ambiguous', [], true);
+    }
+
     return {
       intent,
       confidence,
