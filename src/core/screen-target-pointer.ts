@@ -6,6 +6,7 @@ import {
   SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
   compareScreenFingerprints,
   describeScreenFingerprintDiff,
+  shouldCancelForScreenFingerprintChange,
   summarizeScreenFingerprint,
 } from './screen-fingerprint';
 import { WindowActivityService } from './window-activity-service';
@@ -396,7 +397,7 @@ export class ScreenTargetPointer {
       return false;
     }
 
-    const changed = diff >= SCREEN_FINGERPRINT_CHANGE_THRESHOLD;
+    const changed = shouldCancelForScreenFingerprintChange(diffSummary);
     debugScreenTargetPointer('[ScreenTargetPointer][debug] fingerprint diff before move:', {
       sessionId,
       diff,

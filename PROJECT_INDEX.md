@@ -77,7 +77,7 @@ src/
 - `vision-image-analyzer.ts`：复用现有 Vision 配置，对设置页提供的低分辨率单帧做 presence / affect / reason 结构化解析，并限制身份、敏感属性和环境描述。
 - `camera-awareness-manager.ts`：摄像头感知状态机，提供 `detectOnce`、`processBackgroundFrame`、`getSnapshot`；仅在稳定 `absent -> present` 时尝试通过 `BubbleOrchestrator` 发出低优先级回来回应。
 - `screen-capture-frame.ts`（Unreleased）：纯 TypeScript 截图帧尺寸工具，默认以 1280 宽按当前显示器比例推导缩略图高度；例如 1707x1067 会使用约 1280x800，确保 Vision point 坐标与 `mapPointToScreen()` 的 X/Y 比例来自同一画面比例。
-- `screen-fingerprint.ts`（Unreleased）：纯 TypeScript 低分辨率截图 fingerprint 工具，提供 16x9 亮度摘要、`0.20` 阈值和 diff/summary helper。
+- `screen-fingerprint.ts`（Unreleased）：纯 TypeScript 低分辨率截图 fingerprint 工具，提供 16x9 亮度摘要、平均 diff `0.15` 阈值、`p95 >= 0.12 && cellsAbove010 >= 10` 局部变化规则，以及 diff/summary helper。
 - `screen-pointer-debug.ts`（Unreleased）：纯 TypeScript point 截图诊断 helper，负责 debug 开关判断、文件名安全化和截图文件名生成；实际 PNG 仅在 `PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时由 `ScreenAnalyzer` 写入 Electron `userData/screen-pointer-debug/`，截图可能包含隐私内容，用完需手动清理。
 - `screen-vision-request.ts`（Unreleased）：纯 TypeScript Vision 请求用途 helper；普通屏幕分析保持 `detail: low`，point 目标定位使用 `detail: high`，避免定位按钮/文字入口时因低细节图像看不清。
 

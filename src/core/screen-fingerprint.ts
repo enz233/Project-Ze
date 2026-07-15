@@ -27,7 +27,9 @@ export interface ScreenFingerprintDiffSummary {
 export const SCREEN_FINGERPRINT_WIDTH = 16;
 export const SCREEN_FINGERPRINT_HEIGHT = 9;
 export const SCREEN_FINGERPRINT_CHANNELS = 4;
-export const SCREEN_FINGERPRINT_CHANGE_THRESHOLD = 0.20;
+export const SCREEN_FINGERPRINT_CHANGE_THRESHOLD = 0.15;
+export const SCREEN_FINGERPRINT_LOCAL_P95_THRESHOLD = 0.12;
+export const SCREEN_FINGERPRINT_LOCAL_CELLS_ABOVE_010_THRESHOLD = 10;
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -137,6 +139,15 @@ export function describeScreenFingerprintDiff(
     cellsAbove010,
     cellsAbove020,
   };
+}
+
+export function shouldCancelForScreenFingerprintChange(summary?: ScreenFingerprintDiffSummary | null): boolean {
+  if (!summary) return false;
+  return summary.average >= SCREEN_FINGERPRINT_CHANGE_THRESHOLD
+    || (
+      summary.p95 >= SCREEN_FINGERPRINT_LOCAL_P95_THRESHOLD
+      && summary.cellsAbove010 >= SCREEN_FINGERPRINT_LOCAL_CELLS_ABOVE_010_THRESHOLD
+    );
 }
 
 export function compareScreenFingerprints(
