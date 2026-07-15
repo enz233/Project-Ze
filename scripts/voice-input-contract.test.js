@@ -56,9 +56,18 @@ function testAsrEngineFactoryAndParser() {
   assert.strictEqual(normalizeTranscriptEvent({ type: 'unknown' }, 's1'), null);
 }
 
+function testVoiceAudioCachePaths() {
+  const { createVoiceAudioRefPath } = load('core/voice-audio-cache.js');
+  assert.strictEqual(
+    createVoiceAudioRefPath('abc123', 7),
+    'voice-input/abc123/chunk-000007.webm'
+  );
+}
+
 function run() {
   testAsrConfigDefaults();
   testAsrEngineFactoryAndParser();
+  testVoiceAudioCachePaths();
   console.log('voice-input-contract tests passed');
 }
 
