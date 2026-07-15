@@ -11,3 +11,4 @@ Task 2: complete (commits 6bb9046..4e623e0, review clean; minor report metadata 
 Task 3: complete (commits 4e623e0..67f6761, review clean after race fix)
 Task 4: complete (commits 67f6761..0114afe, review clean after docs fix)
 Task 1: complete (commits 995ac64..aebf9ec, review clean; minor notes recorded)
+Task 2: complete (commits 56922b4..6ba7fb6, review clean after fix)
