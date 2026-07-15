@@ -10,6 +10,7 @@
 - 文档补充语音输入交互、配置安全、IPC 和模块职责
 
 ## Unreleased
+- Move 测试反馈微调：修正自动移动左右镜像方向，降低默认移动速度让行走更自然
 - 设置页新增临时 Move 测试入口，可输入坐标调用 `moveTo` / `teleportTo` 验证自动移动和直接切换
 - 屏幕目标指示系统：规划并实现 `.` 显式屏幕分析中的目标定位与指向流程，普通聊天自然语言自动触发暂缓
 - Renderer 动画守卫修复：为 blink、sleepy、lonely、bubble/subtitle timeout 链加入 handle 清理与 generation 检查，避免 stale callback 覆盖新状态或 guard flag 卡住

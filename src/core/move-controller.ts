@@ -48,7 +48,7 @@ interface MoveSegment {
   direction: MoveDirection;
 }
 
-const DEFAULT_SPEED_PX_PER_SEC = 500;
+const DEFAULT_SPEED_PX_PER_SEC = 320;
 const MIN_AUTO_DURATION_MS = 180;
 const MAX_AUTO_DURATION_MS = 3000;
 const MIN_EXPLICIT_DURATION_MS = 120;

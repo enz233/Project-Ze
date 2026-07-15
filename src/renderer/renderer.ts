@@ -764,7 +764,7 @@
       return;
     }
 
-    if (direction === 'right') {
+    if (direction === 'left') {
       spriteEl.classList.add('companion-move-flip');
     }
 
