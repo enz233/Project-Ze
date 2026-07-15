@@ -69,18 +69,18 @@ export class ScreenAnalyzer {
       if (sources.length === 0) return null;
 
       const matchedSource = sources.find((source) => String(source.display_id) === String(primaryDisplay.id));
-      const source = matchedSource ?? sources[0];
-      const matchedDisplay = matchedSource
-        ? displays.find((display) => String(display.id) === String(matchedSource.display_id)) ?? primaryDisplay
-        : primaryDisplay;
-      const resized = source.thumbnail.resize({ width: 1280, height: 720 });
+      if (!matchedSource) {
+        console.error('[ScreenAnalyzer] 未找到主屏幕截图源，跳过可能错配的坐标映射');
+        return null;
+      }
+
+      const matchedDisplay = displays.find((display) => String(display.id) === String(matchedSource.display_id)) ?? primaryDisplay;
+      const resized = matchedSource.thumbnail.resize({ width: 1280, height: 720 });
       const imageSize = resized.getSize();
       const base64 = resized.toPNG().toString('base64');
 
       return {
         imageDataUri: `data:image/png;base64,${base64}`,
-        // Fallback to sources[0] keeps the first implementation conservative: without a
-        // display_id match, coordinate mapping is only guaranteed for the primary screen.
         origin: { x: matchedDisplay.bounds.x, y: matchedDisplay.bounds.y },
         screenSize: { width: matchedDisplay.bounds.width, height: matchedDisplay.bounds.height },
         imageSize: { width: imageSize.width, height: imageSize.height },
