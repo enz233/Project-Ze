@@ -1,6 +1,13 @@
 import { ASRConfig } from './asr-config';
 import { ASREngine, ASRStreamInput, ASRTranscriptEvent, VoiceAudioChunk } from './asr-engine';
 
+const REALTIME_FINAL_EVENT_GRACE_MS = 750;
+const REALTIME_POLL_INTERVAL_MS = 20;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function normalizeTranscriptEvent(raw: unknown, sessionId: string): ASRTranscriptEvent | null {
   if (!raw || typeof raw !== 'object') return null;
   const data = raw as Record<string, unknown>;
@@ -26,10 +33,43 @@ export function normalizeTranscriptEvent(raw: unknown, sessionId: string): ASRTr
   return null;
 }
 
+export function isRealtimeTerminalEvent(event: ASRTranscriptEvent): boolean {
+  return event.type === 'final' || event.type === 'error';
+}
+
+async function* drainRealtimeEventsUntilTerminal(
+  pending: ASRTranscriptEvent[],
+  isClosed: () => boolean,
+  timeoutMs: number = REALTIME_FINAL_EVENT_GRACE_MS,
+): AsyncIterable<ASRTranscriptEvent> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline || pending.length > 0) {
+    while (pending.length > 0) {
+      const event = pending.shift()!;
+      yield event;
+      if (isRealtimeTerminalEvent(event)) return;
+    }
+
+    if (isClosed()) return;
+    await sleep(REALTIME_POLL_INTERVAL_MS);
+  }
+}
+
 function joinUrl(baseUrl: string, path: string): string {
   const base = baseUrl.replace(/\/$/, '');
   const suffix = path.startsWith('/') ? path : `/${path}`;
   return `${base}${suffix}`;
+}
+
+function createRealtimeAuthProtocol(apiKey: string): string {
+  return `openai-insecure-api-key.${apiKey}`;
+}
+
+function createRealtimeUrl(config: ASRConfig): string {
+  const url = new URL(joinUrl(config.baseUrl.replace(/^http/, 'ws'), config.realtimePath));
+  url.searchParams.set('model', config.model);
+  return url.toString();
 }
 
 async function* chunkedFallback(input: ASRStreamInput): AsyncIterable<ASRTranscriptEvent> {
@@ -89,13 +129,18 @@ export class OpenAICompatibleASREngine implements ASREngine {
       return;
     }
 
-    const url = joinUrl(input.config.baseUrl.replace(/^http/, 'ws'), input.config.realtimePath);
-    const socket = new websocketCtor(`${url}?model=${encodeURIComponent(input.config.model)}`);
+    const socket = new websocketCtor(
+      createRealtimeUrl(input.config),
+      ['realtime', createRealtimeAuthProtocol(input.config.apiKey)]
+    );
     const pending: ASRTranscriptEvent[] = [];
     let opened = false;
     let closed = false;
 
-    socket.addEventListener('open', () => { opened = true; });
+    socket.addEventListener('open', () => {
+      opened = true;
+      socket.send(JSON.stringify({ type: 'session.auth', api_key: input.config.apiKey }));
+    });
     socket.addEventListener('message', (event) => {
       try {
         const normalized = normalizeTranscriptEvent(JSON.parse(String(event.data)), input.sessionId);
@@ -111,7 +156,7 @@ export class OpenAICompatibleASREngine implements ASREngine {
     });
 
     while (!opened && !closed) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await sleep(REALTIME_POLL_INTERVAL_MS);
     }
 
     if (!opened) {
@@ -129,7 +174,8 @@ export class OpenAICompatibleASREngine implements ASREngine {
 
     if (!closed) {
       socket.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-      socket.close();
+      yield* drainRealtimeEventsUntilTerminal(pending, () => closed || Boolean(input.signal?.aborted));
+      if (!closed) socket.close();
     }
 
     while (pending.length > 0) {

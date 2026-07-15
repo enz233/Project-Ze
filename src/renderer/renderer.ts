@@ -92,8 +92,46 @@
   var voiceChunkSequence = 0;
   var voiceRecording = false;
   var voiceAutoSend = false;
+  var voiceHoldToTalkShortcut = 'Ctrl+Shift+Space';
   var voicePartialBase = '';
   var voicePendingChunkUploads: Promise<void>[] = [];
+
+  function normalizeShortcut(shortcut: string): string {
+    return (shortcut || 'Ctrl+Shift+Space').toLowerCase().replace(/\s+/g, '');
+  }
+
+  function getShortcutParts(shortcut: string): string[] {
+    return normalizeShortcut(shortcut).split('+').filter(Boolean);
+  }
+
+  function shortcutKeyMatches(e: KeyboardEvent, keyPart: string): boolean {
+    var code = e.code.toLowerCase();
+    var key = e.key.toLowerCase();
+    return keyPart === 'space'
+      ? code === 'space' || key === ' '
+      : code === ('key' + keyPart).toLowerCase() || code === keyPart || key === keyPart;
+  }
+
+  function eventMatchesShortcut(e: KeyboardEvent, shortcut: string): boolean {
+    var parts = getShortcutParts(shortcut);
+    var keyPart = parts.length ? parts[parts.length - 1] : 'space';
+    var wantsCtrl = parts.indexOf('ctrl') >= 0 || parts.indexOf('control') >= 0;
+    var wantsShift = parts.indexOf('shift') >= 0;
+    var wantsAlt = parts.indexOf('alt') >= 0;
+    var wantsMeta = parts.indexOf('meta') >= 0 || parts.indexOf('cmd') >= 0 || parts.indexOf('command') >= 0;
+    return shortcutKeyMatches(e, keyPart) && e.ctrlKey === wantsCtrl && e.shiftKey === wantsShift && e.altKey === wantsAlt && e.metaKey === wantsMeta;
+  }
+
+  function eventReleasesShortcut(e: KeyboardEvent, shortcut: string): boolean {
+    var parts = getShortcutParts(shortcut);
+    var keyPart = parts.length ? parts[parts.length - 1] : 'space';
+    var key = e.key.toLowerCase();
+    return shortcutKeyMatches(e, keyPart)
+      || (parts.indexOf('ctrl') >= 0 || parts.indexOf('control') >= 0) && key === 'control'
+      || parts.indexOf('shift') >= 0 && key === 'shift'
+      || parts.indexOf('alt') >= 0 && key === 'alt'
+      || (parts.indexOf('meta') >= 0 || parts.indexOf('cmd') >= 0 || parts.indexOf('command') >= 0) && key === 'meta';
+  }
 
   function init(): void {
     // @ts-ignore
@@ -257,6 +295,20 @@
   function setupChatInput(): void {
     if (!chatInputEl || !chatInputWrapEl || !voiceInputBtnEl) return;
 
+    // @ts-ignore
+    window.companion.loadASRConfig().then(function (config: any) {
+      voiceHoldToTalkShortcut = config && config.holdToTalkShortcut ? config.holdToTalkShortcut : 'Ctrl+Shift+Space';
+    }).catch(function () {
+      voiceHoldToTalkShortcut = 'Ctrl+Shift+Space';
+    });
+    // @ts-ignore
+    if (window.companion.onASRConfigUpdated) {
+      // @ts-ignore
+      window.companion.onASRConfigUpdated(function (config: any) {
+        voiceHoldToTalkShortcut = config && config.holdToTalkShortcut ? config.holdToTalkShortcut : 'Ctrl+Shift+Space';
+      });
+    }
+
     // 右键伙伴打开输入框
     companionEl.addEventListener('contextmenu', function (e) {
       e.preventDefault();
@@ -269,14 +321,14 @@
     });
 
     document.addEventListener('keydown', function (e: KeyboardEvent) {
-      if (!chatInputWrapEl.classList.contains('hidden') && e.ctrlKey && e.shiftKey && e.code === 'Space' && !voiceRecording) {
+      if (!chatInputWrapEl.classList.contains('hidden') && eventMatchesShortcut(e, voiceHoldToTalkShortcut) && !voiceRecording) {
         e.preventDefault();
         startVoiceInput('shortcut');
       }
     });
 
     document.addEventListener('keyup', function (e: KeyboardEvent) {
-      if (e.code === 'Space' && voiceRecording) {
+      if (eventReleasesShortcut(e, voiceHoldToTalkShortcut) && voiceRecording) {
         e.preventDefault();
         stopVoiceInput();
       }
@@ -360,7 +412,12 @@
     try {
       // @ts-ignore
       var config = await window.companion.loadASRConfig();
+      if (!config || !config.enabled) {
+        updateChatStatus({ phase: 'voice-error', message: '语音输入未启用' });
+        return;
+      }
       voiceAutoSend = !!config.autoSendFinalTranscript;
+      voiceHoldToTalkShortcut = config.holdToTalkShortcut || 'Ctrl+Shift+Space';
       var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
       // @ts-ignore

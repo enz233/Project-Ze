@@ -32,5 +32,5 @@ export function createASREngine(config: ASRConfig): ASREngine {
   if (config.provider === 'openai-compatible') {
     return new OpenAICompatibleASREngine();
   }
-  return new OpenAICompatibleASREngine();
+  throw new Error(`Unsupported ASR provider: ${config.provider}`);
 }

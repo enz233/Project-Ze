@@ -32,6 +32,10 @@ function testAsrEngineFactoryAndParser() {
   const engine = createASREngine(DEFAULT_ASR_CONFIG);
   assert.strictEqual(engine.provider, 'openai-compatible');
   assert.strictEqual(engine.supportsStreaming(DEFAULT_ASR_CONFIG), true);
+  assert.throws(
+    () => createASREngine({ ...DEFAULT_ASR_CONFIG, provider: 'custom' }),
+    /Unsupported ASR provider/
+  );
 
   assert.deepStrictEqual(
     normalizeTranscriptEvent({ type: 'partial', text: '你好' }, 's1'),
@@ -54,6 +58,84 @@ function testAsrEngineFactoryAndParser() {
   );
 
   assert.strictEqual(normalizeTranscriptEvent({ type: 'unknown' }, 's1'), null);
+}
+
+async function testRealtimeTerminalEventHelper() {
+  const { isRealtimeTerminalEvent } = load('core/asr-openai-compatible.js');
+
+  assert.strictEqual(isRealtimeTerminalEvent({ type: 'partial', text: '还在听', sessionId: 's1' }), false);
+  assert.strictEqual(isRealtimeTerminalEvent({ type: 'final', text: '完成', sessionId: 's1' }), true);
+  assert.strictEqual(
+    isRealtimeTerminalEvent({ type: 'error', message: 'provider failed', sessionId: 's1', recoverable: false }),
+    true
+  );
+}
+
+async function testRealtimeStreamWaitsForPostCommitFinal() {
+  const { OpenAICompatibleASREngine } = load('core/asr-openai-compatible.js');
+  const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+  const originalWebSocket = globalThis.WebSocket;
+  const sockets = [];
+
+  class FakeWebSocket {
+    constructor(url, protocols) {
+      this.url = url;
+      this.protocols = protocols;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.sent = [];
+      this.closed = false;
+      sockets.push(this);
+      setTimeout(() => this.emit('open', {}), 0);
+    }
+
+    addEventListener(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      this.sent.push(JSON.parse(payload));
+      if (this.sent.at(-1).type === 'input_audio_buffer.commit') {
+        setTimeout(() => {
+          this.emit('message', { data: JSON.stringify({ type: 'transcript.completed', transcript: '最终文本' }) });
+        }, 25);
+      }
+    }
+
+    close() {
+      this.closed = true;
+      this.emit('close', {});
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  globalThis.WebSocket = FakeWebSocket;
+  try {
+    async function* chunks() {
+      yield { sessionId: 's1', sequence: 1, mimeType: 'audio/webm', base64: 'AAAA', capturedAt: Date.now() };
+    }
+
+    const engine = new OpenAICompatibleASREngine();
+    const events = [];
+    for await (const event of engine.stream({
+      sessionId: 's1',
+      config: { ...DEFAULT_ASR_CONFIG, apiKey: 'test-key', baseUrl: 'https://example.test/v1' },
+      chunks: chunks(),
+    })) {
+      events.push(event);
+    }
+
+    assert.deepStrictEqual(events, [{ type: 'final', text: '最终文本', sessionId: 's1' }]);
+    assert.strictEqual(sockets.length, 1);
+    assert.strictEqual(sockets[0].protocols[1], 'openai-insecure-api-key.test-key');
+    assert.deepStrictEqual(sockets[0].sent[0], { type: 'session.auth', api_key: 'test-key' });
+    assert.strictEqual(sockets[0].sent.at(-1).type, 'input_audio_buffer.commit');
+    assert.strictEqual(sockets[0].closed, true);
+  } finally {
+    globalThis.WebSocket = originalWebSocket;
+  }
 }
 
 function testVoiceAudioCachePaths() {
@@ -84,13 +166,18 @@ function testVoiceIpcChannelNames() {
   assert.strictEqual(channels.includes('voice-input-transcript'), true);
 }
 
-function run() {
+async function run() {
   testAsrConfigDefaults();
   testAsrEngineFactoryAndParser();
+  await testRealtimeTerminalEventHelper();
+  await testRealtimeStreamWaitsForPostCommitFinal();
   testVoiceAudioCachePaths();
   testVoiceInputManagerExports();
   testVoiceIpcChannelNames();
   console.log('voice-input-contract tests passed');
 }
 
-run();
+run().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

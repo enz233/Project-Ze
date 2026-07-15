@@ -480,8 +480,6 @@
         <label>供应商</label>
         <select id="asrProvider">
           <option value="openai-compatible">OpenAI-compatible</option>
-          <option value="aliyun">阿里云（预留）</option>
-          <option value="custom">Custom</option>
         </select>
       </div>
 
@@ -958,6 +956,18 @@
 
     document.getElementById('saveASRBtn').addEventListener('click', () => {
       const config = collectASRConfig();
+      if (config.provider !== 'openai-compatible') {
+        showToast('语音输入当前仅支持 OpenAI-compatible 供应商', 'error');
+        return;
+      }
+      if (!Number.isFinite(config.cache.retentionMinutes) || config.cache.retentionMinutes <= 0) {
+        showToast('缓存保留分钟必须是大于 0 的数字', 'error');
+        return;
+      }
+      if (!Number.isFinite(config.cache.maxSessionBytes) || config.cache.maxSessionBytes <= 0) {
+        showToast('单次录音最大字节必须是大于 0 的数字', 'error');
+        return;
+      }
       if (config.enabled && (!config.baseUrl || !config.model || !config.apiKey)) {
         showToast('启用语音输入时需要 Base URL、模型和 API Key', 'error');
         return;

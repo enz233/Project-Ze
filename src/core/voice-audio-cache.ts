@@ -32,6 +32,10 @@ export class VoiceAudioCache {
     fs.mkdirSync(this.rootDir, { recursive: true });
   }
 
+  updateConfig(config: ASRCacheConfig): void {
+    this.config = config;
+  }
+
   async createSession(sessionId: string): Promise<VoiceAudioCacheEntry> {
     const dir = path.join(this.rootDir, sessionId);
     fs.mkdirSync(dir, { recursive: true });

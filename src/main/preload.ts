@@ -103,6 +103,9 @@ contextBridge.exposeInMainWorld('companion', {
   saveASRConfig: (config: any) => {
     ipcRenderer.send('save-asr-config', config);
   },
+  onASRConfigUpdated: (callback: (config: any) => void) => {
+    ipcRenderer.on('asr-config-updated', (_event, config) => callback(config));
+  },
   voiceInput: {
     start: (options: any): Promise<any> => ipcRenderer.invoke('voice-input-start', options),
     appendAudioChunk: (payload: any): Promise<void> => ipcRenderer.invoke('voice-input-audio-chunk', payload),
