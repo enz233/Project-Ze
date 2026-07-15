@@ -1,6 +1,6 @@
 # Project-Ze / Quiet Companion 项目索引
 
-> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.3.0
+> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.3.1 + Unreleased 文档同步
 
 ## 项目概述
 
@@ -20,6 +20,9 @@ src/
 │   ├── ai-memory.ts        # AI 记忆（对话历史+摘要+轻量生活习惯）
 │   ├── chat-manager.ts     # 对话管理（消息构建、流式调用）
 │   ├── proactive-reaction-system.ts # 情境化主动回应候选判断
+│   ├── screen-fingerprint.ts # 屏幕变化轻量 fingerprint 工具（Unreleased）
+│   ├── camera-awareness-*.ts # 摄像头感知 core/config/manager/types
+│   ├── vision-image-analyzer.ts # 摄像头单帧 Vision 结构化解析
 │   ├── logger.ts           # 日志系统（写入 userData/logs/）
 │   └── types.ts            # 类型定义（StateId 等）
 ├── main/               # Electron 主进程
@@ -69,6 +72,11 @@ src/
 - `asr-engine.ts` / `asr-openai-compatible.ts`：ASR 引擎接口与 OpenAI-compatible provider，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设当前都复用该引擎。
 - `voice-input-manager.ts`：语音输入 session 编排，连接音频 chunk、ASR engine、音频缓存和 transcript/status IPC。
 - `voice-audio-cache.ts`：短期语音缓存边界，保存 runtime-only 音频 chunk 并返回 `audioRef`。
+- `camera-awareness-types.ts`：摄像头感知配置、帧输入、检测结果、状态快照与 IPC 常量类型；不代表独立事件总线。
+- `camera-awareness-config.ts`：摄像头感知运行态默认配置与 Electron `userData/config/camera-awareness.json` 持久化。
+- `vision-image-analyzer.ts`：复用现有 Vision 配置，对设置页提供的低分辨率单帧做 presence / affect / reason 结构化解析，并限制身份、敏感属性和环境描述。
+- `camera-awareness-manager.ts`：摄像头感知状态机，提供 `detectOnce`、`processBackgroundFrame`、`getSnapshot`；仅在稳定 `absent -> present` 时尝试通过 `BubbleOrchestrator` 发出低优先级回来回应。
+- `screen-fingerprint.ts`（Unreleased）：纯 TypeScript 低分辨率截图 fingerprint 工具，提供 16x9 亮度摘要、`0.20` 阈值和 diff/summary helper。
 
 ## 8 个状态
 
@@ -98,9 +106,9 @@ src/
 - **IPC 注册**：`setupIPC()` 在 `app.whenReady` 前调用一次
 - **拖拽**：主进程用 `screen.getCursorScreenPoint()` 轮询鼠标位置
 - **AI 模块**：AIConfigManager → AIService → ChatManager
-- **设置窗口**：单例模式，F11 打开；“其他”页包含临时 Move 测试（Debug）区块，可输入坐标调用 `moveTo` / `teleportTo` 验证移动效果
+- **设置窗口**：单例模式，F11 打开；“其他”页包含临时 Move 测试（Debug）区块，可输入坐标调用 `moveTo` / `teleportTo` 验证移动效果；“摄像头感知”页提供启用开关、立即检测一次、可选低频检测、debug preview 和本地实时预览，帧采集由设置页 renderer 在用户授权后完成。
 - **调试窗口**：F3 打开，显示日志、关系数值、互动统计、常用应用和生活习惯提示词
-- **主动回应**：当前主动回应主路径：`ObserverManager → ContextCollector → ProactiveReactionSystem → MicroBehaviorManager → BubbleOrchestrator → BubbleManager.tryShowProactiveBubble`。基于轻量上下文快照、应用切换、工作/休息转换、长专注和直接互动生成轻柔回应；规则来自 `src/config/proactive-reactions.json` 与 `src/config/micro-behaviors.json`，Debug 面板显示最近决策/拦截原因/预算状态。`BubbleOrchestrator` 只负责主进程气泡请求的轻量编排；`BubbleManager` 继续负责状态门禁、冷却和 `show-bubble` IPC 投递。
+- **主动回应**：当前主动回应主路径：`ObserverManager → ContextCollector → ProactiveReactionSystem → MicroBehaviorManager → BubbleOrchestrator → BubbleManager.tryShowProactiveBubble`。基于轻量上下文快照、应用切换、工作/休息转换、长专注和直接互动生成轻柔回应；规则来自 `src/config/proactive-reactions.json` 与 `src/config/micro-behaviors.json`，Debug 面板显示最近决策/拦截原因/预算状态。`BubbleOrchestrator` 只负责主进程气泡请求的轻量编排；`BubbleManager` 继续负责状态门禁、冷却和 `show-bubble` IPC 投递。Camera Awareness 第一版仅在后台稳定 `absent -> present` 时尝试 `camera_awareness` 来源气泡，不是常驻视频分析或主动回应系统的一等输入。
 
 ### AI 系统
 - **配置**：`ai-config.json` 持久化到 `app.getPath('userData')/config/`
@@ -147,6 +155,20 @@ src/
 | voice-input-transcript | partial/final/error event | 语音识别结果 |
 | point-visual | {active, pose?, reason?} | 屏幕目标指示期间的八方向 point-* 指向差分，pose 可为 point-right / point-right_down / point-down / point-left_down / point-left / point-left_up / point-up / point-right_up，资源缺失时 renderer 回退到 dragged 方向差分 |
 
+### Camera Awareness 设置页 API
+
+`window.companion.cameraAwareness` 由 preload 暴露给设置页，当前包含：
+
+| 方法 | 说明 |
+|------|------|
+| getConfig | 读取摄像头感知运行态配置 |
+| updateConfig | 保存启用、后台低频检测、离开判定、回来回应、debug preview 等配置 |
+| detectOnce | 对设置页提供的单帧做一次检测，不触发气泡 |
+| processBackgroundFrame | 处理设置页低频 timer 提供的后台帧，进入状态机并可能触发回来回应 |
+| getSnapshot | 读取最近检测、稳定状态和状态机快照 |
+
+摄像头感知默认关闭；第一版不保存图片/视频，不做身份识别、年龄/性别/种族等敏感属性判断，不做精细情绪或诊断。当前低频检测由设置页 renderer timer 驱动，不是系统级常驻后台视频服务。
+
 ### ASR provider presets
 
 语音输入设置页提供 OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 三个供应商预设。预设只负责填充 Base URL、路径、模型和流式模式等配置；运行时仍按 `provider` 字段选择实际引擎。本轮阿里百炼预设的 `provider` 仍为 `openai-compatible`，不包含专用百炼 ASR 协议实现。
@@ -180,6 +202,8 @@ src/
 
 | 版本 | 日期 | 主要内容 |
 |------|------|---------|
+| Unreleased | - | 八方向 point visual、screen fingerprint 稳定性与诊断、Move 专用差分/单轴分段/teleportTo、ASR provider presets、renderer 动画守卫修复 |
+| v0.3.1 | 2026-07-15 | Camera Awareness 第一版、设置页摄像头入口与实时预览、cameraAwareness IPC、Move clamp/测试入口、ScreenTargetPointer 初版 |
 | v0.3.0 | 2026-07-15 | 语音输入 ASR：麦克风按钮、长按快捷键、流式识别、ASR 配置、音频缓存接口 |
 | v0.1.0 | 2026-05-23 | 初始版本，7 状态系统 |
 | v0.1.1 | 2026-05-24 | curious 眨眼，修复重复触发 |
