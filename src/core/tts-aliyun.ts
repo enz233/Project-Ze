@@ -27,6 +27,25 @@ export class TTSAliyun implements TTSEngine {
     return `${baseURL}/${endpointPath}`;
   }
 
+  private formatError(status: number, body: string): string {
+    const trimmed = body.trim();
+    if (!trimmed) {
+      return `阿里云 TTS 请求失败 (${status})`;
+    }
+
+    try {
+      const data = JSON.parse(trimmed) as { code?: string; message?: string; request_id?: string };
+      const detail = [data.code, data.message].filter(Boolean).join(' - ');
+      if (detail) {
+        return `阿里云 TTS 请求失败 (${status}): ${detail}`;
+      }
+    } catch {
+      // 非 JSON 响应，使用原始文本。
+    }
+
+    return `阿里云 TTS 请求失败 (${status}): ${trimmed}`;
+  }
+
   /** 合成语音，返回音频 base64 */
   async synthesize(text: string): Promise<TTSAudioResult> {
     const url = this.buildUrl();
@@ -62,7 +81,7 @@ export class TTSAliyun implements TTSEngine {
     if (!response.ok) {
       const error = await response.text();
       console.error('[Aliyun TTS] 错误响应:', error);
-      throw new Error(`阿里云 TTS 请求失败 (${response.status}): ${error}`);
+      throw new Error(this.formatError(response.status, error));
     }
 
     const data = await response.json() as any;
@@ -90,11 +109,7 @@ export class TTSAliyun implements TTSEngine {
 
   /** 测试连接 */
   async test(): Promise<boolean> {
-    try {
-      await this.synthesize('测试');
-      return true;
-    } catch {
-      return false;
-    }
+    await this.synthesize('测试');
+    return true;
   }
 }
