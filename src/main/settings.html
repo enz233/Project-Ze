@@ -143,6 +143,7 @@
     <button class="tab-btn" data-tab="chat">聊天模型</button>
     <button class="tab-btn" data-tab="vision">屏幕分析</button>
     <button class="tab-btn" data-tab="tts">语音</button>
+    <button class="tab-btn" data-tab="asr">语音输入</button>
     <button class="tab-btn" data-tab="other">其他</button>
   </div>
 
@@ -460,6 +461,92 @@
       </div>
     </div>
 
+    <div class="tab-content" id="tab-asr">
+      <h2>语音输入（ASR）</h2>
+      <hr class="divider">
+
+      <div class="field">
+        <label><input type="checkbox" id="asrEnabled"> 启用语音输入</label>
+        <div class="hint">右键输入框中显示麦克风按钮；快捷键默认为 Ctrl+Shift+Space 长按说话。</div>
+      </div>
+
+      <div class="field">
+        <label>长按说话快捷键</label>
+        <input type="text" id="asrHoldToTalkShortcut" placeholder="Ctrl+Shift+Space">
+        <div class="hint">按住快捷键开始录音，松开后结束识别。</div>
+      </div>
+
+      <div class="field">
+        <label>供应商</label>
+        <select id="asrProvider">
+          <option value="openai-compatible">OpenAI-compatible</option>
+          <option value="aliyun">阿里云（预留）</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Base URL</label>
+        <input type="text" id="asrBaseUrl" placeholder="https://api.openai.com/v1">
+      </div>
+
+      <div class="field password-wrap">
+        <label>API Key</label>
+        <input type="password" id="asrApiKey" placeholder="留空则不启用">
+      </div>
+
+      <div class="field">
+        <label>模型</label>
+        <input type="text" id="asrModel" placeholder="gpt-4o-mini-transcribe">
+      </div>
+
+      <div class="field">
+        <label>Realtime Path</label>
+        <input type="text" id="asrRealtimePath" placeholder="/realtime">
+      </div>
+
+      <div class="field">
+        <label>Transcription Path</label>
+        <input type="text" id="asrTranscriptionPath" placeholder="/audio/transcriptions">
+      </div>
+
+      <div class="field">
+        <label>流式模式</label>
+        <select id="asrStreamingMode">
+          <option value="realtime">Realtime</option>
+          <option value="chunked-fallback">Chunked fallback</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>语言</label>
+        <input type="text" id="asrLanguage" placeholder="zh">
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="asrAutoSend"> 识别完成后自动发送</label>
+        <div class="hint">默认关闭；关闭时需要按 Enter 发送。</div>
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="asrCacheEnabled"> 启用短期音频缓存</label>
+      </div>
+
+      <div class="field">
+        <label>缓存保留分钟</label>
+        <input type="text" id="asrCacheRetention" placeholder="30">
+      </div>
+
+      <div class="field">
+        <label>单次录音最大字节</label>
+        <input type="text" id="asrCacheMaxBytes" placeholder="10485760">
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="saveASRBtn">保存语音输入设置</button>
+      </div>
+    </div>
+
     <!-- 其他 -->
     <div class="tab-content" id="tab-other">
       <h2>对话记忆</h2>
@@ -581,6 +668,45 @@
       }
       document.getElementById('aliyunLanguage').value = config.aliyunLanguage || 'auto';
       toggleTtsSections();
+    }
+
+    async function loadASRConfig() {
+      const config = await window.companion.loadASRConfig();
+      document.getElementById('asrEnabled').checked = !!config.enabled;
+      document.getElementById('asrHoldToTalkShortcut').value = config.holdToTalkShortcut || 'Ctrl+Shift+Space';
+      document.getElementById('asrProvider').value = config.provider || 'openai-compatible';
+      document.getElementById('asrBaseUrl').value = config.baseUrl || 'https://api.openai.com/v1';
+      document.getElementById('asrApiKey').value = config.apiKey || '';
+      document.getElementById('asrModel').value = config.model || 'gpt-4o-mini-transcribe';
+      document.getElementById('asrRealtimePath').value = config.realtimePath || '/realtime';
+      document.getElementById('asrTranscriptionPath').value = config.transcriptionPath || '/audio/transcriptions';
+      document.getElementById('asrStreamingMode').value = config.streamingMode || 'realtime';
+      document.getElementById('asrLanguage').value = config.language || 'zh';
+      document.getElementById('asrAutoSend').checked = !!config.autoSendFinalTranscript;
+      document.getElementById('asrCacheEnabled').checked = config.cache?.enabled !== false;
+      document.getElementById('asrCacheRetention').value = String(config.cache?.retentionMinutes ?? 30);
+      document.getElementById('asrCacheMaxBytes').value = String(config.cache?.maxSessionBytes ?? 10485760);
+    }
+
+    function collectASRConfig() {
+      return {
+        enabled: document.getElementById('asrEnabled').checked,
+        holdToTalkShortcut: document.getElementById('asrHoldToTalkShortcut').value.trim() || 'Ctrl+Shift+Space',
+        provider: document.getElementById('asrProvider').value,
+        baseUrl: document.getElementById('asrBaseUrl').value.trim(),
+        apiKey: document.getElementById('asrApiKey').value,
+        model: document.getElementById('asrModel').value.trim(),
+        realtimePath: document.getElementById('asrRealtimePath').value.trim(),
+        transcriptionPath: document.getElementById('asrTranscriptionPath').value.trim(),
+        streamingMode: document.getElementById('asrStreamingMode').value,
+        language: document.getElementById('asrLanguage').value.trim(),
+        autoSendFinalTranscript: document.getElementById('asrAutoSend').checked,
+        cache: {
+          enabled: document.getElementById('asrCacheEnabled').checked,
+          retentionMinutes: Number(document.getElementById('asrCacheRetention').value || 30),
+          maxSessionBytes: Number(document.getElementById('asrCacheMaxBytes').value || 10485760),
+        },
+      };
     }
 
     async function loadChatInfo() {
@@ -830,6 +956,16 @@
       input.type = input.type === 'password' ? 'text' : 'password';
     });
 
+    document.getElementById('saveASRBtn').addEventListener('click', () => {
+      const config = collectASRConfig();
+      if (config.enabled && (!config.baseUrl || !config.model || !config.apiKey)) {
+        showToast('启用语音输入时需要 Base URL、模型和 API Key', 'error');
+        return;
+      }
+      window.companion.saveASRConfig(config);
+      showToast('语音输入设置已保存', 'success');
+    });
+
     // 保存 TTS 配置
     document.getElementById('saveTtsBtn').addEventListener('click', function() {
       console.log('[Settings] TTS 保存按钮点击');
@@ -872,6 +1008,7 @@
     loadConfig();
     loadAppearance();
     loadTTSConfig();
+    loadASRConfig();
     loadLogPath();
     loadChatInfo();
   </script>
