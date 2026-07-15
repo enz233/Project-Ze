@@ -411,13 +411,19 @@
         </div>
         <div class="field">
           <label>API 地址</label>
-          <input type="text" id="aliyunBaseURL" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions" />
+          <input type="text" id="aliyunBaseURL" placeholder="https://dashscope.aliyuncs.com/api/v1" />
+        </div>
+        <div class="field">
+          <label>接口路径</label>
+          <input type="text" id="aliyunEndpointPath" placeholder="/services/aigc/multimodal-generation/generation" />
+          <div class="hint">默认新版 MultiModalConversation；如需尝试历史接口可填 /services/aigc/text2audio/generation</div>
         </div>
         <div class="field">
           <label>模型</label>
           <select id="aliyunModel" onchange="document.getElementById('aliyunCustomModelWrap').style.display = this.value==='_custom'?'block':'none'">
             <option value="qwen3-tts-flash">qwen3-tts-flash</option>
             <option value="qwen3-tts-instruct-flash">qwen3-tts-instruct-flash（指令控制）</option>
+            <option value="qwen3-tts-vd-2026-01-26">qwen3-tts-vd-2026-01-26（设计音色）</option>
             <option value="_custom">自定义...</option>
           </select>
           <div id="aliyunCustomModelWrap" style="display:none; margin-top:8px;">
@@ -434,7 +440,7 @@
             <option value="_custom">自定义...</option>
           </select>
           <div id="aliyunCustomVoiceWrap" style="display:none; margin-top:8px;">
-            <input type="text" id="aliyunCustomVoice" placeholder="输入自定义音色名" />
+            <input type="text" id="aliyunCustomVoice" placeholder="输入自定义音色名或设计音色 ID" />
           </div>
         </div>
         <div class="field">
@@ -551,7 +557,8 @@
       document.getElementById('mimoVoiceDesign').value = config.mimoVoiceDesign || '温柔可爱的少女声音，说话轻声细语';
       // 阿里云
       document.getElementById('aliyunApiKey').value = config.aliyunApiKey || '';
-      document.getElementById('aliyunBaseURL').value = config.aliyunBaseURL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+      document.getElementById('aliyunBaseURL').value = config.aliyunBaseURL || 'https://dashscope.aliyuncs.com/api/v1';
+      document.getElementById('aliyunEndpointPath').value = config.aliyunEndpointPath || '/services/aigc/multimodal-generation/generation';
       var aliyunModel = config.aliyunModel || 'qwen3-tts-flash';
       var modelSelect = document.getElementById('aliyunModel');
       var modelOption = modelSelect.querySelector('option[value="' + aliyunModel + '"]');
@@ -647,7 +654,8 @@
         mimoVoice: getVal('mimoVoice', '冰糖'),
         mimoVoiceDesign: getVal('mimoVoiceDesign', '温柔可爱的少女声音，说话轻声细语'),
         aliyunApiKey: getVal('aliyunApiKey'),
-        aliyunBaseURL: getVal('aliyunBaseURL', 'https://dashscope.aliyuncs.com'),
+        aliyunBaseURL: getVal('aliyunBaseURL', 'https://dashscope.aliyuncs.com/api/v1'),
+        aliyunEndpointPath: getVal('aliyunEndpointPath', '/services/aigc/multimodal-generation/generation'),
         aliyunModel: getVal('aliyunModel') === '_custom' ? getVal('aliyunCustomModel') : getVal('aliyunModel', 'qwen3-tts-flash'),
         aliyunVoice: getVal('aliyunVoice') === '_custom' ? getVal('aliyunCustomVoice') : getVal('aliyunVoice', 'Cherry'),
         aliyunLanguage: getVal('aliyunLanguage', 'auto'),
