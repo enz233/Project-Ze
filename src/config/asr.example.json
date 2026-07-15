@@ -1,5 +1,6 @@
 {
   "enabled": false,
+  "advancedSettingsEnabled": false,
   "providerPreset": "openai",
   "provider": "openai-compatible",
   "baseUrl": "https://api.openai.com/v1",
@@ -7,7 +8,7 @@
   "model": "gpt-4o-mini-transcribe",
   "realtimePath": "/realtime",
   "transcriptionPath": "/audio/transcriptions",
-  "streamingMode": "realtime",
+  "streamingMode": "chunked-fallback",
   "language": "zh",
   "autoSendFinalTranscript": false,
   "holdToTalkShortcut": "Ctrl+Shift+Space",

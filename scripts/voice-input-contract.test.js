@@ -9,13 +9,14 @@ function load(modulePath) {
 function testAsrConfigDefaults() {
   const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
   assert.strictEqual(DEFAULT_ASR_CONFIG.enabled, false);
+  assert.strictEqual(DEFAULT_ASR_CONFIG.advancedSettingsEnabled, false);
   assert.strictEqual(DEFAULT_ASR_CONFIG.provider, 'openai-compatible');
   assert.strictEqual(DEFAULT_ASR_CONFIG.baseUrl, 'https://api.openai.com/v1');
   assert.strictEqual(DEFAULT_ASR_CONFIG.apiKey, '');
   assert.strictEqual(DEFAULT_ASR_CONFIG.model, 'gpt-4o-mini-transcribe');
   assert.strictEqual(DEFAULT_ASR_CONFIG.realtimePath, '/realtime');
   assert.strictEqual(DEFAULT_ASR_CONFIG.transcriptionPath, '/audio/transcriptions');
-  assert.strictEqual(DEFAULT_ASR_CONFIG.streamingMode, 'realtime');
+  assert.strictEqual(DEFAULT_ASR_CONFIG.streamingMode, 'chunked-fallback');
   assert.strictEqual(DEFAULT_ASR_CONFIG.language, 'zh');
   assert.strictEqual(DEFAULT_ASR_CONFIG.autoSendFinalTranscript, false);
   assert.strictEqual(DEFAULT_ASR_CONFIG.holdToTalkShortcut, 'Ctrl+Shift+Space');
@@ -163,6 +164,12 @@ function testAsrNormalizerDeepMergesCacheAndValidatesTypes() {
     },
   });
   assert.deepStrictEqual(invalidCache.cache, DEFAULT_ASR_CONFIG.cache);
+
+  const advancedEnabled = normalizeASRConfigForLoad({ advancedSettingsEnabled: true });
+  assert.strictEqual(advancedEnabled.advancedSettingsEnabled, true);
+
+  const invalidAdvancedFlag = normalizeASRConfigForLoad({ advancedSettingsEnabled: 'true' });
+  assert.strictEqual(invalidAdvancedFlag.advancedSettingsEnabled, false);
 }
 
 function testAsrPresetKeyIsPersistedInsteadOfDefinitionId() {
@@ -350,7 +357,7 @@ function testAsrEngineFactoryAndParser() {
 
   const engine = createASREngine(DEFAULT_ASR_CONFIG);
   assert.strictEqual(engine.provider, 'openai-compatible');
-  assert.strictEqual(engine.supportsStreaming(DEFAULT_ASR_CONFIG), true);
+  assert.strictEqual(engine.supportsStreaming({ ...DEFAULT_ASR_CONFIG, streamingMode: 'realtime' }), true);
   assert.throws(
     () => createASREngine({ ...DEFAULT_ASR_CONFIG, provider: 'custom' }),
     /Unsupported ASR provider/
@@ -440,7 +447,7 @@ async function testRealtimeStreamWaitsForPostCommitFinal() {
     const events = [];
     for await (const event of engine.stream({
       sessionId: 's1',
-      config: { ...DEFAULT_ASR_CONFIG, apiKey: 'test-key', baseUrl: 'https://example.test/v1' },
+      config: { ...DEFAULT_ASR_CONFIG, streamingMode: 'realtime', apiKey: 'test-key', baseUrl: 'https://example.test/v1' },
       chunks: chunks(),
     })) {
       events.push(event);

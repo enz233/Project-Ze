@@ -25,6 +25,7 @@ export interface ASRProviderPresetDefinition {
 
 export interface ASRConfig {
   enabled: boolean;
+  advancedSettingsEnabled: boolean;
   providerPreset: ASRProviderPreset;
   provider: ASRProvider;
   baseUrl: string;
@@ -113,7 +114,8 @@ function matchesPresetManagedFields(config: ASRConfig, preset: ASRProviderPreset
     && config.model === definition.model
     && config.realtimePath === definition.realtimePath
     && config.transcriptionPath === definition.transcriptionPath
-    && config.streamingMode === definition.streamingMode
+    && (config.streamingMode === definition.streamingMode
+      || (preset === 'openai' && config.streamingMode === DEFAULT_ASR_CONFIG.streamingMode))
     && config.language === definition.language;
 }
 
@@ -134,6 +136,7 @@ export function normalizeASRConfigForLoad(config: Partial<ASRConfig>): ASRConfig
     ...DEFAULT_ASR_CONFIG,
     ...config,
     enabled: normalizeBoolean(raw.enabled, DEFAULT_ASR_CONFIG.enabled),
+    advancedSettingsEnabled: normalizeBoolean(raw.advancedSettingsEnabled, DEFAULT_ASR_CONFIG.advancedSettingsEnabled),
     provider: isASRProvider(raw.provider) ? raw.provider : DEFAULT_ASR_CONFIG.provider,
     baseUrl: normalizeString(raw.baseUrl, DEFAULT_ASR_CONFIG.baseUrl),
     apiKey: normalizeString(raw.apiKey, DEFAULT_ASR_CONFIG.apiKey),
@@ -180,6 +183,7 @@ const OPENAI_ASR_PRESET = ASR_PROVIDER_PRESETS.openai;
 
 export const DEFAULT_ASR_CONFIG: ASRConfig = {
   enabled: false,
+  advancedSettingsEnabled: false,
   providerPreset: DEFAULT_ASR_PROVIDER_PRESET,
   provider: OPENAI_ASR_PRESET.provider,
   baseUrl: OPENAI_ASR_PRESET.baseUrl,
@@ -187,7 +191,7 @@ export const DEFAULT_ASR_CONFIG: ASRConfig = {
   model: OPENAI_ASR_PRESET.model,
   realtimePath: OPENAI_ASR_PRESET.realtimePath,
   transcriptionPath: OPENAI_ASR_PRESET.transcriptionPath,
-  streamingMode: OPENAI_ASR_PRESET.streamingMode,
+  streamingMode: 'chunked-fallback',
   language: OPENAI_ASR_PRESET.language,
   autoSendFinalTranscript: false,
   holdToTalkShortcut: 'Ctrl+Shift+Space',
