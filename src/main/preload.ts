@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('companion', {
   onMoveVisual: (callback: (payload: any) => void) => {
     ipcRenderer.on('move-visual', (_event, payload) => callback(payload));
   },
+  onPointVisual: (callback: (payload: any) => void) => {
+    ipcRenderer.on('point-visual', (_event, payload) => callback(payload));
+  },
   sendMouseEnter: () => {
     ipcRenderer.send('mouse-enter');
   },

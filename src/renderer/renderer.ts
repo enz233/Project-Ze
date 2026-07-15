@@ -68,6 +68,8 @@
   var isDragVisualActive = false; // 拖拽视觉是否激活（mousedown到mouseup之间）
   var isMoveVisualActive = false;
   var currentMoveDirection: string | null = null;
+  var isPointVisualActive = false;
+  var currentPointPose: string | null = null;
   var sleepyAnimRunning = false;
   var justDragged = false; // 刚完成拖拽，忽略接下来的 click
 
@@ -398,6 +400,12 @@
       updateMoveVisual(payload);
     });
 
+    // 主进程发来的目标指向视觉
+    // @ts-ignore
+    window.companion.onPointVisual(function (payload: any) {
+      updatePointVisual(payload);
+    });
+
     // 主进程发来的聊天处理状态
     // @ts-ignore
     window.companion.onChatStatus(function (payload: any) {
@@ -470,6 +478,48 @@
     }
   }
 
+  function updatePointVisual(payload: any): void {
+    if (!payload || !payload.active) {
+      if (!isPointVisualActive) return;
+      isPointVisualActive = false;
+      currentPointPose = null;
+      lastVisualState = '';
+      updateVisual(currentState, null);
+      return;
+    }
+
+    if (isDragVisualActive) return;
+
+    var pose = payload.pose || 'point-right';
+    if (pose !== 'point-left' && pose !== 'point-right' && pose !== 'point-up' && pose !== 'point-down') {
+      pose = 'point-right';
+    }
+
+    isPointVisualActive = true;
+    companionEl.className = 'dragged';
+
+    if (pose !== currentPointPose) {
+      currentPointPose = pose;
+      setSpriteWithFallback(pose, fallbackSpriteForPose(pose));
+    }
+  }
+
+  function fallbackSpriteForPose(pose: string): string {
+    if (pose === 'point-left') return 'dragged_left';
+    if (pose === 'point-up') return 'dragged_up';
+    if (pose === 'point-down') return 'dragged_down';
+    return 'dragged_right';
+  }
+
+  function setSpriteWithFallback(name: string, fallback: string): void {
+    if (!SPRITE_DIR) return;
+    spriteEl.onerror = function () {
+      spriteEl.onerror = null;
+      setSprite(fallback);
+    };
+    setSprite(name);
+  }
+
   function playMicroBehavior(payload: any): void {
     if (!payload || typeof payload.behavior !== 'string') return;
     var behavior = payload.behavior;
@@ -529,6 +579,7 @@
     else if (name.indexOf('sleepy') === 0) folder = 'basic/sleepy';
     else if (name.indexOf('sleep') === 0) folder = 'basic/sleeping';
     else if (name.indexOf('dragged') === 0) folder = 'basic/dragged';
+    else if (name.indexOf('point') === 0) folder = 'basic/point';
     else if (name.indexOf('lonely') === 0) folder = 'basic/lonely';
     else if (name.indexOf('comfortable') === 0) folder = 'basic/comfortable';
     else if (name.indexOf('tried') === 0) folder = 'basic/tried';
@@ -882,6 +933,8 @@
     if (isDragVisualActive) return;
     // 自动移动期间不覆盖移动方向差分
     if (isMoveVisualActive) return;
+    // 目标指向期间不覆盖指向差分
+    if (isPointVisualActive) return;
     // 拖拽已结束但主进程还在发旧的 dragged 状态，忽略
     if (state === 'dragged' && !isDragVisualActive) return;
 
