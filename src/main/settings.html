@@ -1184,6 +1184,14 @@
       document.getElementById('asrRecognitionResult').value = text || '';
     }
 
+    function formatASRRecognitionErrorMessage(message) {
+      var text = message || '语音识别失败';
+      if (text.indexOf('ASR realtime connection did not open') >= 0) {
+        return '实时识别连接失败：当前服务商、模型或网络可能不支持 Realtime WebSocket。可关闭高级 ASR 设置，或将流式模式改为 chunked-fallback 后重试。';
+      }
+      return text;
+    }
+
     function appendASRRecognitionResult(text) {
       const resultEl = document.getElementById('asrRecognitionResult');
       if (!text) return;
@@ -1229,6 +1237,20 @@
       }
       setASRValidationMessage('');
       return true;
+    }
+
+    async function saveASRConfigForRecognitionTest(config) {
+      var savedConfig = await window.companion.saveASRConfig(config);
+      setASRValidationMessage('');
+      debugASRSettings('recognition test config saved', {
+        enabled: !!(savedConfig && savedConfig.enabled),
+        advancedSettingsEnabled: !!(savedConfig && savedConfig.advancedSettingsEnabled),
+        streamingMode: savedConfig && savedConfig.streamingMode,
+        providerPreset: savedConfig && savedConfig.providerPreset,
+        hasApiKey: !!(savedConfig && savedConfig.apiKey),
+        model: savedConfig && savedConfig.model,
+      });
+      return savedConfig;
     }
 
     function getASRRecognitionMimeType() {
@@ -1298,6 +1320,7 @@
       if (asrRecognitionRunning || asrRecognitionStopping) return;
       const config = collectASRConfig();
       if (!validateASRRecognitionTestConfig(config)) return;
+      await saveASRConfigForRecognitionTest(config);
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setASRMicStatus('当前环境不支持麦克风访问', true);
         return;
@@ -1333,7 +1356,6 @@
         await startASRMicMeter(stream);
 
         const mimeType = getASRRecognitionMimeType();
-        await window.companion.saveASRConfig(config);
         const session = await window.companion.voiceInput.start({ source: 'settings-test', mimeType });
         if (startToken !== asrRecognitionStartToken) {
           if (session && session.sessionId) {
@@ -1382,13 +1404,13 @@
           stopASRRecognitionTest(false);
         }, ASR_RECOGNITION_TEST_MS);
       } catch (error) {
-        const errorMessage = '语音识别测试启动失败：' + (error && error.message ? error.message : String(error));
+        const message = formatASRRecognitionErrorMessage(error && error.message ? error.message : String(error));
         if (startToken !== asrRecognitionStartToken) {
           cleanupStaleASRRecognitionStartup(startupResources);
           return;
         }
         await stopASRRecognitionTest(true, { preserveStatus: true });
-        setASRMicStatus(errorMessage, true);
+        setASRMicStatus('语音识别测试启动失败：' + message, true);
       }
     }
 
@@ -2003,7 +2025,7 @@
       window.companion.voiceInput.onStatus(function(payload) {
         if (!asrRecognitionSessionId || payload.sessionId !== asrRecognitionSessionId) return;
         if (payload.phase === 'voice-error') {
-          setASRMicStatus(payload.message || '语音识别失败', true);
+          setASRMicStatus(formatASRRecognitionErrorMessage(payload.message || '语音识别失败'), true);
         } else if (payload.message) {
           setASRMicStatus(payload.message, false);
         }
@@ -2020,7 +2042,7 @@
           setASRMicStatus('识别完成', false);
           asrRecognitionSessionId = null;
         } else if (payload.type === 'error') {
-          setASRMicStatus(payload.message || '语音识别失败', true);
+          setASRMicStatus(formatASRRecognitionErrorMessage(payload.message || '语音识别失败'), true);
           setASRRecognitionProgress(100, '识别失败');
           asrRecognitionSessionId = null;
         }

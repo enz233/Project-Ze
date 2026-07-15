@@ -286,6 +286,11 @@ function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   assert.match(html, /advancedSettingsEnabled: isASRAdvancedSettingsEnabled\(\)/);
   assert.match(html, /streamingMode: 'chunked-fallback'/);
   assert.match(html, /saveASRConfig\(config\)[\s\S]*?voiceInput\.start/);
+  assert.match(html, /async function saveASRConfigForRecognitionTest\(config\)/);
+  assert.match(html, /await saveASRConfigForRecognitionTest\(config\);[\s\S]*?window\.companion\.voiceInput\.start/);
+  assert.match(html, /function formatASRRecognitionErrorMessage\(message\)/);
+  assert.match(html, /实时识别连接失败/);
+  assert.match(html, /chunked-fallback 后重试/);
   assert.match(html, /测试麦克风音量/);
   assert.match(html, /测试语音识别 10 秒/);
   assert.match(html, /可能产生 API 调用/);
