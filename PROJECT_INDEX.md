@@ -62,14 +62,14 @@ src/
 - `move-controller.ts`：主进程自动移动控制器，提供 `moveTo` / `cancel` / `isMoving`，负责坐标 anchor、屏幕 clamp、平滑移动和 renderer 移动视觉事件。
 - `bubble-manager.ts`：气泡发送、状态门禁、主动气泡短间隔控制。
 - `bubble-orchestrator.ts`：主进程气泡编排边界，接收带来源/优先级的气泡请求，并把实际投递委托给 `BubbleManager`。
-- `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；截图帧 `ScreenCaptureFrame` 包含坐标映射元信息与 `ScreenCaptureFrame.fingerprint` 低分辨率亮度 fingerprint，用于 Vision 定位前后的一次轻量屏幕变化判定；截图缩略图尺寸由 `screen-capture-frame.ts` 按显示器宽高比计算，避免固定 1280x720 在非 16:9 屏幕上造成 point 坐标映射偏移。
-- `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、八方向 point 指向姿态选择、指向锚点换算、移动调用、屏幕变化取消和指向气泡；移动前会对 Vision 前后两帧 `ScreenCaptureFrame.fingerprint` 做一次保守 diff，diff 阈值为 `0.20`，明显变化时取消旧坐标。
+- `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；当前稳定职责是截图、坐标映射元信息与 Vision 分析。`ScreenCaptureFrame.fingerprint` 与 `screen-capture-frame.ts` 按显示器比例推导缩略图尺寸属于 Unreleased 稳定性增强。
+- `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、移动调用和指向气泡；八方向 point 指向姿态、指向后恢复、fingerprint diff 屏幕变化取消属于 Unreleased 增强。
 - `emotion-system.ts` / `emotion-updater.ts`：情绪状态与更新。
 - `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
 - `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。
 - `chat-history-store.ts`：聊天历史持久化边界，负责 `chat-history.json` 的读写、最近消息读取和摘要计数；`ai-memory.ts` 仍作为记忆 facade 负责摘要、关系、习惯和 prompt 组装。
-- `asr-config.ts`：ASR 运行态配置，使用 `JsonConfigStore<T>` 保存到 Electron `userData/config/asr.json`；`providerPreset` 表示设置页模板，`provider` 表示实际 ASR 引擎类型。
-- `asr-engine.ts` / `asr-openai-compatible.ts`：ASR 引擎接口与 OpenAI-compatible provider，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设当前都复用该引擎。
+- `asr-config.ts`：ASR 运行态配置，使用 `JsonConfigStore<T>` 保存到 Electron `userData/config/asr.json`；`providerPreset` 表示设置页模板，属于 Unreleased 供应商预设增强；`provider` 表示实际 ASR 引擎类型。
+- `asr-engine.ts` / `asr-openai-compatible.ts`：ASR 引擎接口与 OpenAI-compatible provider，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 供应商预设属于 Unreleased 增强，当前仍复用该引擎。
 - `voice-input-manager.ts`：语音输入 session 编排，连接音频 chunk、ASR engine、音频缓存和 transcript/status IPC。
 - `voice-audio-cache.ts`：短期语音缓存边界，保存 runtime-only 音频 chunk 并返回 `audioRef`。
 - `camera-awareness-types.ts`：摄像头感知配置、帧输入、检测结果、状态快照与 IPC 常量类型；不代表独立事件总线。
@@ -119,7 +119,7 @@ src/
 - **情感前缀**：根据状态给 AI 消息加情感上下文，切换后 4 秒保持上一个状态
 - **情境化主动回应**：本地规则先判断是否应该回应，AI 仅用于高价值场景短句改写，不用于决定是否打扰；阈值、分类、模板和 AI 改写 reason 已配置化
 - **TTS 架构**：`TTSManager` 保持唯一编排入口，读取配置并调用 `createTTSEngine(config)` 获取供应商引擎；供应商引擎实现 `TTSEngine.synthesize(text)` 并返回 base64 音频，Electron 播放、字幕、停止和 `playbackId` 完成确认仍只在 `TTSManager`、preload 和 renderer 链路中处理
-- **屏幕目标指示**：`.` 屏幕分析入口中命中明确“指出/在哪/帮我找”等关键词时，`ChatManager` 委托 `ScreenTargetPointer` 调用 Vision 结构化定位；置信度足够时通过 `MoveController` 把桌宠移动到目标旁边，并发送 `point-visual` 八方向指向差分。point 差分约 7 秒后只恢复普通视觉，不移动回原位；指向 session 会保留前台窗口变化检测，并在 Vision 定位前后做一次基于 `ScreenCaptureFrame.fingerprint` 的低分辨率截图 fingerprint diff，阈值为 `0.20`，若屏幕明显变化则取消旧坐标；普通聊天自然语言自动触发、wheel IPC、全局输入 hook 和持续截图监控暂缓，避免隐私、误触发和复杂度问题。
+- **屏幕目标指示**：`.` 屏幕分析入口中命中明确“指出/在哪/帮我找”等关键词时，`ChatManager` 委托 `ScreenTargetPointer` 调用 Vision 结构化定位；置信度足够时通过 `MoveController` 把桌宠移动到目标旁边并给出指向气泡。八方向 `point-visual`、约 7 秒后只恢复普通视觉、Vision 前后 `ScreenCaptureFrame.fingerprint` diff 取消旧坐标属于 Unreleased 增强；普通聊天自然语言自动触发、wheel IPC、全局输入 hook 和持续截图监控暂缓，避免隐私、误触发和复杂度问题。
 
 ## IPC 通道一览
 
@@ -132,8 +132,8 @@ src/
 | user-click | - | 点击 |
 | user-message | text | 发送消息给 AI |
 | window-move-by | {deltaX, deltaY} | 移动窗口 |
-| move-to | MoveToRequest | 调试/后续模块用：按 X/Y 单轴分段平滑移动桌宠到目标坐标；目标、分段落点和每帧位置都会按 workArea clamp |
-| teleport-to | MoveToRequest | 调试/后续模块用：直接切换桌宠到目标坐标，仍执行 clamp，不播放 move 动画 |
+| move-to | MoveToRequest | 调试/后续模块用：平滑移动桌宠到目标坐标，执行 workArea clamp；X/Y 单轴分段属于 Unreleased Move 优化 |
+| teleport-to | MoveToRequest | 调试/后续模块用：直接切换桌宠到目标坐标，仍执行 clamp；当前作为设置页 Move 测试能力记录，后续 Move 优化会继续稳定其视觉边界 |
 | mouse-enter/leave | - | 鼠标进出 |
 | lonely-action | boolean | lonely 动画状态 |
 | state-finished | - | 动画状态结束 |
@@ -172,7 +172,7 @@ src/
 
 ### ASR provider presets
 
-语音输入设置页提供 OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 三个供应商预设。预设只负责填充 Base URL、路径、模型和流式模式等配置；运行时仍按 `provider` 字段选择实际引擎。本轮阿里百炼预设的 `provider` 仍为 `openai-compatible`，不包含专用百炼 ASR 协议实现。
+语音输入设置页的供应商预设属于 Unreleased 增强：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 三个预设只负责填充 Base URL、路径、模型和流式模式等配置；运行时仍按 `provider` 字段选择实际引擎。本轮阿里百炼预设的 `provider` 仍为 `openai-compatible`，不包含专用百炼 ASR 协议实现。
 
 ## 常见修改场景
 
