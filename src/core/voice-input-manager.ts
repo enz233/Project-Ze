@@ -106,8 +106,8 @@ export class VoiceInputManager {
   async cancelSession(sessionId: string): Promise<void> {
     this.requireSession(sessionId);
     await this.audioCache.discard(sessionId);
-    this.active = null;
     this.setPhase('voice-idle', '语音输入已取消');
+    this.active = null;
   }
 
   getStatus(): VoiceInputDebugSnapshot {
