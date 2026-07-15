@@ -66,6 +66,13 @@ export class ScreenAnalyzer {
         thumbnailSize: { width: 1280, height: 720 },
       });
 
+      console.log('[ScreenAnalyzer][debug] capture sources:', {
+        primaryDisplayId: primaryDisplay.id,
+        primaryBounds: primaryDisplay.bounds,
+        displayIds: displays.map(display => ({ id: display.id, bounds: display.bounds, scaleFactor: display.scaleFactor })),
+        sourceIds: sources.map(source => ({ id: source.id, displayId: source.display_id, name: source.name })),
+      });
+
       if (sources.length === 0) return null;
 
       const matchedSource = sources.find((source) => String(source.display_id) === String(primaryDisplay.id));
@@ -78,13 +85,22 @@ export class ScreenAnalyzer {
       const resized = matchedSource.thumbnail.resize({ width: 1280, height: 720 });
       const imageSize = resized.getSize();
       const base64 = resized.toPNG().toString('base64');
-
-      return {
+      const frame = {
         imageDataUri: `data:image/png;base64,${base64}`,
         origin: { x: matchedDisplay.bounds.x, y: matchedDisplay.bounds.y },
         screenSize: { width: matchedDisplay.bounds.width, height: matchedDisplay.bounds.height },
         imageSize: { width: imageSize.width, height: imageSize.height },
       };
+
+      console.log('[ScreenAnalyzer][debug] capture frame:', {
+        sourceDisplayId: matchedSource.display_id,
+        sourceName: matchedSource.name,
+        origin: frame.origin,
+        screenSize: frame.screenSize,
+        imageSize: frame.imageSize,
+      });
+
+      return frame;
     } catch (error: any) {
       console.error('[ScreenAnalyzer] 截屏失败:', error.message);
       return null;
@@ -121,10 +137,20 @@ export class ScreenAnalyzer {
   mapPointToScreen(frame: ScreenCaptureFrame, point: { x: number; y: number }): { x: number; y: number } {
     const scaleX = frame.screenSize.width / frame.imageSize.width;
     const scaleY = frame.screenSize.height / frame.imageSize.height;
-    return {
+    const screenPoint = {
       x: Math.round(frame.origin.x + point.x * scaleX),
       y: Math.round(frame.origin.y + point.y * scaleY),
     };
+    console.log('[ScreenAnalyzer][debug] map point to screen:', {
+      point,
+      origin: frame.origin,
+      screenSize: frame.screenSize,
+      imageSize: frame.imageSize,
+      scaleX,
+      scaleY,
+      screenPoint,
+    });
+    return screenPoint;
   }
 
   private buildLocatePrompt(userMessage: string, frame: ScreenCaptureFrame): string {
@@ -161,14 +187,15 @@ export class ScreenAnalyzer {
       const label = typeof parsed.label === 'string' ? parsed.label.trim() : '';
       const reason = typeof parsed.reason === 'string' ? parsed.reason.trim() : '';
       const point = this.parsePoint(parsed.point, frame);
-
-      return {
+      const locateResult = {
         found: parsed.found === true && !!point,
         label,
         confidence,
         point,
         reason,
       };
+      console.log('[ScreenAnalyzer][debug] locate result:', locateResult);
+      return locateResult;
     } catch (error: any) {
       console.error('[ScreenAnalyzer] 定位 JSON 解析失败:', error.message, raw);
       return fallback;

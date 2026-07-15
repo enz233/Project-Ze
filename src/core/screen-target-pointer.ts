@@ -100,17 +100,33 @@ export class ScreenTargetPointer {
     const screenMessage = this.normalizePointerMessage(message);
     const id = this.startSession();
     const beforeTitle = await this.windowActivityService.getActiveWindowTitle();
+    console.log('[ScreenTargetPointer][debug] session start:', {
+      sessionId: id,
+      message: screenMessage,
+      beforeTitle,
+      windowBounds: this.mainWindow.getBounds(),
+    });
     this.showBubble('我看看哦，先别动屏幕~');
 
     try {
       this.state = 'locating';
       const located = await this.screenAnalyzer.locateTarget(screenMessage);
+      console.log('[ScreenTargetPointer][debug] located:', {
+        sessionId: id,
+        frame: {
+          origin: located.frame.origin,
+          screenSize: located.frame.screenSize,
+          imageSize: located.frame.imageSize,
+        },
+        result: located.result,
+      });
       if (!this.isCurrent(id)) {
         return this.cancelledResult('new-request');
       }
 
       const afterLocateTitle = await this.windowActivityService.getActiveWindowTitle();
       if (this.hasScreenChanged(beforeTitle, afterLocateTitle)) {
+        console.log('[ScreenTargetPointer][debug] screen changed after locate:', { sessionId: id, beforeTitle, afterLocateTitle });
         return this.cancelWithMessage('screen-changed');
       }
 
@@ -128,6 +144,13 @@ export class ScreenTargetPointer {
         x: screenPoint.x - pose.pointerOffset.x,
         y: screenPoint.y - pose.pointerOffset.y,
       };
+      console.log('[ScreenTargetPointer][debug] move target:', {
+        sessionId: id,
+        screenPoint,
+        pose,
+        moveTopLeft,
+        windowBounds: this.mainWindow.getBounds(),
+      });
 
       this.state = 'moving';
       let screenChangedDuringMove = false;
@@ -151,8 +174,17 @@ export class ScreenTargetPointer {
 
       const afterMoveTitle = await this.windowActivityService.getActiveWindowTitle();
       if (screenChangedDuringMove || this.hasScreenChanged(beforeTitle, afterMoveTitle)) {
+        console.log('[ScreenTargetPointer][debug] screen changed after move:', {
+          sessionId: id,
+          beforeTitle,
+          afterMoveTitle,
+          screenChangedDuringMove,
+          moveResult,
+        });
         return this.screenChangedResult(result);
       }
+
+      console.log('[ScreenTargetPointer][debug] move finished:', { sessionId: id, moveResult, afterMoveTitle });
 
       if (moveResult.cancelled) {
         const messageText = '好啦好啦，我不挡你~';
@@ -181,6 +213,7 @@ export class ScreenTargetPointer {
 
   cancel(reason: ScreenTargetPointerCancelReason = 'manual'): void {
     if (this.state === 'done' || this.state === 'cancelled') return;
+    console.log('[ScreenTargetPointer][debug] cancel:', { sessionId: this.sessionId, state: this.state, reason });
     this.sessionId++;
     this.state = 'cancelled';
     this.moveController.cancel('manual');
@@ -227,10 +260,19 @@ export class ScreenTargetPointer {
     const dx = screenPoint.x - windowCenterX;
     const dy = screenPoint.y - windowCenterY;
 
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      return dx >= 0 ? DEFAULT_POSES['point-right'] : DEFAULT_POSES['point-left'];
-    }
-    return dy >= 0 ? DEFAULT_POSES['point-down'] : DEFAULT_POSES['point-up'];
+    const pose = Math.abs(dx) >= Math.abs(dy)
+      ? (dx >= 0 ? DEFAULT_POSES['point-right'] : DEFAULT_POSES['point-left'])
+      : (dy >= 0 ? DEFAULT_POSES['point-down'] : DEFAULT_POSES['point-up']);
+
+    console.log('[ScreenTargetPointer][debug] choose pose:', {
+      screenPoint,
+      windowBounds: bounds,
+      windowCenter: { x: windowCenterX, y: windowCenterY },
+      delta: { x: dx, y: dy },
+      pose,
+    });
+
+    return pose;
   }
 
   private hasScreenChanged(beforeTitle: string, afterTitle: string): boolean {
@@ -324,6 +366,12 @@ export class ScreenTargetPointer {
       this.windowActivityService.getActiveWindowTitle()
         .then(currentTitle => {
           if (this.isCurrent(id) && this.state === expectedState && this.hasScreenChanged(beforeTitle, currentTitle)) {
+            console.log('[ScreenTargetPointer][debug] screen monitor changed:', {
+              sessionId: id,
+              expectedState,
+              beforeTitle,
+              currentTitle,
+            });
             onChanged();
             this.clearMoveMonitor();
           }
