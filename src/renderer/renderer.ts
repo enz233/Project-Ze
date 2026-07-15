@@ -516,6 +516,7 @@
     }
 
     setMoveSprite('move', 'move_1');
+    moveFrameIndex = 1;
     moveAnimTimer = setInterval(function () {
       moveFrameIndex = (moveFrameIndex % 5) + 1;
       setMoveSprite('move', 'move_' + moveFrameIndex);
