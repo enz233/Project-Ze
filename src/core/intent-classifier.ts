@@ -124,23 +124,28 @@ export class IntentClassifier {
 
   private normalizeFallback(raw: unknown, draft: IntentDecision): IntentDecision {
     const value: ParsedFallback = typeof raw === 'string' ? JSON.parse(raw) : (raw as ParsedFallback);
-    const intent = INTENT_KINDS.includes(value.intent as IntentKind) ? value.intent as IntentKind : draft.intent;
+    const hasValidIntent = INTENT_KINDS.includes(value.intent as IntentKind);
+    const intent = hasValidIntent ? value.intent as IntentKind : draft.intent;
     const confidence = typeof value.confidence === 'number' && Number.isFinite(value.confidence)
       ? Math.max(0, Math.min(1, value.confidence))
       : draft.confidence;
     const explicitness = EXPLICITNESS_VALUES.includes(value.explicitness as IntentExplicitness)
       ? value.explicitness as IntentExplicitness
       : draft.explicitness;
-    const requiredCapabilities = Array.isArray(value.requires)
+    const requiredCapabilities = hasValidIntent && Array.isArray(value.requires)
       ? value.requires.filter((capability): capability is IntentCapability => CAPABILITIES.includes(capability as IntentCapability))
       : draft.requiredCapabilities;
     const target = typeof value.target === 'string' && value.target.trim() ? value.target.trim() : draft.target;
+
+    if (!hasValidIntent) {
+      return decision('unknown', confidence, 'LLM fallback returned invalid intent', 'ambiguous', [], true);
+    }
 
     if (intent === 'screen_target_pointer' && !target) {
       return decision('unknown', 0.2, 'LLM fallback requested target pointer without target', 'ambiguous', [], true);
     }
 
-    if (confidence < this.lowConfidenceThreshold && intent !== 'normal_chat') {
+    if (confidence < this.lowConfidenceThreshold) {
       return decision('unknown', confidence, 'LLM fallback confidence below safe threshold', 'ambiguous', [], true);
     }
 
@@ -149,10 +154,16 @@ export class IntentClassifier {
       confidence,
       reason: typeof value.reason === 'string' && value.reason.trim() ? value.reason.trim() : draft.reason,
       explicitness,
-      requiredCapabilities,
+      requiredCapabilities: this.sanitizeFallbackCapabilities(intent, requiredCapabilities),
       usedLlmFallback: true,
       ...(target ? { target } : {}),
     };
+  }
+
+  private sanitizeFallbackCapabilities(intent: IntentKind, capabilities: IntentCapability[]): IntentCapability[] {
+    if (intent === 'normal_chat') return ['llm'];
+    if (intent === 'unknown') return [];
+    return [...new Set(capabilities)];
   }
 }
 

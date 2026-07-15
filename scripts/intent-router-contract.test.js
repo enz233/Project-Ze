@@ -264,6 +264,77 @@ async function testLlmFallbackInvalidJsonFallsBackToDraft() {
   assert.match(decision.reason, /LLM fallback failed/);
 }
 
+async function testLlmFallbackInvalidIntentDropsSensitiveCapabilities() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const classifier = new IntentClassifier({
+    enableLlmFallback: true,
+    llmFallback: async () => ({
+      intent: 'delete_everything',
+      confidence: 0.91,
+      reason: 'invalid intent must not carry config write',
+      explicitness: 'explicit',
+      requires: ['config_write'],
+    }),
+  });
+
+  const decision = await classifier.classify({
+    source: 'text_chat',
+    text: '这个设置帮我看一下',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(decision.intent, 'unknown');
+  assert.deepStrictEqual(decision.requiredCapabilities, []);
+}
+
+async function testLlmFallbackLowConfidenceDropsSensitiveCapabilities() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const classifier = new IntentClassifier({
+    enableLlmFallback: true,
+    lowConfidenceThreshold: 0.7,
+    llmFallback: async () => ({
+      intent: 'screen_summary',
+      confidence: 0.2,
+      reason: 'low confidence must not keep screen capability',
+      explicitness: 'explicit',
+      requires: ['screen_capture', 'vision'],
+    }),
+  });
+
+  const decision = await classifier.classify({
+    source: 'text_chat',
+    text: '这里帮我看一下',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(decision.intent, 'unknown');
+  assert.deepStrictEqual(decision.requiredCapabilities, []);
+}
+
+async function testLlmFallbackLowConfidenceNormalChatDropsSensitiveCapabilities() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const classifier = new IntentClassifier({
+    enableLlmFallback: true,
+    lowConfidenceThreshold: 0.7,
+    llmFallback: async () => ({
+      intent: 'normal_chat',
+      confidence: 0.2,
+      reason: 'normal chat must stay safe',
+      explicitness: 'implicit',
+      requires: ['config_write', 'move_pointer'],
+    }),
+  });
+
+  const decision = await classifier.classify({
+    source: 'text_chat',
+    text: '这个设置帮我看一下',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(decision.intent, 'unknown');
+  assert.deepStrictEqual(decision.requiredCapabilities, []);
+}
+
 async function run() {
   await testRuleClassifierNormalChatDoesNotNeedSensitiveCapabilities();
   await testRuleClassifierScreenSummaryFromNaturalLanguage();
@@ -279,6 +350,9 @@ async function run() {
   await testLlmFallbackCanClassifyAmbiguousPageRequest();
   await testLlmFallbackMissingTargetDowngradesToUnknown();
   await testLlmFallbackInvalidJsonFallsBackToDraft();
+  await testLlmFallbackInvalidIntentDropsSensitiveCapabilities();
+  await testLlmFallbackLowConfidenceDropsSensitiveCapabilities();
+  await testLlmFallbackLowConfidenceNormalChatDropsSensitiveCapabilities();
   console.log('intent-router contract tests passed');
 }
 
