@@ -544,7 +544,7 @@
       voiceChunkStartedAt = Date.now();
       voiceRecorder.start(750);
       setVoiceRecording(true);
-      updateChatStatus({ phase: 'voice-recording', message: '正在听你说话…' });
+      updateChatStatus({ phase: 'voice-recording', message: '正在录音，请说话…' });
     } catch (e) {
       setVoiceRecording(false);
       updateChatStatus({ phase: 'voice-error', message: '语音输入启动失败' });
@@ -557,6 +557,7 @@
     var sessionId = voiceSessionId;
     var recorder = voiceRecorder;
     setVoiceRecording(false);
+    updateChatStatus({ phase: 'voice-finalizing', message: '正在识别…' });
     if (recorder && recorder.state !== 'inactive') {
       await new Promise<void>(function (resolve) {
         var activeRecorder = recorder as MediaRecorder;
