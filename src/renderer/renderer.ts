@@ -513,11 +513,7 @@
 
   function setSpriteWithFallback(name: string, fallback: string): void {
     if (!SPRITE_DIR) return;
-    spriteEl.onerror = function () {
-      spriteEl.onerror = null;
-      setSprite(fallback);
-    };
-    setSprite(name);
+    setSprite(name, fallback);
   }
 
   function playMicroBehavior(payload: any): void {
@@ -571,7 +567,7 @@
     }
   }
 
-  function setSprite(name: string): void {
+  function setSprite(name: string, fallback?: string): void {
     if (!SPRITE_DIR) return;
     // 根据名字前缀确定子目录
     var folder = 'basic/misc';
@@ -585,6 +581,14 @@
     else if (name.indexOf('tried') === 0) folder = 'basic/tried';
     var path = SPRITE_DIR + folder + '/' + name + '.png';
     console.log('[Sprite]', name);
+    spriteEl.onerror = fallback ? function () {
+      spriteEl.onerror = null;
+      setSprite(fallback);
+    } : null;
+    spriteEl.onload = function () {
+      spriteEl.onerror = null;
+      spriteEl.onload = null;
+    };
     spriteEl.src = path;
   }
 
