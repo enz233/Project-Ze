@@ -81,11 +81,12 @@ export class ScreenAnalyzer {
         thumbnailSize: { width: 1280, height: 720 },
       });
 
-      console.log('[ScreenAnalyzer][debug] capture sources:', {
+      debugScreenAnalyzer('[ScreenAnalyzer][debug] capture sources:', {
         primaryDisplayId: primaryDisplay.id,
-        primaryBounds: primaryDisplay.bounds,
-        displayIds: displays.map(display => ({ id: display.id, bounds: display.bounds, scaleFactor: display.scaleFactor })),
-        sourceIds: sources.map(source => ({ id: source.id, displayId: source.display_id, name: source.name })),
+        displayCount: displays.length,
+        sourceCount: sources.length,
+        displayIds: displays.map(display => ({ id: display.id, scaleFactor: display.scaleFactor })),
+        sourceDisplayIds: sources.map(source => source.display_id),
       });
 
       if (sources.length === 0) return null;
@@ -124,9 +125,8 @@ export class ScreenAnalyzer {
         fingerprint,
       };
 
-      console.log('[ScreenAnalyzer][debug] capture frame:', {
+      debugScreenAnalyzer('[ScreenAnalyzer][debug] capture frame:', {
         sourceDisplayId: matchedSource.display_id,
-        sourceName: matchedSource.name,
         origin: frame.origin,
         screenSize: frame.screenSize,
         imageSize: frame.imageSize,
@@ -284,4 +284,11 @@ export class ScreenAnalyzer {
     });
 
     if (!response.ok) {
-      con
+      const error = await response.text();
+      throw new Error(`API 请求失败 (${response.status}): ${error}`);
+    }
+
+    const data = await response.json() as any;
+    return data.choices?.[0]?.message?.content ?? '（无响应）';
+  }
+}
