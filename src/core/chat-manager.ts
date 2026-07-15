@@ -65,6 +65,10 @@ export class ChatManager {
 
   /** 发送用户消息并获取 AI 回复 */
   async sendMessage(userMessage: string): Promise<void> {
+    if (userMessage.startsWith('.')) {
+      this.screenTargetPointer?.cancel('new-request');
+    }
+
     if (this.isProcessing) {
       this.sendBubble('等一下，我还在想...');
       this.sendChatStatus('busy', '还在想上一句');
