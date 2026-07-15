@@ -19,6 +19,7 @@
     if (msg.indexOf('[Drag]') >= 0) return 'drag';
     if (msg.indexOf('[Visual]') >= 0 || msg.indexOf('[Sprite]') >= 0) return 'state';
     if (msg.indexOf('[TTS]') >= 0) return 'tts';
+    if (msg.indexOf('[VoiceInput]') >= 0) return 'chat';
     if (msg.indexOf('[Chat]') >= 0) return 'chat';
     if (msg.indexOf('[Observer]') >= 0) return 'observer';
     return 'info';
@@ -307,6 +308,11 @@
     if (window.companion.onASRConfigUpdated) {
       // @ts-ignore
       window.companion.onASRConfigUpdated(function (config: any) {
+        debugVoiceInput('received asr-config-updated', {
+          enabled: !!(config && config.enabled),
+          providerPreset: config && config.providerPreset,
+          model: config && config.model
+        });
         applyVoiceInputConfig(config);
       });
     }
@@ -375,8 +381,10 @@
   }
 
   function keepChatInputOpen(): void {
+    var wasHidden = chatInputWrapEl.classList.contains('hidden');
     chatInputWrapEl.classList.remove('hidden');
     chatInputEl.focus();
+    debugVoiceInput('keep chat input open', { wasHidden: wasHidden, valueLength: chatInputEl.value.length });
   }
 
   function closeChatInput(clearText: boolean): void {
@@ -413,6 +421,14 @@
     });
   }
 
+  function debugVoiceInput(message: string, data?: any): void {
+    if (typeof data === 'undefined') {
+      console.log('[VoiceInput]', message);
+      return;
+    }
+    console.log('[VoiceInput]', message, data);
+  }
+
   function applyVoiceInputConfig(config: any): void {
     var wasEnabled = voiceInputEnabled;
     voiceInputEnabled = !!(config && config.enabled);
@@ -422,6 +438,13 @@
     voiceInputBtnEl.title = voiceInputEnabled
       ? '语音输入已启用：点击开始/结束，' + voiceHoldToTalkShortcut + ' 长按说话'
       : '语音输入未启用：点击查看提示，F11 设置里可开启';
+    debugVoiceInput('apply config', {
+      enabled: voiceInputEnabled,
+      wasEnabled: wasEnabled,
+      shortcut: voiceHoldToTalkShortcut,
+      inputHidden: chatInputWrapEl.classList.contains('hidden'),
+      buttonDisabled: voiceInputBtnEl.classList.contains('disabled')
+    });
     if (voiceInputEnabled && !wasEnabled) {
       openChatInput(chatInputEl.value);
       updateChatStatus({ phase: 'idle', message: '语音输入已启用，点击麦克风开始说话' });
@@ -431,10 +454,19 @@
   }
 
   function refreshVoiceInputConfig(): void {
+    debugVoiceInput('refresh config start');
     // @ts-ignore
     window.companion.loadASRConfig().then(function (config: any) {
+      debugVoiceInput('refresh config loaded', {
+        enabled: !!(config && config.enabled),
+        shortcut: config && config.holdToTalkShortcut,
+        providerPreset: config && config.providerPreset,
+        provider: config && config.provider,
+        model: config && config.model
+      });
       applyVoiceInputConfig(config);
-    }).catch(function () {
+    }).catch(function (e: any) {
+      debugVoiceInput('refresh config failed', e && e.message ? e.message : e);
       voiceInputEnabled = false;
       voiceHoldToTalkShortcut = 'Ctrl+Shift+Space';
       voiceInputBtnEl.classList.add('disabled');
@@ -454,10 +486,18 @@
   }
 
   async function startVoiceInput(source: 'button' | 'shortcut'): Promise<void> {
+    debugVoiceInput('start requested', { source: source, enabledCached: voiceInputEnabled, recording: voiceRecording });
     if (voiceRecording) return;
     try {
       // @ts-ignore
       var config = await window.companion.loadASRConfig();
+      debugVoiceInput('start config loaded', {
+        enabled: !!(config && config.enabled),
+        providerPreset: config && config.providerPreset,
+        provider: config && config.provider,
+        model: config && config.model,
+        hasApiKey: !!(config && config.apiKey)
+      });
       if (!config || !config.enabled) {
         applyVoiceInputConfig(config);
         showVoiceInputDisabledHint();
@@ -694,11 +734,13 @@
     // @ts-ignore
     window.companion.voiceInput.onTranscript(function (payload: any) {
       if (payload.type === 'partial') {
+        debugVoiceInput('transcript partial', { textLength: String(payload.text || '').length });
         keepChatInputOpen();
         setChatInputValue(voicePartialBase + payload.text);
         return;
       }
       if (payload.type === 'final') {
+        debugVoiceInput('transcript final', { textLength: String(payload.text || '').length, autoSend: voiceAutoSend });
         keepChatInputOpen();
         var finalText = payload.text || chatInputEl.value;
         setChatInputValue(finalText);

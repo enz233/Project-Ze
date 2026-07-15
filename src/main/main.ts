@@ -460,7 +460,15 @@ function setupIPC(): void {
     asrConfigManager.update(config);
     const updatedConfig = asrConfigManager.get();
     voiceAudioCache?.updateConfig(updatedConfig.cache);
-    BrowserWindow.getAllWindows().forEach((window) => {
+    const windows = BrowserWindow.getAllWindows();
+    console.log('[VoiceInput] ASR config saved', {
+      enabled: updatedConfig.enabled,
+      providerPreset: updatedConfig.providerPreset,
+      provider: updatedConfig.provider,
+      model: updatedConfig.model,
+      windowCount: windows.length,
+    });
+    windows.forEach((window) => {
       window.webContents.send('asr-config-updated', updatedConfig);
     });
     return updatedConfig;
