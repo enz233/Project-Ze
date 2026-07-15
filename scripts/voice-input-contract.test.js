@@ -274,6 +274,18 @@ function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   ]) {
     assert.ok(html.includes(`id="${id}"`), `settings.html missing ASR test control #${id}`);
   }
+  for (const id of [
+    'asrAdvancedSettingsEnabled',
+    'asrAdvancedSettingsSection',
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `settings.html missing ASR advanced setting #${id}`);
+  }
+  assert.match(html, /显示高级 ASR 设置/);
+  assert.match(html, /function getDefaultASRAdvancedFields\(\)/);
+  assert.match(html, /function toggleASRAdvancedSettings\(\)/);
+  assert.match(html, /advancedSettingsEnabled: isASRAdvancedSettingsEnabled\(\)/);
+  assert.match(html, /streamingMode: 'chunked-fallback'/);
+  assert.match(html, /saveASRConfig\(config\)[\s\S]*?voiceInput\.start/);
   assert.match(html, /测试麦克风音量/);
   assert.match(html, /测试语音识别 10 秒/);
   assert.match(html, /可能产生 API 调用/);
