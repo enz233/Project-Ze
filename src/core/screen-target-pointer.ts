@@ -77,10 +77,14 @@ export class ScreenTargetPointer {
   }
 
   isPointerRequest(message: string): boolean {
-    if (!message.startsWith('.')) return false;
-    const normalized = message.slice(1).trim().toLowerCase();
+    const normalized = this.normalizePointerMessage(message).toLowerCase();
     if (!normalized) return false;
     return POINTER_KEYWORDS.some(keyword => normalized.includes(keyword.toLowerCase()));
+  }
+
+  private normalizePointerMessage(message: string): string {
+    const trimmed = message.trim();
+    return trimmed.startsWith('.') ? trimmed.slice(1).trim() : trimmed;
   }
 
   async handle(message: string): Promise<ScreenTargetPointerResult> {
@@ -88,7 +92,7 @@ export class ScreenTargetPointer {
       return { handled: false, moved: false, message: '' };
     }
 
-    const screenMessage = message.slice(1).trim();
+    const screenMessage = this.normalizePointerMessage(message);
     const id = this.startSession();
     const beforeTitle = await this.windowActivityService.getActiveWindowTitle();
     this.showBubble('我看看哦，先别动屏幕~');
