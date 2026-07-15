@@ -5,6 +5,7 @@
   "main": "dist/main/main.js",
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node scripts/voice-input-contract.test.js",
     "start": "npm run build && electron .",
     "dev": "tsc && electron .",
     "dist": "npm run build && electron-builder",
