@@ -108,6 +108,9 @@ contextBridge.exposeInMainWorld('companion', {
   onSpritesPath: (callback: (path: string) => void) => {
     ipcRenderer.on('sprites-path', (_event, path) => callback(path));
   },
+  onMoveVisual: (callback: (payload: any) => void) => {
+    ipcRenderer.on('move-visual', (_event, payload) => callback(payload));
+  },
   onShowBubble: (callback: (text: string) => void) => {
     ipcRenderer.on('show-bubble', (_event, text) => callback(text));
   },

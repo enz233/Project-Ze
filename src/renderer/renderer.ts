@@ -141,7 +141,7 @@
       // @ts-ignore
       window.companion.sendTtsStop();
       // 点击立即显示 dragged
-      setSprite('dragged');
+      setSprite('dragged', true);
       companionEl.className = 'dragged';
       subtitleActive = false; // 清除字幕标记
       showBubble('！');
@@ -391,8 +391,9 @@
     });
   }
 
-  function setSprite(name: string): void {
+  function setSprite(name: string, force?: boolean): void {
     if (!SPRITE_DIR) return;
+    if (isMoveVisualActive && !force) return;
     // 根据名字前缀确定子目录
     var folder = 'basic/misc';
     if (name.indexOf('idle') === 0) folder = 'basic/idle';
