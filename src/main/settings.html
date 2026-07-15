@@ -933,6 +933,7 @@
     let asrMicAnalyser = null;
     let asrMicFrame = null;
     let asrMicLevelData = null;
+    let asrMicStartPending = false;
 
     async function openCameraStream() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1039,11 +1040,16 @@
     }
 
     async function startASRMicMeter() {
-      if (asrMicStream) return;
+      if (asrMicStartPending || asrMicStream) return;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setASRMicStatus('当前环境不支持麦克风访问', true);
         return;
       }
+      const micTestBtn = document.getElementById('asrMicTestBtn');
+      asrMicStartPending = true;
+      micTestBtn.disabled = true;
+      micTestBtn.textContent = '请求麦克风权限...';
+      setASRMicStatus('正在请求麦克风权限…', false);
       try {
         asrMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
@@ -1052,16 +1058,20 @@
         asrMicAnalyser.fftSize = 1024;
         asrMicLevelData = new Uint8Array(asrMicAnalyser.fftSize);
         asrMicAudioContext.createMediaStreamSource(asrMicStream).connect(asrMicAnalyser);
-        document.getElementById('asrMicTestBtn').textContent = '停止麦克风测试';
+        asrMicStartPending = false;
+        micTestBtn.disabled = false;
+        micTestBtn.textContent = '停止麦克风测试';
         setASRMicStatus('正在监听麦克风，请说话…', false);
         updateASRMicMeter();
       } catch (error) {
-        setASRMicStatus('麦克风启动失败：' + (error && error.message ? error.message : String(error)), true);
+        const errorMessage = '麦克风启动失败：' + (error && error.message ? error.message : String(error));
         stopASRMicMeter();
+        setASRMicStatus(errorMessage, true);
       }
     }
 
     function stopASRMicMeter() {
+      asrMicStartPending = false;
       if (asrMicFrame) cancelAnimationFrame(asrMicFrame);
       asrMicFrame = null;
       if (asrMicStream) {
@@ -1075,6 +1085,7 @@
       asrMicAnalyser = null;
       asrMicLevelData = null;
       setASRMicLevel(0);
+      document.getElementById('asrMicTestBtn').disabled = false;
       document.getElementById('asrMicTestBtn').textContent = '测试麦克风音量';
       setASRMicStatus('未开始测试', false);
     }
@@ -1408,6 +1419,7 @@
     });
 
     document.getElementById('asrMicTestBtn').addEventListener('click', async function() {
+      if (asrMicStartPending) return;
       if (asrMicStream) {
         stopASRMicMeter();
         return;
