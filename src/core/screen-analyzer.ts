@@ -1,6 +1,13 @@
-import { desktopCapturer, screen } from 'electron';
+import { app, desktopCapturer, screen } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
 import { AIConfigManager } from './ai-config';
 import { computeScreenCaptureThumbnailSize } from './screen-capture-frame';
+import {
+  buildScreenPointerDebugFileName,
+  isScreenPointerDebugEnabled,
+  sanitizeScreenPointerDebugLabel,
+} from './screen-pointer-debug';
 import {
   SCREEN_FINGERPRINT_HEIGHT,
   SCREEN_FINGERPRINT_WIDTH,
@@ -9,11 +16,19 @@ import {
   summarizeScreenFingerprint,
 } from './screen-fingerprint';
 
-const SCREEN_POINTER_DEBUG = process.env.PROJECT_ZE_SCREEN_POINTER_DEBUG === '1';
+const SCREEN_POINTER_DEBUG = isScreenPointerDebugEnabled();
+let screenPointerDebugFrameSequence = 0;
 
 function debugScreenAnalyzer(message: string, data: Record<string, unknown>): void {
   if (!SCREEN_POINTER_DEBUG) return;
   console.log(message, data);
+}
+
+export interface ScreenCaptureDebugInfo {
+  label: string;
+  pngPath?: string;
+  capturedAt: string;
+  sourceDisplayId?: string;
 }
 
 export interface ScreenCaptureFrame {
@@ -22,6 +37,7 @@ export interface ScreenCaptureFrame {
   screenSize: { width: number; height: number };
   imageSize: { width: number; height: number };
   fingerprint?: ScreenFingerprint;
+  debug?: ScreenCaptureDebugInfo;
 }
 
 export interface ScreenTargetLocateResult {
@@ -73,7 +89,7 @@ export class ScreenAnalyzer {
   }
 
   /** 截取主屏幕并返回坐标映射所需元信息 */
-  async captureScreenFrame(): Promise<ScreenCaptureFrame | null> {
+  async captureScreenFrame(debugLabel = 'screen-frame'): Promise<ScreenCaptureFrame | null> {
     try {
       const primaryDisplay = screen.getPrimaryDisplay();
       const displays = screen.getAllDisplays();
@@ -122,13 +138,16 @@ export class ScreenAnalyzer {
         console.warn('[ScreenAnalyzer] 屏幕指纹生成失败，继续返回截图帧:', error.message);
       }
       const imageSize = resized.getSize();
-      const base64 = resized.toPNG().toString('base64');
+      const pngBuffer = resized.toPNG();
+      const debug = this.writeDebugCaptureFrame(pngBuffer, debugLabel, matchedSource.display_id, imageSize);
+      const base64 = pngBuffer.toString('base64');
       const frame: ScreenCaptureFrame = {
         imageDataUri: `data:image/png;base64,${base64}`,
         origin: { x: matchedDisplay.bounds.x, y: matchedDisplay.bounds.y },
         screenSize: { width: matchedDisplay.bounds.width, height: matchedDisplay.bounds.height },
         imageSize: { width: imageSize.width, height: imageSize.height },
         fingerprint,
+        debug,
       };
 
       debugScreenAnalyzer('[ScreenAnalyzer][debug] capture frame:', {
@@ -137,12 +156,43 @@ export class ScreenAnalyzer {
         screenSize: frame.screenSize,
         imageSize: frame.imageSize,
         fingerprint: summarizeScreenFingerprint(frame.fingerprint),
+        debug: frame.debug,
       });
 
       return frame;
     } catch (error: any) {
       console.error('[ScreenAnalyzer] 截屏失败:', error.message);
       return null;
+    }
+  }
+
+  private writeDebugCaptureFrame(
+    pngBuffer: Buffer,
+    label: string,
+    sourceDisplayId: string | undefined,
+    imageSize: { width: number; height: number }
+  ): ScreenCaptureDebugInfo | undefined {
+    if (!SCREEN_POINTER_DEBUG) return undefined;
+
+    const capturedAt = new Date().toISOString();
+    const safeLabel = sanitizeScreenPointerDebugLabel(label);
+    try {
+      const debugDir = path.join(app.getPath('userData'), 'screen-pointer-debug');
+      fs.mkdirSync(debugDir, { recursive: true });
+      const fileName = buildScreenPointerDebugFileName({
+        sequence: ++screenPointerDebugFrameSequence,
+        label: safeLabel,
+        sourceDisplayId,
+        width: imageSize.width,
+        height: imageSize.height,
+        capturedAt,
+      });
+      const pngPath = path.join(debugDir, fileName);
+      fs.writeFileSync(pngPath, pngBuffer);
+      return { label: safeLabel, pngPath, capturedAt, sourceDisplayId };
+    } catch (error: any) {
+      console.warn('[ScreenAnalyzer] debug 截图写入失败:', error.message);
+      return { label: safeLabel, capturedAt, sourceDisplayId };
     }
   }
 
@@ -153,7 +203,7 @@ export class ScreenAnalyzer {
       throw new Error('屏幕分析未配置，请在设置中配置 Vision API');
     }
 
-    const frame = await this.captureScreenFrame();
+    const frame = await this.captureScreenFrame('screen-pointer-before-locate');
     if (!frame) {
       throw new Error('截屏失败');
     }

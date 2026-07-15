@@ -62,7 +62,7 @@ src/
 - `move-controller.ts`：主进程自动移动控制器，提供 `moveTo` / `cancel` / `isMoving`，负责坐标 anchor、屏幕 clamp、平滑移动和 renderer 移动视觉事件。
 - `bubble-manager.ts`：气泡发送、状态门禁、主动气泡短间隔控制。
 - `bubble-orchestrator.ts`：主进程气泡编排边界，接收带来源/优先级的气泡请求，并把实际投递委托给 `BubbleManager`。
-- `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；当前稳定职责是截图、坐标映射元信息与 Vision 分析。`ScreenCaptureFrame.fingerprint` 与 `screen-capture-frame.ts` 按显示器比例推导缩略图尺寸属于 Unreleased 稳定性增强。
+- `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；当前稳定职责是截图、坐标映射元信息与 Vision 分析。`ScreenCaptureFrame.fingerprint`、`screen-capture-frame.ts` 按显示器比例推导缩略图尺寸，以及 `PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时将 point 前后实际 PNG 截图保存到 Electron `userData/screen-pointer-debug/` 属于 Unreleased 稳定性/诊断增强。
 - `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、移动调用和指向气泡；八方向 point 指向姿态、指向后恢复、fingerprint diff 屏幕变化取消属于 Unreleased 增强。
 - `emotion-system.ts` / `emotion-updater.ts`：情绪状态与更新。
 - `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
@@ -78,6 +78,7 @@ src/
 - `camera-awareness-manager.ts`：摄像头感知状态机，提供 `detectOnce`、`processBackgroundFrame`、`getSnapshot`；仅在稳定 `absent -> present` 时尝试通过 `BubbleOrchestrator` 发出低优先级回来回应。
 - `screen-capture-frame.ts`（Unreleased）：纯 TypeScript 截图帧尺寸工具，默认以 1280 宽按当前显示器比例推导缩略图高度；例如 1707x1067 会使用约 1280x800，确保 Vision point 坐标与 `mapPointToScreen()` 的 X/Y 比例来自同一画面比例。
 - `screen-fingerprint.ts`（Unreleased）：纯 TypeScript 低分辨率截图 fingerprint 工具，提供 16x9 亮度摘要、`0.20` 阈值和 diff/summary helper。
+- `screen-pointer-debug.ts`（Unreleased）：纯 TypeScript point 截图诊断 helper，负责 debug 开关判断、文件名安全化和截图文件名生成；实际 PNG 仅在 `PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时由 `ScreenAnalyzer` 写入 Electron `userData/screen-pointer-debug/`，截图可能包含隐私内容，用完需手动清理。
 
 ## 8 个状态
 

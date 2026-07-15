@@ -145,6 +145,7 @@ export class ScreenTargetPointer {
           origin: located.frame.origin,
           screenSize: located.frame.screenSize,
           imageSize: located.frame.imageSize,
+          debug: located.frame.debug,
           fingerprint: summarizeScreenFingerprint(located.frame.fingerprint),
         },
         result: {
@@ -351,6 +352,7 @@ export class ScreenTargetPointer {
         origin: beforeFrame.origin,
         screenSize: beforeFrame.screenSize,
         imageSize: beforeFrame.imageSize,
+        debug: beforeFrame.debug,
         fingerprint: beforeSummary,
       },
     });
@@ -361,7 +363,7 @@ export class ScreenTargetPointer {
     }
 
     const recaptureStartedAt = Date.now();
-    const afterFrame = await this.screenAnalyzer.captureScreenFrame();
+    const afterFrame = await this.screenAnalyzer.captureScreenFrame('screen-pointer-before-move');
     const recaptureElapsedMs = Date.now() - recaptureStartedAt;
     const afterSummary = summarizeScreenFingerprint(afterFrame?.fingerprint);
     debugScreenTargetPointer('[ScreenTargetPointer][debug] fingerprint after recapture:', {
@@ -372,6 +374,7 @@ export class ScreenTargetPointer {
           origin: afterFrame.origin,
           screenSize: afterFrame.screenSize,
           imageSize: afterFrame.imageSize,
+          debug: afterFrame.debug,
           fingerprint: afterSummary,
         }
         : null,
@@ -400,6 +403,8 @@ export class ScreenTargetPointer {
       threshold: SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
       changed,
       diffSummary,
+      beforeDebug: beforeFrame.debug,
+      afterDebug: afterFrame.debug,
       before: beforeSummary,
       after: afterSummary,
     });
