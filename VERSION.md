@@ -11,7 +11,7 @@
 
 ## Unreleased
 - 屏幕目标指示视觉：使用 `src/assets/sprites/point/` 八方向 point 差分，按目标相对方向选择姿态，并在约 7 秒后只恢复普通视觉、不移动回原位
-- Move 自动移动修复：起点尊重当前窗口真实位置，只对最终目标做 workArea clamp，避免贴近右上角等边缘时移动开始先向下偏移
+- Move 自动移动修复：起点尊重当前窗口真实位置，移动期间锁定窗口尺寸并只对最终目标做 workArea clamp，避免贴近边缘时起点偏移或窗口尺寸膨胀导致视觉 Y 轴持续下沉
 - ASR 设置新增供应商预设：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible；阿里百炼当前作为 OpenAI-compatible 预设接入，不新增专用 ASR 引擎。
 - Renderer 动画守卫修复：为 blink、sleepy、lonely、bubble/subtitle timeout 链加入 handle 清理与 generation 检查，避免 stale callback 覆盖新状态或 guard flag 卡住
 

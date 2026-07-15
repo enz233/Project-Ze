@@ -39,6 +39,7 @@ interface ActiveMove {
   timers: ReturnType<typeof setInterval>[];
   resolve: (result: MoveResult) => void;
   reason?: string;
+  windowSize: { width: number; height: number };
 }
 
 interface MoveSegment {
@@ -83,22 +84,40 @@ export class MoveController {
     }
 
     const [startX, startY] = this.window.getPosition();
+    const startBounds = this.window.getBounds();
     const target = this.resolveTarget(request);
     const dx = target.x - startX;
     const dy = target.y - startY;
     const totalDistance = Math.abs(dx) + Math.abs(dy);
 
+    this.debugMove(request.reason, 'moveTo:init', {
+      request,
+      startPosition: { x: startX, y: startY },
+      startBounds,
+      startDisplay: this.debugDisplayForPoint(startX, startY),
+      target,
+      targetDisplay: this.debugDisplayForPoint(target.x, target.y),
+      delta: { x: dx, y: dy },
+      totalDistance,
+    });
+
     if (totalDistance < 1) {
-      this.window.setPosition(target.x, target.y);
+      this.setWindowPosition(target.x, target.y);
       this.sendVisual({ active: false, reason: request.reason });
       return { success: true, cancelled: false, finalPosition: target };
     }
 
     const segments = this.buildSegments({ x: startX, y: startY }, target, request.axisOrder);
+    this.debugMove(request.reason, 'moveTo:segments', { segments });
     const totalDurationMs = this.resolveDuration(totalDistance, request);
 
     return new Promise<MoveResult>((resolve) => {
-      const activeMove: ActiveMove = { timers: [], resolve, reason: request.reason };
+      const activeMove: ActiveMove = {
+        timers: [],
+        resolve,
+        reason: request.reason,
+        windowSize: { width: startBounds.width, height: startBounds.height },
+      };
       this.activeMove = activeMove;
       this.runSegment(activeMove, segments, 0, target, totalDurationMs, totalDistance, request.reason);
     });
@@ -118,7 +137,7 @@ export class MoveController {
     }
 
     const target = this.resolveTarget(request);
-    this.window.setPosition(target.x, target.y);
+    this.setWindowPosition(target.x, target.y);
     this.sendVisual({ active: false, reason: request.reason });
     return { success: true, cancelled: false, finalPosition: target };
   }
@@ -141,7 +160,7 @@ export class MoveController {
 
     const segment = segments[index];
     if (!segment) {
-      this.window.setPosition(target.x, target.y);
+      this.setWindowPosition(target.x, target.y, activeMove);
       this.finish(true, false);
       return;
     }
@@ -152,10 +171,20 @@ export class MoveController {
     }
 
     const [startX, startY] = this.window.getPosition();
+    const startBounds = this.window.getBounds();
     const dx = segment.x - startX;
     const dy = segment.y - startY;
     const durationMs = this.resolveSegmentDuration(segment.distance, totalDistance, totalDurationMs, segments.length);
     const startedAt = Date.now();
+
+    this.debugMove(reason, 'segment:start', {
+      index,
+      segment,
+      startPosition: { x: startX, y: startY },
+      startBounds,
+      delta: { x: dx, y: dy },
+      durationMs,
+    });
 
     this.sendVisual({ active: true, direction: segment.direction, reason });
 
@@ -175,12 +204,19 @@ export class MoveController {
       const eased = this.easeInOut(t);
       const nextX = Math.round(startX + dx * eased);
       const nextY = Math.round(startY + dy * eased);
-      this.window.setPosition(nextX, nextY);
+      this.setWindowPosition(nextX, nextY, activeMove);
 
       if (t >= 1) {
         clearInterval(timer);
         activeMove.timers = activeMove.timers.filter((activeTimer) => activeTimer !== timer);
-        this.window.setPosition(segment.x, segment.y);
+        this.setWindowPosition(segment.x, segment.y, activeMove);
+        const [endX, endY] = this.window.getPosition();
+        this.debugMove(reason, 'segment:end', {
+          index,
+          requestedEnd: { x: segment.x, y: segment.y },
+          actualEnd: { x: endX, y: endY },
+          bounds: this.window.getBounds(),
+        });
         this.runSegment(activeMove, segments, index + 1, target, totalDurationMs, totalDistance, reason);
       }
     }, FRAME_MS);
@@ -234,13 +270,22 @@ export class MoveController {
     const bounds = this.window.getBounds();
     let targetX = request.x;
     let targetY = request.y;
+    const rawTarget = { x: targetX, y: targetY };
 
     if ((request.anchor || 'top-left') === 'center') {
       targetX = request.x - bounds.width / 2;
       targetY = request.y - bounds.height / 2;
     }
 
-    return this.clampToWorkArea(targetX, targetY, bounds.width, bounds.height);
+    const target = this.clampToWorkArea(targetX, targetY, bounds.width, bounds.height);
+    this.debugMove(request.reason, 'resolveTarget', {
+      anchor: request.anchor || 'top-left',
+      rawTarget,
+      adjustedTarget: { x: targetX, y: targetY },
+      bounds,
+      resolvedTarget: target,
+    });
+    return target;
   }
 
   private clampToWorkArea(x: number, y: number, width: number, height: number): { x: number; y: number } {
@@ -302,6 +347,29 @@ export class MoveController {
     }
     const [x, y] = this.window.getPosition();
     return { success, cancelled, cancelReason, finalPosition: { x, y } };
+  }
+
+  private setWindowPosition(x: number, y: number, activeMove?: ActiveMove): void {
+    if (activeMove) {
+      this.window.setBounds({ x, y, width: activeMove.windowSize.width, height: activeMove.windowSize.height });
+      return;
+    }
+    this.window.setPosition(x, y);
+  }
+
+  private debugMove(reason: string | undefined, label: string, data: unknown): void {
+    if (reason !== 'settings-debug') return;
+    console.log('[MoveDebug]', label, data);
+  }
+
+  private debugDisplayForPoint(x: number, y: number): unknown {
+    const display = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) });
+    return {
+      id: display.id,
+      bounds: display.bounds,
+      workArea: display.workArea,
+      scaleFactor: display.scaleFactor,
+    };
   }
 
   private easeInOut(t: number): number {

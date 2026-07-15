@@ -153,7 +153,7 @@ teleportTo(request: MoveToRequest): MoveResult
 visibilityMode: 'fully-visible'
 ```
 
-默认行为：最终目标保持在目标显示器 `workArea` 内。自动移动尊重当前窗口真实位置作为起点，不在开始时强行修正起点，避免贴近右上角等边缘位置时先向下跳一下。
+默认行为：最终目标保持在目标显示器 `workArea` 内。自动移动尊重当前窗口真实位置作为起点，不在开始时强行修正起点；移动期间锁定开始时的窗口尺寸，只改变窗口位置，避免 Electron bounds 膨胀导致视觉 Y 轴持续下沉。
 
 后续可扩展：
 
