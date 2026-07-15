@@ -5,7 +5,7 @@
   "main": "dist/main/main.js",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node scripts/voice-input-contract.test.js && node scripts/screen-fingerprint-contract.test.js",
+    "test": "npm run build && node scripts/voice-input-contract.test.js && node scripts/screen-fingerprint-contract.test.js && node scripts/screen-capture-frame-contract.test.js",
     "start": "npm run build && electron .",
     "dev": "tsc && electron .",
     "dist": "npm run build && electron-builder",

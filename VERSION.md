@@ -3,6 +3,7 @@
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
 ## Unreleased
+- 屏幕目标指示坐标映射修复：截图缩略图高度改为按显示器宽高比从 1280 宽推导，避免 1707x1067 等非 16:9 屏幕被固定拉伸到 1280x720 后造成 Vision point Y 轴映射偏移
 - 屏幕目标指示视觉：使用 `src/assets/sprites/point/` 八方向 point 差分，按目标相对方向选择姿态，并在约 7 秒后只恢复普通视觉、不移动回原位
 - 屏幕目标指示稳定性：新增 Vision 定位前后一次基于 `ScreenCaptureFrame.fingerprint` 的轻量截图 fingerprint diff，diff threshold 为 `0.20`，屏幕明显变化时在移动前取消旧坐标；不引入 wheel IPC、全局输入 hook 或持续截图监控
 - 屏幕目标指示诊断：为 fingerprint 检查增加前后帧摘要、diff 分布、截图耗时和定位耗时日志，便于确认滚动未取消时是 diff 过低、截图未更新还是检测时机错过

@@ -1,5 +1,6 @@
 import { desktopCapturer, screen } from 'electron';
 import { AIConfigManager } from './ai-config';
+import { computeScreenCaptureThumbnailSize } from './screen-capture-frame';
 import {
   SCREEN_FINGERPRINT_HEIGHT,
   SCREEN_FINGERPRINT_WIDTH,
@@ -76,15 +77,20 @@ export class ScreenAnalyzer {
     try {
       const primaryDisplay = screen.getPrimaryDisplay();
       const displays = screen.getAllDisplays();
+      const captureSize = computeScreenCaptureThumbnailSize({
+        width: primaryDisplay.bounds.width,
+        height: primaryDisplay.bounds.height,
+      });
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
-        thumbnailSize: { width: 1280, height: 720 },
+        thumbnailSize: captureSize,
       });
 
       debugScreenAnalyzer('[ScreenAnalyzer][debug] capture sources:', {
         primaryDisplayId: primaryDisplay.id,
         displayCount: displays.length,
         sourceCount: sources.length,
+        captureSize,
         displayIds: displays.map(display => ({ id: display.id, scaleFactor: display.scaleFactor })),
         sourceDisplayIds: sources.map(source => source.display_id),
       });
@@ -99,7 +105,7 @@ export class ScreenAnalyzer {
       }
 
       const matchedDisplay = displays.find((display) => String(display.id) === String(matchedSource.display_id)) ?? primaryDisplay;
-      const resized = matchedSource.thumbnail.resize({ width: 1280, height: 720 });
+      const resized = matchedSource.thumbnail.resize(captureSize);
       let fingerprint: ScreenFingerprint | undefined;
       try {
         const fingerprintImage = matchedSource.thumbnail.resize({
