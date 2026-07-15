@@ -256,7 +256,7 @@ function testSettingsAsrPresetContractMatchesCoreDefinitions() {
     }
   }
   assert.match(html, /<select id="asrProvider"[^>]*disabled/);
-  assert.match(html, /asrProviderPreset'\)\.addEventListener\('change', function\(\) \{\s*applySelectedASRPreset\(\);/);
+  assert.match(html, /asrProviderPreset'\)\.addEventListener\('change', function\(\) \{[\s\S]*?applySelectedASRPreset\(\);/);
   assert.match(html, /config\.model \?\? preset\.model/);
   assert.doesNotMatch(html, /config\.model \|\| 'gpt-4o-mini-transcribe'/);
 }

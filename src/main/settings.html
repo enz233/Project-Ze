@@ -965,6 +965,14 @@
       }
     }
 
+    function debugASRSettings(message, data) {
+      var text = '[VoiceInput][Settings] ' + message + (data ? ' ' + JSON.stringify(data) : '');
+      console.log(text);
+      if (window.companion && window.companion.log) {
+        window.companion.log('chat', text);
+      }
+    }
+
     function collectASRConfig() {
       return {
         enabled: document.getElementById('asrEnabled').checked,
@@ -1284,6 +1292,7 @@
     });
 
     document.getElementById('asrProviderPreset').addEventListener('change', function() {
+      debugASRSettings('preset changed', { preset: document.getElementById('asrProviderPreset').value });
       applySelectedASRPreset();
       showToast('已自动应用语音输入供应商推荐配置；API Key 不会自动填写', 'success');
     });
@@ -1293,24 +1302,45 @@
     });
 
     document.getElementById('saveASRBtn').addEventListener('click', async () => {
+      debugASRSettings('save clicked');
       const config = collectASRConfig();
+      debugASRSettings('save collected config', {
+        enabled: !!config.enabled,
+        providerPreset: config.providerPreset,
+        provider: config.provider,
+        model: config.model,
+        hasApiKey: !!config.apiKey
+      });
       if (config.provider !== 'openai-compatible') {
+        debugASRSettings('save blocked: unsupported provider', { provider: config.provider });
         showToast('语音输入当前仅支持 OpenAI-compatible 供应商', 'error');
         return;
       }
       if (!Number.isFinite(config.cache.retentionMinutes) || config.cache.retentionMinutes <= 0) {
+        debugASRSettings('save blocked: invalid retention', { retentionMinutes: config.cache.retentionMinutes });
         showToast('缓存保留分钟必须是大于 0 的数字', 'error');
         return;
       }
       if (!Number.isFinite(config.cache.maxSessionBytes) || config.cache.maxSessionBytes <= 0) {
+        debugASRSettings('save blocked: invalid max bytes', { maxSessionBytes: config.cache.maxSessionBytes });
         showToast('单次录音最大字节必须是大于 0 的数字', 'error');
         return;
       }
       if (config.enabled && (!config.baseUrl || !config.model || !config.apiKey)) {
+        debugASRSettings('save blocked: missing required enabled fields', {
+          hasBaseUrl: !!config.baseUrl,
+          hasModel: !!config.model,
+          hasApiKey: !!config.apiKey
+        });
         showToast('启用语音输入时需要 Base URL、模型和 API Key', 'error');
         return;
       }
-      await window.companion.saveASRConfig(config);
+      var savedConfig = await window.companion.saveASRConfig(config);
+      debugASRSettings('save completed', {
+        enabled: !!(savedConfig && savedConfig.enabled),
+        providerPreset: savedConfig && savedConfig.providerPreset,
+        model: savedConfig && savedConfig.model
+      });
       showToast('语音输入设置已保存', 'success');
     });
 
