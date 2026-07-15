@@ -100,6 +100,8 @@ src/
 | user-click | - | 点击 |
 | user-message | text | 发送消息给 AI |
 | window-move-by | {deltaX, deltaY} | 移动窗口 |
+| move-to | MoveToRequest | 调试/后续模块用：按 X/Y 单轴分段平滑移动桌宠到目标坐标 |
+| teleport-to | MoveToRequest | 调试/后续模块用：直接切换桌宠到目标坐标，仍执行 clamp，不播放 move 动画 |
 | mouse-enter/leave | - | 鼠标进出 |
 | lonely-action | boolean | lonely 动画状态 |
 | state-finished | - | 动画状态结束 |
@@ -114,6 +116,7 @@ src/
 | state-update | {state, definition, ...} | 状态同步（500ms） |
 | sprites-path | string | 精灵图路径 |
 | show-bubble | text | 显示气泡 |
+| move-visual | {active, direction, edge?, reason?} | 自动移动过程方向差分 |
 
 ## 常见修改场景
 
