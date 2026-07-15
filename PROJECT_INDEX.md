@@ -123,7 +123,7 @@ src/
 | user-click | - | 点击 |
 | user-message | text | 发送消息给 AI |
 | window-move-by | {deltaX, deltaY} | 移动窗口 |
-| move-to | MoveToRequest | 调试/后续模块用：按 X/Y 单轴分段平滑移动桌宠到目标坐标 |
+| move-to | MoveToRequest | 调试/后续模块用：按 X/Y 单轴分段平滑移动桌宠到目标坐标；目标、分段落点和每帧位置都会按 workArea clamp |
 | teleport-to | MoveToRequest | 调试/后续模块用：直接切换桌宠到目标坐标，仍执行 clamp，不播放 move 动画 |
 | mouse-enter/leave | - | 鼠标进出 |
 | lonely-action | boolean | lonely 动画状态 |
