@@ -106,7 +106,6 @@ src/
 | lonely-action | boolean | lonely 动画状态 |
 | state-finished | - | 动画状态结束 |
 | open-settings | - | 打开设置窗口 |
-| teleport-to | MoveToRequest | 调试/后续模块用：直接切换桌宠到目标坐标，仍执行 clamp，不播放 move 动画 |
 | renderer-log | level, message | 日志转发 |
 
 ### 主 → 渲染
