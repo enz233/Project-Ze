@@ -1,6 +1,6 @@
 {
   "name": "project-ze",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "An open-source desktop AI companion powered by LLM / 一个基于大语言模型的桌面 AI 伙伴",
   "main": "dist/main/main.js",
   "scripts": {
