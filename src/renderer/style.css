@@ -69,6 +69,20 @@ html, body {
   cursor: grabbing;
 }
 
+#sprite.companion-move-flip {
+  transform: scaleX(-1);
+}
+
+@keyframes move-down-sway {
+  0%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+  25% { transform: translateX(-50%) translateY(1px) rotate(-1deg); }
+  75% { transform: translateX(-50%) translateY(1px) rotate(1deg); }
+}
+
+#companion.companion-move-down {
+  animation: move-down-sway 0.6s ease-in-out infinite;
+}
+
 /* 犯困 - 轻微摇晃+下垂 */
 @keyframes sleepy-sway {
   0%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }

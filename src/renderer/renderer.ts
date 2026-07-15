@@ -62,6 +62,14 @@
   var dragTransitionDone = false;
   var dragFirstMove = false;
   var isDragVisualActive = false; // 拖拽视觉是否激活（mousedown到mouseup之间）
+
+  // 移动动画相关
+  var moveAnimTimer: ReturnType<typeof setInterval> | null = null;
+  var moveFrameIndex = 0;
+  var moveUpForward = true;
+  var currentMoveDirection: string | null = null;
+  var isMoveVisualActive = false;
+
   var sleepyAnimRunning = false;
   var justDragged = false; // 刚完成拖拽，忽略接下来的 click
 
@@ -122,6 +130,13 @@
       dragAccumX = 0;
       dragAccumY = 0;
       currentDragDirection = null;
+      stopMoveAnimation();
+      isMoveVisualActive = false;
+      currentMoveDirection = null;
+      moveFrameIndex = 0;
+      moveUpForward = true;
+      companionEl.classList.remove('companion-move-down');
+      spriteEl.classList.remove('companion-move-flip');
       // 打断当前 TTS 播放
       // @ts-ignore
       window.companion.sendTtsStop();
@@ -314,6 +329,14 @@
     });
 
     // @ts-ignore
+    if (window.companion.onMoveVisual) {
+      // @ts-ignore
+      window.companion.onMoveVisual(function (event: any) {
+        updateMoveVisual(event);
+      });
+    }
+
+    // @ts-ignore
     window.companion.onStateChanged(function (event: any) {
       currentState = event.to;
       onStateEnter(event.to, event.from);
@@ -382,6 +405,89 @@
     var path = SPRITE_DIR + folder + '/' + name + '.png';
     console.log('[Sprite]', name);
     spriteEl.src = path;
+  }
+
+  function setMoveSprite(group: string, frame: string): void {
+    if (!SPRITE_DIR) return;
+    var path = SPRITE_DIR + 'move/' + group + '/' + frame + '.png';
+    console.log('[Sprite] move/' + group + '/' + frame);
+    spriteEl.src = path;
+  }
+
+  function stopMoveAnimation(): void {
+    if (moveAnimTimer) {
+      clearInterval(moveAnimTimer);
+      moveAnimTimer = null;
+    }
+  }
+
+  function clearMoveVisual(): void {
+    stopMoveAnimation();
+    isMoveVisualActive = false;
+    currentMoveDirection = null;
+    moveFrameIndex = 0;
+    moveUpForward = true;
+    companionEl.classList.remove('companion-move-down');
+    spriteEl.classList.remove('companion-move-flip');
+  }
+
+  function startMoveAnimation(direction: string): void {
+    stopMoveAnimation();
+    currentMoveDirection = direction;
+    moveFrameIndex = 0;
+    moveUpForward = true;
+    companionEl.classList.remove('companion-move-down');
+    spriteEl.classList.remove('companion-move-flip');
+
+    if (direction === 'left' || direction === 'right') {
+      var frames = ['move_1', 'move_2', 'move_3', 'move_4', 'move_5'];
+      if (direction === 'right') spriteEl.classList.add('companion-move-flip');
+      setMoveSprite('move', frames[moveFrameIndex]);
+      moveAnimTimer = setInterval(function () {
+        moveFrameIndex = (moveFrameIndex + 1) % frames.length;
+        setMoveSprite('move', frames[moveFrameIndex]);
+      }, 300);
+      return;
+    }
+
+    if (direction === 'up') {
+      var upFrames = ['up_1', 'up_2'];
+      setMoveSprite('up', upFrames[moveFrameIndex]);
+      moveAnimTimer = setInterval(function () {
+        if (moveUpForward) {
+          moveFrameIndex++;
+          if (moveFrameIndex >= upFrames.length - 1) moveUpForward = false;
+        } else {
+          moveFrameIndex--;
+          if (moveFrameIndex <= 0) moveUpForward = true;
+        }
+        setMoveSprite('up', upFrames[moveFrameIndex]);
+      }, 300);
+      return;
+    }
+
+    if (direction === 'down') {
+      companionEl.classList.add('companion-move-down');
+      setMoveSprite('down', 'down_0');
+    }
+  }
+
+  function updateMoveVisual(event: any): void {
+    var active = !!(event && event.active);
+    if (!active) {
+      clearMoveVisual();
+      lastVisualState = '';
+      updateVisual(currentState, null);
+      return;
+    }
+
+    if (isDragVisualActive) return;
+
+    isMoveVisualActive = true;
+    var direction = event.direction || 'down';
+    if (direction !== currentMoveDirection) {
+      startMoveAnimation(direction);
+    }
   }
 
   function stopSleepAnim(): void {
@@ -695,6 +801,8 @@
     if (isBlinking && state === 'idle') return;
     // 拖拽期间不覆盖精灵图
     if (isDragVisualActive) return;
+    // 自动移动期间不覆盖精灵图
+    if (isMoveVisualActive) return;
     // 拖拽已结束但主进程还在发旧的 dragged 状态，忽略
     if (state === 'dragged' && !isDragVisualActive) return;
 
