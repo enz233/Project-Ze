@@ -142,13 +142,13 @@ export class ScreenTargetPointer {
         return { handled: true, moved: false, message: failureMessage, locateResult: result };
       }
 
-      if (await this.hasFingerprintChangedBeforeMove(id, located.frame)) {
-        console.log('[ScreenTargetPointer][debug] screen changed before move:', { sessionId: id });
-        return this.screenChangedResult(result);
-      }
-
+      const fingerprintChanged = await this.hasFingerprintChangedBeforeMove(id, located.frame);
       if (!this.isCurrent(id)) {
         return this.cancelledResult('new-request');
+      }
+      if (fingerprintChanged) {
+        console.log('[ScreenTargetPointer][debug] screen changed before move:', { sessionId: id });
+        return this.screenChangedResult(result);
       }
 
       const screenPoint = this.screenAnalyzer.mapPointToScreen(located.frame, result.point!);
