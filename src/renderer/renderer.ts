@@ -68,6 +68,9 @@
   var isDragVisualActive = false; // 拖拽视觉是否激活（mousedown到mouseup之间）
   var isMoveVisualActive = false;
   var currentMoveDirection: string | null = null;
+  var moveAnimTimer: ReturnType<typeof setInterval> | null = null;
+  var moveFrameIndex = 0;
+  var moveUpForward = true;
   var sleepyAnimRunning = false;
   var justDragged = false; // 刚完成拖拽，忽略接下来的 click
 
@@ -131,6 +134,7 @@
       dragAccumX = 0;
       dragAccumY = 0;
       currentDragDirection = null;
+      clearMoveVisualState(false);
       // 打断当前 TTS 播放
       // @ts-ignore
       window.companion.sendTtsStop();
@@ -446,11 +450,8 @@
 
   function updateMoveVisual(payload: any): void {
     if (!payload || !payload.active) {
-      if (!isMoveVisualActive) return;
-      isMoveVisualActive = false;
-      currentMoveDirection = null;
-      lastVisualState = '';
-      updateVisual(currentState, null);
+      if (!isMoveVisualActive && !moveAnimTimer && !currentMoveDirection) return;
+      clearMoveVisualState(true);
       return;
     }
 
@@ -462,12 +463,70 @@
     }
 
     isMoveVisualActive = true;
-    companionEl.className = 'dragged';
-
     if (direction !== currentMoveDirection) {
       currentMoveDirection = direction;
-      setSprite('dragged_' + direction);
+      startMoveAnimation(direction);
     }
+  }
+
+  function clearMoveVisualState(restoreVisual: boolean): void {
+    if (moveAnimTimer) {
+      clearInterval(moveAnimTimer);
+      moveAnimTimer = null;
+    }
+    isMoveVisualActive = false;
+    currentMoveDirection = null;
+    moveFrameIndex = 0;
+    moveUpForward = true;
+    companionEl.classList.remove('companion-move-down');
+    spriteEl.classList.remove('companion-move-flip');
+    if (restoreVisual) {
+      lastVisualState = '';
+      updateVisual(currentState, null);
+    }
+  }
+
+  function startMoveAnimation(direction: string): void {
+    if (moveAnimTimer) {
+      clearInterval(moveAnimTimer);
+      moveAnimTimer = null;
+    }
+    moveFrameIndex = 0;
+    moveUpForward = true;
+    companionEl.className = '';
+    spriteEl.classList.remove('companion-move-flip');
+
+    if (direction === 'down') {
+      companionEl.classList.add('companion-move-down');
+      setMoveSprite('down', 'down_0');
+      return;
+    }
+
+    if (direction === 'right') {
+      spriteEl.classList.add('companion-move-flip');
+    }
+
+    if (direction === 'up') {
+      setMoveSprite('up', 'up_1');
+      moveAnimTimer = setInterval(function () {
+        setMoveSprite('up', moveUpForward ? 'up_2' : 'up_1');
+        moveUpForward = !moveUpForward;
+      }, 300);
+      return;
+    }
+
+    setMoveSprite('move', 'move_1');
+    moveAnimTimer = setInterval(function () {
+      moveFrameIndex = (moveFrameIndex % 5) + 1;
+      setMoveSprite('move', 'move_' + moveFrameIndex);
+    }, 300);
+  }
+
+  function setMoveSprite(group: string, frame: string): void {
+    if (!SPRITE_DIR) return;
+    var path = SPRITE_DIR + 'move/' + group + '/' + frame + '.png';
+    console.log('[Sprite]', 'move/' + group + '/' + frame);
+    spriteEl.src = path;
   }
 
   function playMicroBehavior(payload: any): void {

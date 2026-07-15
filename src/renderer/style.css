@@ -231,6 +231,20 @@ html, body {
   border-top: 5px solid rgba(255, 255, 255, 0.92);
 }
 
+#sprite.companion-move-flip {
+  transform: scaleX(-1);
+}
+
+@keyframes move-down-sway {
+  0%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+  25% { transform: translateX(-50%) translateY(1px) rotate(-1deg); }
+  75% { transform: translateX(-50%) translateY(1px) rotate(1deg); }
+}
+
+#companion.companion-move-down {
+  animation: move-down-sway 0.6s ease-in-out infinite;
+}
+
 /* 聊天输入框 */
 #chat-input {
   position: absolute;
