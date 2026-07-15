@@ -13,6 +13,7 @@ import { ScreenAnalyzer } from '../core/screen-analyzer';
 import { TTSConfigManager } from '../core/tts-config';
 import { TTSManager } from '../core/tts-manager';
 import { ObserverManager } from '../core/observer-manager';
+import { MoveController, MoveToRequest } from '../core/move-controller';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -29,6 +30,7 @@ let screenAnalyzer: ScreenAnalyzer;
 let ttsConfigManager: TTSConfigManager;
 let ttsManager: TTSManager;
 let observerManager: ObserverManager;
+let moveController: MoveController | null = null;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -61,6 +63,9 @@ function createWindow(): void {
 
   // 默认穿透，鼠标进入角色时恢复交互
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
+  moveController = new MoveController(mainWindow, {
+    sendVisual: (event) => mainWindow?.webContents.send('move-visual', event),
+  });
   mainWindow.loadFile(path.join(__dirname, '..', '..', 'src', 'renderer', 'index.html'));
 
   // F12 打开 DevTools，F11 打开设置，F3 打开调试窗口
@@ -213,6 +218,16 @@ function setupIPC(): void {
     if (!mainWindow || mainWindow.isDestroyed() || isDragging) return;
     const [x, y] = mainWindow.getPosition();
     mainWindow.setPosition(x + data.deltaX, y + data.deltaY);
+  });
+
+  ipcMain.handle('move-to', async (_event, request: MoveToRequest) => {
+    if (!moveController) return { success: false, cancelled: false, finalPosition: { x: 0, y: 0 } };
+    return moveController.moveTo(request);
+  });
+
+  ipcMain.handle('teleport-to', async (_event, request: MoveToRequest) => {
+    if (!moveController) return { success: false, cancelled: false, finalPosition: { x: 0, y: 0 } };
+    return moveController.teleportTo(request);
   });
 
   ipcMain.on('mouse-enter', () => {

@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('companion', {
   sendWindowMoveBy: (data: { deltaX: number; deltaY: number }) => {
     ipcRenderer.send('window-move-by', data);
   },
+  moveTo: (request: any): Promise<any> => ipcRenderer.invoke('move-to', request),
+  teleportTo: (request: any): Promise<any> => ipcRenderer.invoke('teleport-to', request),
   sendMouseEnter: () => {
     ipcRenderer.send('mouse-enter');
   },
