@@ -1292,7 +1292,7 @@
       showToast('已应用语音输入供应商推荐配置；API Key 不会自动填写', 'success');
     });
 
-    document.getElementById('saveASRBtn').addEventListener('click', () => {
+    document.getElementById('saveASRBtn').addEventListener('click', async () => {
       const config = collectASRConfig();
       if (config.provider !== 'openai-compatible') {
         showToast('语音输入当前仅支持 OpenAI-compatible 供应商', 'error');
@@ -1310,7 +1310,7 @@
         showToast('启用语音输入时需要 Base URL、模型和 API Key', 'error');
         return;
       }
-      window.companion.saveASRConfig(config);
+      await window.companion.saveASRConfig(config);
       showToast('语音输入设置已保存', 'success');
     });
 

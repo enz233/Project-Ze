@@ -374,6 +374,11 @@
     updateChatStatus({ phase: 'idle', message: 'Enter 发送，Ctrl+Enter 换行' });
   }
 
+  function keepChatInputOpen(): void {
+    chatInputWrapEl.classList.remove('hidden');
+    chatInputEl.focus();
+  }
+
   function closeChatInput(clearText: boolean): void {
     chatInputWrapEl.classList.add('hidden');
     if (clearText) {
@@ -414,8 +419,11 @@
     voiceInputBtnEl.classList.toggle('disabled', !voiceInputEnabled);
     voiceInputBtnEl.setAttribute('aria-disabled', voiceInputEnabled ? 'false' : 'true');
     voiceInputBtnEl.title = voiceInputEnabled
-      ? '语音输入：点击开始/结束，' + voiceHoldToTalkShortcut + ' 长按说话'
+      ? '语音输入已启用：点击开始/结束，' + voiceHoldToTalkShortcut + ' 长按说话'
       : '语音输入未启用：点击查看提示，F11 设置里可开启';
+    if (voiceInputEnabled && !chatInputWrapEl.classList.contains('hidden')) {
+      updateChatStatus({ phase: 'idle', message: '语音输入已启用，点击麦克风开始说话' });
+    }
   }
 
   function refreshVoiceInputConfig(): void {
@@ -682,10 +690,12 @@
     // @ts-ignore
     window.companion.voiceInput.onTranscript(function (payload: any) {
       if (payload.type === 'partial') {
+        keepChatInputOpen();
         setChatInputValue(voicePartialBase + payload.text);
         return;
       }
       if (payload.type === 'final') {
+        keepChatInputOpen();
         var finalText = payload.text || chatInputEl.value;
         setChatInputValue(finalText);
         voicePartialBase = finalText;

@@ -456,11 +456,12 @@ function setupIPC(): void {
     return asrConfigManager.get();
   });
 
-  ipcMain.on('save-asr-config', (_event, config: any) => {
+  ipcMain.handle('save-asr-config', (_event, config: any) => {
     asrConfigManager.update(config);
     const updatedConfig = asrConfigManager.get();
     voiceAudioCache?.updateConfig(updatedConfig.cache);
     mainWindow?.webContents.send('asr-config-updated', updatedConfig);
+    return updatedConfig;
   });
 
   ipcMain.handle('voice-input-start', async (_event, options: any) => {
