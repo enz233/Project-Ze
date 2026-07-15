@@ -98,7 +98,7 @@ src/
 - **IPC 注册**：`setupIPC()` 在 `app.whenReady` 前调用一次
 - **拖拽**：主进程用 `screen.getCursorScreenPoint()` 轮询鼠标位置
 - **AI 模块**：AIConfigManager → AIService → ChatManager
-- **设置窗口**：单例模式，F11 打开
+- **设置窗口**：单例模式，F11 打开；“其他”页包含临时 Move 测试（Debug）区块，可输入坐标调用 `moveTo` / `teleportTo` 验证移动效果
 - **调试窗口**：F3 打开，显示日志、关系数值、互动统计、常用应用和生活习惯提示词
 - **主动回应**：当前主动回应主路径：`ObserverManager → ContextCollector → ProactiveReactionSystem → MicroBehaviorManager → BubbleOrchestrator → BubbleManager.tryShowProactiveBubble`。基于轻量上下文快照、应用切换、工作/休息转换、长专注和直接互动生成轻柔回应；规则来自 `src/config/proactive-reactions.json` 与 `src/config/micro-behaviors.json`，Debug 面板显示最近决策/拦截原因/预算状态。`BubbleOrchestrator` 只负责主进程气泡请求的轻量编排；`BubbleManager` 继续负责状态门禁、冷却和 `show-bubble` IPC 投递。
 

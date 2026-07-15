@@ -927,6 +927,14 @@
       showToast('✓ 外观已应用', 'success');
     });
 
+    document.getElementById('moveTestBtn').addEventListener('click', function() {
+      runMoveDebugTest('move');
+    });
+
+    document.getElementById('teleportTestBtn').addEventListener('click', function() {
+      runMoveDebugTest('teleport');
+    });
+
     // 测试连接
     document.getElementById('testBtn').addEventListener('click', async function() {
       var btn = this;
