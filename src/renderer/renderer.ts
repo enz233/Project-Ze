@@ -47,10 +47,14 @@
   var currentState = 'idle';
   var bubbleTimeout: ReturnType<typeof setTimeout> | null = null;
   var blinkTimer: ReturnType<typeof setTimeout> | null = null;
+  var blinkFrameTimer: ReturnType<typeof setTimeout> | null = null;
+  var blinkGeneration = 0;
   var sleepAnimTimer: ReturnType<typeof setInterval> | null = null;
   var sleepyAnimTimer: ReturnType<typeof setTimeout> | null = null;
+  var sleepyAnimGeneration = 0;
   var lonelyAnimTimer: ReturnType<typeof setTimeout> | null = null;
   var lonelyActionTimer: ReturnType<typeof setTimeout> | null = null;
+  var lonelyAnimGeneration = 0;
   var triedAnimTimer: ReturnType<typeof setTimeout> | null = null;
   var isBlinking = false;
 
@@ -506,7 +510,17 @@
     }
   }
 
+  function stopBlinkAnim(): void {
+    blinkGeneration++;
+    if (blinkFrameTimer) {
+      clearTimeout(blinkFrameTimer);
+      blinkFrameTimer = null;
+    }
+    isBlinking = false;
+  }
+
   function stopSleepyAnim(): void {
+    sleepyAnimGeneration++;
     if (sleepyAnimTimer) {
       clearTimeout(sleepyAnimTimer);
       sleepyAnimTimer = null;
@@ -515,22 +529,26 @@
   }
 
   function stopLonelyAnim(): void {
+    lonelyAnimGeneration++;
     if (lonelyAnimTimer) {
       clearTimeout(lonelyAnimTimer);
       lonelyAnimTimer = null;
     }
+    isLonelyExiting = false;
     stopLonelyAction();
   }
 
   /** lonely 动画：lonely_0 → 1 → 2 → 3 → 4 → lonely（停留最终帧） */
   function startLonelyAnim(): void {
     stopLonelyAnim();
+    var generation = ++lonelyAnimGeneration;
     setSprite('lonely_0');
     var frames = ['lonely_1', 'lonely_2', 'lonely_3', 'lonely_4', 'lonely'];
     var i = 0;
     function next(): void {
       lonelyAnimTimer = setTimeout(function () {
-        if (currentState !== 'lonely') return;
+        lonelyAnimTimer = null;
+        if (generation !== lonelyAnimGeneration || currentState !== 'lonely') return;
         setSprite(frames[i]);
         i++;
         if (i < frames.length) {
@@ -555,8 +573,12 @@
 
   /** lonely 退出动画：从当前帧反向播放回 lonely_0 */
   function playLonelyExit(callback: () => void): void {
-    stopLonelyAnim();
+    if (lonelyAnimTimer) {
+      clearTimeout(lonelyAnimTimer);
+      lonelyAnimTimer = null;
+    }
     stopLonelyAction();
+    var generation = ++lonelyAnimGeneration;
     // 找到当前帧在序列中的位置，从那里开始反向
     var fullSeq = ['lonely_0', 'lonely_1', 'lonely_2', 'lonely_3', 'lonely_4', 'lonely'];
     var currentSrc = spriteEl.src;
@@ -577,7 +599,8 @@
     var i = 0;
     function next(): void {
       lonelyAnimTimer = setTimeout(function () {
-        if (currentState !== 'lonely') { isLonelyExiting = false; return; }
+        lonelyAnimTimer = null;
+        if (generation !== lonelyAnimGeneration) return;
         setSprite(frames[i]);
         i++;
         if (i < frames.length) {
@@ -654,28 +677,38 @@
   function startSleepyAnim(): void {
     if (sleepyAnimRunning) return;
     sleepyAnimRunning = true;
+    var generation = ++sleepyAnimGeneration;
+
+    function isCurrentSleepyAnim(): boolean {
+      if (generation === sleepyAnimGeneration && currentState === 'sleepy') return true;
+      sleepyAnimTimer = null;
+      sleepyAnimRunning = false;
+      return false;
+    }
+
+    function scheduleFrame(callback: () => void, delay: number): void {
+      sleepyAnimTimer = setTimeout(function () {
+        sleepyAnimTimer = null;
+        if (!isCurrentSleepyAnim()) return;
+        callback();
+      }, delay);
+    }
 
     function scheduleNext(): void {
       // 基础停留时间 4~8 秒，然后播放过渡帧
       var baseDelay = 4000 + Math.random() * 4000;
-      sleepyAnimTimer = setTimeout(function () {
-        if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
+      scheduleFrame(function () {
         setSprite('sleepy_2');
-        sleepyAnimTimer = setTimeout(function () {
-          if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
+        scheduleFrame(function () {
           setSprite('sleepy_3');
-          sleepyAnimTimer = setTimeout(function () {
-            if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
+          scheduleFrame(function () {
             setSprite('sleepy'); // 最终帧
-            sleepyAnimTimer = setTimeout(function () {
-              if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
+            scheduleFrame(function () {
               // 反向返回
               setSprite('sleepy_3');
-              sleepyAnimTimer = setTimeout(function () {
-                if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
+              scheduleFrame(function () {
                 setSprite('sleepy_2');
-                sleepyAnimTimer = setTimeout(function () {
-                  if (currentState !== 'sleepy') { sleepyAnimRunning = false; return; }
+                scheduleFrame(function () {
                   setSprite('sleepy_1'); // 回到主帧
                   scheduleNext(); // 开始下一轮
                 }, 800);
@@ -804,7 +837,7 @@
       playLonelyExit(function () {
         isLonelyExiting = false;
         lastVisualState = '';
-        updateVisual(state, _definition);
+        updateVisual(currentState === state ? state : currentState, _definition);
       });
       return;
     }
@@ -818,7 +851,7 @@
 
     // 离开眨眼状态时重置标记
     if (state !== 'idle' && state !== 'curious' && state !== 'sleepy') {
-      isBlinking = false;
+      stopBlinkAnim();
     }
 
     lastVisualState = state;
@@ -907,14 +940,17 @@
   }
 
   var bubbleHideTimeout: ReturnType<typeof setTimeout> | null = null;
+  var bubbleGeneration = 0;
   var subtitleActive = false; // 字幕正在播放
 
   function showBubble(text: string): void {
     // 字幕播放期间，普通气泡不能覆盖
     if (subtitleActive) return;
 
+    var generation = ++bubbleGeneration;
     if (bubbleTimeout) {
       clearTimeout(bubbleTimeout);
+      bubbleTimeout = null;
     }
     if (bubbleHideTimeout) {
       clearTimeout(bubbleHideTimeout);
@@ -927,14 +963,21 @@
     bubbleEl.classList.add('visible');
 
     bubbleTimeout = setTimeout(function () {
+      bubbleTimeout = null;
+      if (generation !== bubbleGeneration) return;
       bubbleEl.classList.remove('visible');
-      bubbleHideTimeout = setTimeout(function () { bubbleEl.classList.add('hidden'); }, 500);
+      bubbleHideTimeout = setTimeout(function () {
+        bubbleHideTimeout = null;
+        if (generation !== bubbleGeneration) return;
+        bubbleEl.classList.add('hidden');
+      }, 500);
     }, 3000);
   }
 
   /** 显示字幕（不自动隐藏，等 hideSubtitle 调用） */
   function showSubtitle(text: string): void {
     subtitleActive = true;
+    bubbleGeneration++;
     if (bubbleTimeout) {
       clearTimeout(bubbleTimeout);
       bubbleTimeout = null;
@@ -952,8 +995,21 @@
   /** 隐藏字幕 */
   function hideSubtitle(): void {
     subtitleActive = false;
+    var generation = ++bubbleGeneration;
+    if (bubbleTimeout) {
+      clearTimeout(bubbleTimeout);
+      bubbleTimeout = null;
+    }
+    if (bubbleHideTimeout) {
+      clearTimeout(bubbleHideTimeout);
+      bubbleHideTimeout = null;
+    }
     bubbleEl.classList.remove('visible');
-    setTimeout(function () { bubbleEl.classList.add('hidden'); }, 300);
+    bubbleHideTimeout = setTimeout(function () {
+      bubbleHideTimeout = null;
+      if (generation !== bubbleGeneration) return;
+      bubbleEl.classList.add('hidden');
+    }, 300);
   }
 
   function scheduleNextBlink(): void {
@@ -969,6 +1025,7 @@
       interval = 2000 + Math.random() * 3000 + Math.random() * 3000;
     }
     blinkTimer = setTimeout(function () {
+      blinkTimer = null;
       // sleepy 哈欠播放中不眨眼
       if (currentState === 'sleepy' && sleepyAnimTimer) {
         scheduleNextBlink();
@@ -983,6 +1040,8 @@
 
   function performBlink(): void {
     if (!SPRITE_DIR) return;
+    if (isBlinking) return;
+    var generation = ++blinkGeneration;
     isBlinking = true;
     var speed: number;
     if (currentState === 'curious') {
@@ -996,26 +1055,38 @@
       speed = 80 + Math.random() * 70;
     }
 
+    function finishBlink(): void {
+      blinkFrameTimer = null;
+      if (generation === blinkGeneration) {
+        isBlinking = false;
+      }
+    }
+
     if (currentState === 'sleepy') {
       // sleepy 眨眼：sleepy_1 → sleepy_blink → sleepy_1
       setSprite('sleepy_blink');
-      setTimeout(function () {
+      blinkFrameTimer = setTimeout(function () {
+        if (generation !== blinkGeneration) return;
+        if (currentState !== 'sleepy') { finishBlink(); return; }
         setSprite('sleepy_1');
-        isBlinking = false;
+        finishBlink();
       }, speed * 2);
     } else {
       // idle/curious 眨眼：idle → blink_1 → blink_2 → blink_1 → idle
       setSprite('idle_blink_1');
-      setTimeout(function () {
-        if (currentState !== 'idle' && currentState !== 'curious') { isBlinking = false; return; }
+      blinkFrameTimer = setTimeout(function () {
+        if (generation !== blinkGeneration) return;
+        if (currentState !== 'idle' && currentState !== 'curious') { finishBlink(); return; }
         setSprite('idle_blink_2');
-        setTimeout(function () {
-          if (currentState !== 'idle' && currentState !== 'curious') { isBlinking = false; return; }
+        blinkFrameTimer = setTimeout(function () {
+          if (generation !== blinkGeneration) return;
+          if (currentState !== 'idle' && currentState !== 'curious') { finishBlink(); return; }
           setSprite('idle_blink_1');
-          setTimeout(function () {
-            if (currentState !== 'idle' && currentState !== 'curious') { isBlinking = false; return; }
+          blinkFrameTimer = setTimeout(function () {
+            if (generation !== blinkGeneration) return;
+            if (currentState !== 'idle' && currentState !== 'curious') { finishBlink(); return; }
             setSprite('idle');
-            isBlinking = false;
+            finishBlink();
           }, speed);
         }, speed);
       }, speed);

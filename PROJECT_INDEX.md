@@ -152,11 +152,11 @@ src/
 
 ## 已知待修复（中优先级）
 
-- blink `isBlinking` 标记可能阻塞状态更新
-- lonely 退出动画闭包可能用到旧 state
-- 气泡淡出的 500ms 内部 timeout 无法取消
-- `sleepyAnimRunning` 可能卡住
 - test-ai-connection 返回 undefined 时 renderer 报错（v0.2.12 已加兜底）
+
+## 已解决问题
+
+- v0.2.17 后：renderer 动画守卫已加入 timeout handle 清理和 generation 检查，修复 blink `isBlinking` 阻塞、lonely 退出旧回调、气泡 fade timeout 无法取消、`sleepyAnimRunning` 卡住风险。
 
 ## 版本历史
 

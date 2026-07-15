@@ -79,6 +79,22 @@ Required verification for the implementation plan:
 - Verify `show-bubble`, TTS playback, proactive reaction, and main-process IPC files are unchanged unless a compile error directly requires a fix.
 - Verify `PROJECT_INDEX.md` no longer lists the fixed animation guard issues as unresolved.
 
+## Implementation notes
+
+Implemented in `src/renderer/renderer.ts`:
+
+- Added generation guards for blink, sleepy, lonely and bubble/subtitle timeout chains.
+- Blink frame callbacks now check generation/current state before mutating sprites, and `stopBlinkAnim()` resets stale `isBlinking` state.
+- Sleepy animation callbacks now run through one guarded scheduler; `stopSleepyAnim()` invalidates old callbacks, clears the active timeout and resets `sleepyAnimRunning`.
+- Lonely enter/exit callbacks now invalidate old animation chains and avoid applying stale exit targets after a newer state arrives.
+- Bubble and subtitle fade/hide callbacks now share generation checks so old hide timers cannot hide newer content.
+
+Verification recorded during implementation:
+
+- `npm run build` passed.
+- `npm test` was run as required; project has no test script, so npm reported `Missing script: "test"`.
+- Targeted diff review was limited to `src/renderer/renderer.ts`, `PROJECT_INDEX.md` and this design note.
+
 ## Commit strategy
 
 Recommended implementation commits:
