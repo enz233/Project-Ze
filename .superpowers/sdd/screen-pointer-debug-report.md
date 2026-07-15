@@ -61,7 +61,17 @@ Then check logs for these tags:
 
 These logs should identify whether the issue is from Vision point selection, coordinate mapping, pose/pointer offset, movement clamp, or screen-change detection.
 
+## Follow-up: single-source display id fallback
+
+Runtime logs showed Electron returned one screen source with an empty `display_id`:
+
+```text
+primaryDisplayId: 288698470
+sourceIds: [ { id: 'screen:0:0', displayId: '', name: '整个屏幕' } ]
+```
+
+This made the strict primary-display match fail even on a single-display setup. The capture logic now accepts `sources[0]` only when there is exactly one source; multi-source setups still require an explicit display id match to avoid cross-display coordinate mismatches.
+
 ## Concerns
 
-- This task intentionally adds diagnostics only; it does not change movement or screen-change behavior.
 - Debug logs are verbose and should be removed or gated after the root cause is confirmed.

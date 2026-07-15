@@ -75,7 +75,8 @@ export class ScreenAnalyzer {
 
       if (sources.length === 0) return null;
 
-      const matchedSource = sources.find((source) => String(source.display_id) === String(primaryDisplay.id));
+      const matchedSource = sources.find((source) => String(source.display_id) === String(primaryDisplay.id))
+        ?? (sources.length === 1 ? sources[0] : undefined);
       if (!matchedSource) {
         console.error('[ScreenAnalyzer] 未找到主屏幕截图源，跳过可能错配的坐标映射');
         return null;
