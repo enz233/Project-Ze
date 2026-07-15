@@ -151,15 +151,9 @@ export class MoveController {
       return;
     }
 
-    const [rawStartX, rawStartY] = this.window.getPosition();
-    const bounds = this.window.getBounds();
-    const safeStart = this.clampToWorkArea(rawStartX, rawStartY, bounds.width, bounds.height);
-    const safeSegment = this.clampToWorkArea(segment.x, segment.y, bounds.width, bounds.height);
-    if (safeStart.x !== rawStartX || safeStart.y !== rawStartY) {
-      this.window.setPosition(safeStart.x, safeStart.y);
-    }
-    const dx = safeSegment.x - safeStart.x;
-    const dy = safeSegment.y - safeStart.y;
+    const [startX, startY] = this.window.getPosition();
+    const dx = segment.x - startX;
+    const dy = segment.y - startY;
     const durationMs = this.resolveSegmentDuration(segment.distance, totalDistance, totalDurationMs, segments.length);
     const startedAt = Date.now();
 
@@ -179,15 +173,14 @@ export class MoveController {
       const elapsed = Date.now() - startedAt;
       const t = Math.min(1, elapsed / durationMs);
       const eased = this.easeInOut(t);
-      const nextX = Math.round(safeStart.x + dx * eased);
-      const nextY = Math.round(safeStart.y + dy * eased);
-      const nextPosition = this.clampToWorkArea(nextX, nextY, bounds.width, bounds.height);
-      this.window.setPosition(nextPosition.x, nextPosition.y);
+      const nextX = Math.round(startX + dx * eased);
+      const nextY = Math.round(startY + dy * eased);
+      this.window.setPosition(nextX, nextY);
 
       if (t >= 1) {
         clearInterval(timer);
         activeMove.timers = activeMove.timers.filter((activeTimer) => activeTimer !== timer);
-        this.window.setPosition(safeSegment.x, safeSegment.y);
+        this.window.setPosition(segment.x, segment.y);
         this.runSegment(activeMove, segments, index + 1, target, totalDurationMs, totalDistance, reason);
       }
     }, FRAME_MS);

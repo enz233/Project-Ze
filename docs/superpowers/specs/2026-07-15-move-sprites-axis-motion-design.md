@@ -153,7 +153,7 @@ teleportTo(request: MoveToRequest): MoveResult
 visibilityMode: 'fully-visible'
 ```
 
-默认行为：整个窗口保持在目标显示器 `workArea` 内。当前实现会对最终目标、每个 segment 落点和每帧 `setPosition` 前的位置都执行 clamp，避免向下移动等边界场景把窗口推到任务栏或屏幕外。
+默认行为：最终目标保持在目标显示器 `workArea` 内。自动移动尊重当前窗口真实位置作为起点，不在开始时强行修正起点，避免贴近右上角等边缘位置时先向下跳一下。
 
 后续可扩展：
 
