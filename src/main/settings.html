@@ -1217,6 +1217,22 @@
       };
     }
 
+    function cleanupStaleASRRecognitionStartup(resources) {
+      const recorder = resources && resources.recorder;
+      const stream = resources && resources.stream;
+      if (recorder && recorder.state !== 'inactive') {
+        try {
+          recorder.stop();
+        } catch (_error) {}
+      }
+      if (stream && asrMicStream === stream) {
+        stopASRMicMeter({ preserveStatus: true });
+      }
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    }
+
     async function startASRRecognitionTest() {
       if (asrRecognitionRunning || asrRecognitionStopping) return;
       const config = collectASRConfig();
@@ -1236,6 +1252,7 @@
 
       const startToken = asrRecognitionStartToken + 1;
       asrRecognitionStartToken = startToken;
+      const startupResources = { stream: null, recorder: null };
       try {
         asrRecognitionRunning = true;
         asrRecognitionUploads = [];
@@ -1245,12 +1262,14 @@
         testBtn.disabled = false;
         testBtn.textContent = '停止识别测试';
 
-        asrRecognitionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        startupResources.stream = stream;
         if (startToken !== asrRecognitionStartToken) {
-          await stopASRRecognitionTest(true);
+          cleanupStaleASRRecognitionStartup(startupResources);
           return;
         }
-        await startASRMicMeter(asrRecognitionStream);
+        asrRecognitionStream = stream;
+        await startASRMicMeter(stream);
 
         const mimeType = getASRRecognitionMimeType();
         const session = await window.companion.voiceInput.start({ source: 'settings-test', mimeType });
@@ -1258,19 +1277,22 @@
           if (session && session.sessionId) {
             await window.companion.voiceInput.cancel(session.sessionId).catch(() => {});
           }
-          await stopASRRecognitionTest(true);
+          cleanupStaleASRRecognitionStartup(startupResources);
           return;
         }
         asrRecognitionSessionId = session.sessionId;
-        asrRecognitionRecorder = mimeType
-          ? new MediaRecorder(asrRecognitionStream, { mimeType })
-          : new MediaRecorder(asrRecognitionStream);
-        const recorderMimeType = asrRecognitionRecorder.mimeType || mimeType || 'audio/webm';
+        const recorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream);
+        startupResources.recorder = recorder;
+        asrRecognitionRecorder = recorder;
+        const recorderMimeType = recorder.mimeType || mimeType || 'audio/webm';
         asrRecognitionChunkStartedAt = Date.now();
 
-        asrRecognitionRecorder.ondataavailable = function(event) {
-          if (!asrRecognitionSessionId || !event.data || event.data.size === 0) return;
-          const sessionId = asrRecognitionSessionId;
+        recorder.ondataavailable = function(event) {
+          if (startToken !== asrRecognitionStartToken || !event.data || event.data.size === 0) return;
+          const sessionId = session.sessionId;
+          if (!sessionId) return;
           const capturedAt = Date.now();
           const durationMs = capturedAt - asrRecognitionChunkStartedAt;
           const upload = blobToBase64ForASRTest(event.data).then(function(base64) {
@@ -1292,13 +1314,17 @@
           setASRRecognitionProgress(percent, percent < 100 ? '请说话… ' + percent + '%' : '正在识别…');
         }, 100);
 
-        asrRecognitionRecorder.start(750);
+        recorder.start(750);
         setASRMicStatus('正在录音测试，请说话…', false);
         asrRecognitionStopTimer = setTimeout(function() {
           stopASRRecognitionTest(false);
         }, ASR_RECOGNITION_TEST_MS);
       } catch (error) {
         const errorMessage = '语音识别测试启动失败：' + (error && error.message ? error.message : String(error));
+        if (startToken !== asrRecognitionStartToken) {
+          cleanupStaleASRRecognitionStartup(startupResources);
+          return;
+        }
         await stopASRRecognitionTest(true, { preserveStatus: true });
         setASRMicStatus(errorMessage, true);
       }
