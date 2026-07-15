@@ -13,7 +13,8 @@
   - 保留既有缺 `target` 的 `screen_target_pointer` 防护。
 
 ## 提交
-- `1892a08` - `test: cover intent llm fallback validation`
+- 实现与测试提交：`9d374ee` - `test: cover intent llm fallback validation`
+- 报告元数据提交：本报告更新提交见后续 `git log -1 --short`；由于提交哈希包含文件内容，最终报告提交哈希以命令输出为准。
 
 ## 运行的测试命令和结果
 1. `npm test`
