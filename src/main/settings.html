@@ -928,6 +928,11 @@
     }
 
     let cameraPreviewStream = null;
+    let asrMicStream = null;
+    let asrMicAudioContext = null;
+    let asrMicAnalyser = null;
+    let asrMicFrame = null;
+    let asrMicLevelData = null;
 
     async function openCameraStream() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1004,6 +1009,74 @@
       if (window.companion && window.companion.log) {
         window.companion.log('chat', text);
       }
+    }
+
+    function setASRMicStatus(message, isError) {
+      const el = document.getElementById('asrMicStatus');
+      if (!el) return;
+      el.textContent = message;
+      el.style.color = isError ? '#c62828' : '#666';
+    }
+
+    function setASRMicLevel(level) {
+      const normalized = Math.max(0, Math.min(1, level || 0));
+      const percent = Math.round(normalized * 100);
+      document.getElementById('asrMicLevelBar').style.width = percent + '%';
+      document.getElementById('asrMicLevelText').textContent = '音量：' + percent + '%';
+    }
+
+    function updateASRMicMeter() {
+      if (!asrMicAnalyser || !asrMicLevelData) return;
+      asrMicAnalyser.getByteTimeDomainData(asrMicLevelData);
+      let sum = 0;
+      for (let i = 0; i < asrMicLevelData.length; i++) {
+        const centered = (asrMicLevelData[i] - 128) / 128;
+        sum += centered * centered;
+      }
+      const rms = Math.sqrt(sum / asrMicLevelData.length);
+      setASRMicLevel(Math.min(1, rms * 4));
+      asrMicFrame = requestAnimationFrame(updateASRMicMeter);
+    }
+
+    async function startASRMicMeter() {
+      if (asrMicStream) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setASRMicStatus('当前环境不支持麦克风访问', true);
+        return;
+      }
+      try {
+        asrMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+        asrMicAudioContext = new AudioContextCtor();
+        asrMicAnalyser = asrMicAudioContext.createAnalyser();
+        asrMicAnalyser.fftSize = 1024;
+        asrMicLevelData = new Uint8Array(asrMicAnalyser.fftSize);
+        asrMicAudioContext.createMediaStreamSource(asrMicStream).connect(asrMicAnalyser);
+        document.getElementById('asrMicTestBtn').textContent = '停止麦克风测试';
+        setASRMicStatus('正在监听麦克风，请说话…', false);
+        updateASRMicMeter();
+      } catch (error) {
+        setASRMicStatus('麦克风启动失败：' + (error && error.message ? error.message : String(error)), true);
+        stopASRMicMeter();
+      }
+    }
+
+    function stopASRMicMeter() {
+      if (asrMicFrame) cancelAnimationFrame(asrMicFrame);
+      asrMicFrame = null;
+      if (asrMicStream) {
+        asrMicStream.getTracks().forEach(track => track.stop());
+      }
+      asrMicStream = null;
+      if (asrMicAudioContext) {
+        asrMicAudioContext.close().catch(() => {});
+      }
+      asrMicAudioContext = null;
+      asrMicAnalyser = null;
+      asrMicLevelData = null;
+      setASRMicLevel(0);
+      document.getElementById('asrMicTestBtn').textContent = '测试麦克风音量';
+      setASRMicStatus('未开始测试', false);
     }
 
     function collectASRConfig() {
@@ -1334,6 +1407,14 @@
       showToast('已应用语音输入供应商推荐配置；API Key 不会自动填写', 'success');
     });
 
+    document.getElementById('asrMicTestBtn').addEventListener('click', async function() {
+      if (asrMicStream) {
+        stopASRMicMeter();
+        return;
+      }
+      await startASRMicMeter();
+    });
+
     document.getElementById('saveASRBtn').addEventListener('click', async () => {
       debugASRSettings('save clicked');
       const config = collectASRConfig();
@@ -1411,7 +1492,10 @@
       showToast('摄像头预览已关闭', 'success');
     });
 
-    window.addEventListener('beforeunload', stopCameraPreview);
+    window.addEventListener('beforeunload', function() {
+      stopCameraPreview();
+      stopASRMicMeter();
+    });
 
     document.getElementById('testCameraAwarenessBtn').addEventListener('click', async function() {
       var btn = this;
