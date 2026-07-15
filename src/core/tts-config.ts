@@ -26,6 +26,7 @@ export interface TTSConfig {
   // 阿里云百炼 TTS
   aliyunApiKey: string;
   aliyunBaseURL: string;
+  aliyunEndpointPath: string;
   aliyunModel: string;
   aliyunVoice: string;
   aliyunLanguage: string;
@@ -49,7 +50,8 @@ const DEFAULT_CONFIG: TTSConfig = {
   mimoVoice: '冰糖',
   mimoVoiceDesign: '温柔可爱的少女声音，说话轻声细语',
   aliyunApiKey: '',
-  aliyunBaseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+  aliyunBaseURL: 'https://dashscope.aliyuncs.com/api/v1',
+  aliyunEndpointPath: '/services/aigc/multimodal-generation/generation',
   aliyunModel: 'qwen3-tts-flash',
   aliyunVoice: 'Cherry',
   aliyunLanguage: 'auto',
