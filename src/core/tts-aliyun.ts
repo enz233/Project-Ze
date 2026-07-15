@@ -1,12 +1,14 @@
 /**
  * 阿里云百炼 TTS 引擎
  *
- * 调用阿里云百炼 qwen3-tts 系列模型
- * API: POST {baseURL}/chat/completions（OpenAI 兼容格式）
+ * 调用阿里云百炼 qwen3-tts 系列非实时语音合成模型。
+ * 默认 API: POST {baseURL}/services/aigc/multimodal-generation/generation
+ * 格式：DashScope MultiModalConversation。
  *
  * 支持：
  * - qwen3-tts-flash（系统音色）
- * - qwen3-tts-vc-2026-01-22（自定义音色，需先注册）
+ * - qwen3-tts-instruct-flash（指令控制，需服务端支持）
+ * - qwen3-tts-vd-*（设计音色，voice 填实际设计音色 ID）
  */
 
 import { TTSConfig } from './tts-config';
@@ -19,11 +21,15 @@ export class TTSAliyun implements TTSEngine {
     this.config = config;
   }
 
+  private buildUrl(): string {
+    const baseURL = (this.config.aliyunBaseURL || 'https://dashscope.aliyuncs.com/api/v1').replace(/\/+$/, '');
+    const endpointPath = (this.config.aliyunEndpointPath || '/services/aigc/multimodal-generation/generation').replace(/^\/+/, '');
+    return `${baseURL}/${endpointPath}`;
+  }
+
   /** 合成语音，返回音频 base64 */
   async synthesize(text: string): Promise<TTSAudioResult> {
-    // DashScope MultiModalConversation 端点
-    const baseURL = this.config.aliyunBaseURL || 'https://dashscope.aliyuncs.com/api/v1';
-    const url = baseURL + '/services/aigc/multimodal-generation/generation';
+    const url = this.buildUrl();
     const voice = this.config.aliyunVoice || 'Cherry';
 
     const body: any = {
@@ -31,9 +37,6 @@ export class TTSAliyun implements TTSEngine {
       input: {
         text: text,
         voice: voice,
-      },
-      parameters: {
-        format: 'wav',
       },
     };
 
