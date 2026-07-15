@@ -335,6 +335,53 @@ async function testLlmFallbackLowConfidenceNormalChatDropsSensitiveCapabilities(
   assert.deepStrictEqual(decision.requiredCapabilities, []);
 }
 
+async function testExecutorDispatchesAllowedScreenTarget() {
+  const { IntentRouter } = load('core/intent-router.js');
+  const { IntentExecutor } = load('core/intent-executor.js');
+  const router = new IntentRouter();
+  const calls = [];
+  const executor = new IntentExecutor({
+    screenTargetPointer: async (routed) => {
+      calls.push(routed.decision.target);
+      return { status: 'handled', message: 'pointed' };
+    },
+  });
+
+  const routed = await router.route({ source: 'text_chat', text: '指出下载按钮', userInitiated: true });
+  const result = await executor.execute(routed);
+
+  assert.strictEqual(result.status, 'handled');
+  assert.deepStrictEqual(calls, ['下载按钮']);
+}
+
+async function testExecutorSkipsDeniedDecision() {
+  const { IntentRouter } = load('core/intent-router.js');
+  const { IntentExecutor } = load('core/intent-executor.js');
+  const router = new IntentRouter({ cameraEnabled: () => false });
+  const executor = new IntentExecutor({
+    cameraCheckOnce: async () => ({ status: 'handled', message: 'should not run' }),
+  });
+
+  const routed = await router.route({ source: 'text_chat', text: '检测一下摄像头状态', userInitiated: true });
+  const result = await executor.execute(routed);
+
+  assert.strictEqual(result.status, 'skipped');
+  assert.match(result.message, /denied/);
+}
+
+async function testExecutorReportsMissingHandler() {
+  const { IntentRouter } = load('core/intent-router.js');
+  const { IntentExecutor } = load('core/intent-executor.js');
+  const router = new IntentRouter();
+  const executor = new IntentExecutor({});
+
+  const routed = await router.route({ source: 'text_chat', text: '帮我看看这个页面', userInitiated: true });
+  const result = await executor.execute(routed);
+
+  assert.strictEqual(result.status, 'skipped');
+  assert.match(result.message, /No executor handler/);
+}
+
 async function run() {
   await testRuleClassifierNormalChatDoesNotNeedSensitiveCapabilities();
   await testRuleClassifierScreenSummaryFromNaturalLanguage();
@@ -353,6 +400,9 @@ async function run() {
   await testLlmFallbackInvalidIntentDropsSensitiveCapabilities();
   await testLlmFallbackLowConfidenceDropsSensitiveCapabilities();
   await testLlmFallbackLowConfidenceNormalChatDropsSensitiveCapabilities();
+  await testExecutorDispatchesAllowedScreenTarget();
+  await testExecutorSkipsDeniedDecision();
+  await testExecutorReportsMissingHandler();
   console.log('intent-router contract tests passed');
 }
 
