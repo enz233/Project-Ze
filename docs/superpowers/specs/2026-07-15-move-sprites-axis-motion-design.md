@@ -110,9 +110,20 @@ export interface MoveToRequest {
 
 ### segment 时长
 
-默认继续使用现有速度模型：根据 segment 距离和 `speedPxPerSec` 推导时长。
+默认继续使用现有速度模型：根据 segment 距离和 `speedPxPerSec` 推导时长。当前默认速度为 `320px/s`，用于让自动行走更自然。
 
 如果调用方显式传 `durationMs`，该时长表示整段 move 的总预算。实现时按各 segment 距离占比分配时长，并保留最短时长保护，避免极短 segment 闪跳。若只有一个 segment，则直接使用该时长。
+
+### 当前接口快照
+
+Move 模块当前保持轻量接口：
+
+- `moveTo(request): Promise<MoveResult>`：按 X/Y 单轴分段移动。
+- `teleportTo(request): MoveResult`：直接切换到目标位置。
+- `cancel(reason?)`：取消当前自动移动。
+- `isMoving()`：查询是否正在自动移动。
+
+设置页和 preload 暴露的临时调试入口对应 IPC 为 `move-to` / `teleport-to`；renderer 只消费 `move-visual` 方向事件，不负责窗口坐标。
 
 ### 直接切换接口
 
@@ -142,7 +153,7 @@ teleportTo(request: MoveToRequest): MoveResult
 visibilityMode: 'fully-visible'
 ```
 
-默认行为：整个窗口保持在目标显示器 `workArea` 内。
+默认行为：整个窗口保持在目标显示器 `workArea` 内。当前实现会对最终目标、每个 segment 落点和每帧 `setPosition` 前的位置都执行 clamp，避免向下移动等边界场景把窗口推到任务栏或屏幕外。
 
 后续可扩展：
 
@@ -178,8 +189,8 @@ move/move_5.png
 
 规则：
 
-- `left`：按 `move_1 → move_2 → move_3 → move_4 → move_5 → move_1` 循环。
-- `right`：播放同一序列，但对角色图片水平镜像。
+- `right`：按 `move_1 → move_2 → move_3 → move_4 → move_5 → move_1` 循环。
+- `left`：播放同一序列，但对角色图片水平镜像。
 - 帧间隔固定为 300ms。
 - 方向从 left 切到 right 或从 right 切到 left 时，重置到 `move_1`。
 
