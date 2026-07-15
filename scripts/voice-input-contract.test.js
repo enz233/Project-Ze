@@ -70,11 +70,26 @@ function testVoiceInputManagerExports() {
   assert.match(managerModule.createVoiceSessionId(), /^voice-\d+-[a-z0-9]+$/);
 }
 
+function testVoiceIpcChannelNames() {
+  const channels = [
+    'load-asr-config',
+    'save-asr-config',
+    'voice-input-start',
+    'voice-input-audio-chunk',
+    'voice-input-stop',
+    'voice-input-cancel',
+    'voice-input-status',
+    'voice-input-transcript',
+  ];
+  assert.strictEqual(channels.includes('voice-input-transcript'), true);
+}
+
 function run() {
   testAsrConfigDefaults();
   testAsrEngineFactoryAndParser();
   testVoiceAudioCachePaths();
   testVoiceInputManagerExports();
+  testVoiceIpcChannelNames();
   console.log('voice-input-contract tests passed');
 }
 
