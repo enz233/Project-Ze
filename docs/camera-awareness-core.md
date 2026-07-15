@@ -86,6 +86,66 @@ interface CameraFrameInput {
 
 设置页还提供实时预览窗口：点击“开启预览”后保持一条本地 camera stream 绑定到设置页 `<video>`，用于直观看到当前画面；点击“关闭预览”或关闭设置页会停止 tracks。检测按钮会优先复用这条预览 stream 截取单帧，未开启预览时才短暂打开摄像头并在取帧后立即关闭。实时预览只在本地渲染，不进入 IPC，也不会保存到磁盘。
 
+## 接口速查
+
+renderer 侧统一通过 `window.companion.cameraAwareness` 调用主进程：
+
+```ts
+getConfig(): Promise<CameraAwarenessConfig>
+updateConfig(partial: Partial<CameraAwarenessConfig>): Promise<CameraAwarenessConfig>
+detectOnce(frame: CameraFrameInput): Promise<CameraDetectionResult>
+processBackgroundFrame(frame: CameraFrameInput): Promise<CameraAwarenessSnapshot>
+getSnapshot(): Promise<CameraAwarenessSnapshot>
+```
+
+核心数据结构：
+
+```ts
+type CameraFrameSource = 'settings-test' | 'background';
+type CameraPresence = 'present' | 'absent' | 'uncertain';
+type CameraAffect = 'positive' | 'neutral' | 'low_energy' | 'unclear';
+type CameraStatus = 'present' | 'absent' | 'uncertain' | 'unavailable';
+
+interface CameraFrameInput {
+  imageBase64: string;
+  mimeType: 'image/jpeg' | 'image/png';
+  width: number;
+  height: number;
+  capturedAt: number;
+  source: CameraFrameSource;
+}
+
+interface CameraAwarenessConfig {
+  enabled: boolean;
+  backgroundDetectionEnabled: boolean;
+  lightAffectEnabled: boolean;
+  detectionIntervalMs: number;
+  absentAfterMs: number;
+  minConfidence: number;
+  returnedReactionEnabled: boolean;
+  debugPreviewEnabled: boolean;
+}
+
+interface CameraDetectionResult {
+  presence: CameraPresence;
+  confidence: number;
+  affect: CameraAffect;
+  reason: 'person_visible' | 'no_person_visible' | 'too_dark' | 'camera_blocked' | 'image_unclear' | 'api_error';
+  checkedAt: number;
+}
+
+interface CameraAwarenessSnapshot {
+  status: CameraStatus;
+  lastDetection: CameraDetectionResult | null;
+  lastChangedAt: number | null;
+  lastReturnedAt: number | null;
+  backgroundDetectionRunning: boolean;
+  lastError?: string;
+}
+```
+
+使用约定：`detectOnce` 只服务设置页测试，不触发气泡；`processBackgroundFrame` 才进入稳定状态机，并且只有稳定 `absent -> present` 会尝试回来回应。
+
 ## 验证
 
 ```bash
