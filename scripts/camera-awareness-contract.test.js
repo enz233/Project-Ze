@@ -1,7 +1,13 @@
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 
 function load(modulePath) {
   return require(`../dist/${modulePath}`);
+}
+
+function readProjectFile(relativePath) {
+  return fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8');
 }
 
 function testCameraConfigDefaults() {
@@ -155,6 +161,41 @@ async function testDetectOnceDoesNotTriggerBubble() {
   assert.strictEqual(bubbles.length, 0);
 }
 
+function testCameraSettingsIntegrationHooks() {
+  const mainTs = readProjectFile('src/main/main.ts');
+  const preloadTs = readProjectFile('src/main/preload.ts');
+  const settingsHtml = readProjectFile('src/main/settings.html');
+
+  assert(mainTs.includes("import { CameraAwarenessConfigManager } from '../core/camera-awareness-config';"));
+  assert(mainTs.includes("import { CameraAwarenessManager } from '../core/camera-awareness-manager';"));
+  assert(mainTs.includes("import { CAMERA_AWARENESS_IPC, CameraFrameInput } from '../core/camera-awareness-types';"));
+  assert(mainTs.includes("import { VisionImageAnalyzer } from '../core/vision-image-analyzer';"));
+  assert(mainTs.includes('new CameraAwarenessManager('));
+  assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.getConfig'));
+  assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.updateConfig'));
+  assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.detectOnce'));
+  assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.processBackgroundFrame'));
+  assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.getSnapshot'));
+
+  assert(preloadTs.includes('cameraAwareness: {'));
+  assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:get-config')"));
+  assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:update-config', partial)"));
+  assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:detect-once', frame)"));
+  assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:process-background-frame', frame)"));
+  assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:get-snapshot')"));
+
+  assert(settingsHtml.includes('data-tab="camera"'));
+  assert(settingsHtml.includes('id="tab-camera"'));
+  assert(settingsHtml.includes('id="cameraAwarenessEnabled"'));
+  assert(settingsHtml.includes('id="cameraBackgroundEnabled"'));
+  assert(settingsHtml.includes('id="testCameraAwarenessBtn"'));
+  assert(settingsHtml.includes('function captureCameraFrame(source)'));
+  assert(settingsHtml.includes('navigator.mediaDevices.getUserMedia'));
+  assert(settingsHtml.includes('source: source'));
+  assert(settingsHtml.includes('window.companion.cameraAwareness.detectOnce(frame)'));
+  assert(settingsHtml.includes('window.companion.cameraAwareness.processBackgroundFrame(frame)'));
+}
+
 async function run() {
   testCameraConfigDefaults();
   testCameraParserAcceptsValidJson();
@@ -162,6 +203,7 @@ async function run() {
   testCameraParserFallsBackOnInvalidJson();
   testTypeConstants();
   testCameraIpcChannelNames();
+  testCameraSettingsIntegrationHooks();
   await testCameraAwarenessManagerStateMachine();
   await testDetectOnceDoesNotTriggerBubble();
   console.log('camera-awareness-contract tests passed');

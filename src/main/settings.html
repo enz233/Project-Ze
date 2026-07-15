@@ -555,6 +555,32 @@
         <button class="btn btn-danger" id="clearHistoryBtn">清空历史和记忆</button>
       </div>
 
+      <h2 style="margin-top: 24px;">Move 测试（临时 Debug）</h2>
+      <hr class="divider">
+      <div class="hint" style="margin-bottom: 8px; color: #666;">
+        临时用于验证 moveTo / teleportTo 坐标、clamp 和移动差分；不会保存到配置。
+      </div>
+      <div class="field">
+        <label>目标 X</label>
+        <input type="text" id="moveTestX" placeholder="例如 100" />
+      </div>
+      <div class="field">
+        <label>目标 Y</label>
+        <input type="text" id="moveTestY" placeholder="例如 100" />
+      </div>
+      <div class="field">
+        <label>Anchor</label>
+        <select id="moveTestAnchor">
+          <option value="top-left">top-left（窗口左上角）</option>
+          <option value="center">center（窗口中心）</option>
+        </select>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="moveTestBtn">Move 到坐标</button>
+        <button class="btn btn-secondary" id="teleportTestBtn">Teleport 到坐标</button>
+      </div>
+      <div class="hint" id="moveTestResult" style="margin-top: 8px; color: #666;">等待测试...</div>
+
       <h2 style="margin-top: 24px;">日志</h2>
       <hr class="divider">
       <div class="hint" id="logPath" style="margin-bottom: 8px; word-break: break-all;"></div>
@@ -727,7 +753,6 @@
       document.getElementById('logPath').textContent = '日志路径: ' + logPath;
     }
 
-    // ========== 保存配置 ==========
     function saveConfig() {
       var config = {
         apiKey: document.getElementById('apiKey').value,
@@ -845,6 +870,48 @@
       var input = document.getElementById('visionApiKey');
       input.type = input.type === 'password' ? 'text' : 'password';
     });
+
+    function formatMoveResult(result) {
+      if (!result) return '无返回结果';
+      var finalPosition = result.finalPosition || { x: '?', y: '?' };
+      var reason = result.cancelReason ? ' reason=' + result.cancelReason : '';
+      return 'success=' + !!result.success
+        + ' cancelled=' + !!result.cancelled
+        + reason
+        + ' final=(' + finalPosition.x + ', ' + finalPosition.y + ')';
+    }
+
+    async function runMoveDebugTest(mode) {
+      var xInput = document.getElementById('moveTestX');
+      var yInput = document.getElementById('moveTestY');
+      var anchorSelect = document.getElementById('moveTestAnchor');
+      var resultEl = document.getElementById('moveTestResult');
+      var x = Number(xInput.value);
+      var y = Number(yInput.value);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        resultEl.textContent = '请输入有效坐标';
+        showToast('请输入有效坐标', 'error');
+        return;
+      }
+      var request = {
+        x: x,
+        y: y,
+        anchor: anchorSelect.value,
+        reason: 'settings-debug'
+      };
+      resultEl.textContent = '执行中...';
+      try {
+        var result = mode === 'teleport'
+          ? await window.companion.teleportTo(request)
+          : await window.companion.moveTo(request);
+        resultEl.textContent = formatMoveResult(result);
+        showToast('Move 测试完成', result && result.success ? 'success' : 'error');
+      } catch (error) {
+        var message = error && error.message ? error.message : String(error);
+        resultEl.textContent = '调用失败：' + message;
+        showToast('Move 测试失败', 'error');
+      }
+    }
 
     // ========== 按钮事件 ==========
     // 应用外观
