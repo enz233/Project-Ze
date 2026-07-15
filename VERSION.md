@@ -2,16 +2,11 @@
 
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
-## v0.3.0 (2026-07-15)
-- 新增语音输入 ASR：右键输入框麦克风按钮点击开始/结束，`Ctrl+Shift+Space` 长按说话
-- 新增 ASR 引擎抽象和 OpenAI-compatible provider，主流程通过 `ASREngine.stream(...)` 接收 partial/final transcript
-- 新增 `VoiceInputManager` 和 `VoiceAudioCache`，预留短期音频缓存与 `audioRef` 复用边界
-- 设置界面新增语音输入配置，支持供应商、Base URL、API Key、模型、流式模式、语言、自动发送和缓存参数
-- 文档补充语音输入交互、配置安全、IPC 和模块职责
-
 ## Unreleased
 - 屏幕目标指示视觉：使用 `src/assets/sprites/point/` 八方向 point 差分，按目标相对方向选择姿态，并在约 7 秒后只恢复普通视觉、不移动回原位
+- 屏幕目标指示稳定性：新增 Vision 定位前后一次基于 `ScreenCaptureFrame.fingerprint` 的轻量截图 fingerprint diff，diff threshold 为 `0.20`，屏幕明显变化时在移动前取消旧坐标；不引入 wheel IPC、全局输入 hook 或持续截图监控
 - Move 自动移动修复：起点尊重当前窗口真实位置，移动期间锁定窗口尺寸并只对最终目标做 workArea clamp，避免贴近边缘时起点偏移或窗口尺寸膨胀导致视觉 Y 轴持续下沉
+- Move 模块优化：接入 src/assets/sprites/move/ 专用差分，自动移动改为可指定轴顺序的 X/Y 单轴分段移动，并新增 teleportTo 直接切换接口
 - ASR 设置新增供应商预设：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible；阿里百炼当前作为 OpenAI-compatible 预设接入，不新增专用 ASR 引擎。
 - Renderer 动画守卫修复：为 blink、sleepy、lonely、bubble/subtitle timeout 链加入 handle 清理与 generation 检查，避免 stale callback 覆盖新状态或 guard flag 卡住
 
@@ -24,6 +19,13 @@
 - Move 测试反馈微调：修正自动移动左右镜像方向，降低默认移动速度让行走更自然
 - 设置页新增临时 Move 测试入口，可输入坐标调用 `moveTo` / `teleportTo` 验证自动移动和直接切换
 - 屏幕目标指示系统：规划并实现 `.` 显式屏幕分析中的目标定位与指向流程，普通聊天自然语言自动触发暂缓
+
+## v0.3.0 (2026-07-15)
+- 新增语音输入 ASR：右键输入框麦克风按钮点击开始/结束，`Ctrl+Shift+Space` 长按说话
+- 新增 ASR 引擎抽象和 OpenAI-compatible provider，主流程通过 `ASREngine.stream(...)` 接收 partial/final transcript
+- 新增 `VoiceInputManager` 和 `VoiceAudioCache`，预留短期音频缓存与 `audioRef` 复用边界
+- 设置界面新增语音输入配置，支持供应商、Base URL、API Key、模型、流式模式、语言、自动发送和缓存参数
+- 文档补充语音输入交互、配置安全、IPC 和模块职责
 
 ## v0.2.17 (2026-07-15)
 - 架构清理：移除旧主动响应路径，集中化活动上下文检测，并共享屏幕分析实例
@@ -61,9 +63,6 @@
 - 活动气泡增加冷却，降低重复出现
 - Windows 前台窗口检测改用 Win32 GetForegroundWindow/GetWindowText
 - 修复 AI 连接测试 undefined 兜底和部分动画状态卡住风险
-
-## Unreleased
-- Move 模块优化：接入 src/assets/sprites/move/ 专用差分，自动移动改为可指定轴顺序的 X/Y 单轴分段移动，并新增 teleportTo 直接切换接口
 
 ## v0.2.1 (2026-05-30)
 - AI记忆系统：对话历史持久化，每50条自动生成摘要
