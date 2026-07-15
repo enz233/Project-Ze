@@ -255,6 +255,21 @@ function testSettingsAsrPresetContractMatchesCoreDefinitions() {
       );
     }
   }
+  for (const id of [
+    'asrMicStatus',
+    'asrMicLevelBar',
+    'asrMicLevelText',
+    'asrMicTestBtn',
+    'asrRecognitionProgressBar',
+    'asrRecognitionProgressText',
+    'asrRecognitionTestBtn',
+    'asrRecognitionResult',
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `settings.html missing ASR test control #${id}`);
+  }
+  assert.match(html, /测试麦克风音量/);
+  assert.match(html, /测试语音识别 10 秒/);
+  assert.match(html, /可能产生 API 调用/);
   assert.match(html, /<select id="asrProvider"[^>]*disabled/);
   assert.match(html, /asrProviderPreset'\)\.addEventListener\('change', function\(\) \{[\s\S]*?applySelectedASRPreset\(\);/);
   assert.match(html, /config\.model \?\? preset\.model/);

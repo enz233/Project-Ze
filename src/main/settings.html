@@ -610,6 +610,40 @@
       <div class="field">
         <label>语言</label>
         <input type="text" id="asrLanguage" placeholder="zh">
+        <div class="hint" id="asrValidationMessage" style="color:#c62828;"></div>
+      </div>
+
+      <h2 style="margin-top: 20px;">语音输入测试</h2>
+      <hr class="divider">
+      <div class="hint" style="margin-bottom: 10px; color: #666;">
+        麦克风音量测试只检查本地输入；语音识别测试会录音约 10 秒并调用当前 ASR 配置，可能产生 API 调用。
+      </div>
+
+      <div class="field">
+        <label>麦克风音量</label>
+        <div id="asrMicStatus" class="hint">未开始测试</div>
+        <div style="height: 10px; background: #e0e0e0; border-radius: 999px; overflow: hidden; margin-top: 6px;">
+          <div id="asrMicLevelBar" style="height: 100%; width: 0%; background: #6aa3ff; transition: width 0.08s linear;"></div>
+        </div>
+        <div class="hint" id="asrMicLevelText">音量：0%</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="asrMicTestBtn">测试麦克风音量</button>
+        <button class="btn btn-primary" id="asrRecognitionTestBtn">测试语音识别 10 秒</button>
+      </div>
+
+      <div class="field" style="margin-top: 12px;">
+        <label>识别测试进度</label>
+        <div style="height: 8px; background: #e0e0e0; border-radius: 999px; overflow: hidden;">
+          <div id="asrRecognitionProgressBar" style="height: 100%; width: 0%; background: #81c784; transition: width 0.1s linear;"></div>
+        </div>
+        <div class="hint" id="asrRecognitionProgressText">未开始</div>
+      </div>
+
+      <div class="field">
+        <label>识别结果</label>
+        <textarea id="asrRecognitionResult" rows="4" readonly placeholder="测试识别到的文字会显示在这里"></textarea>
       </div>
 
       <div class="field">
@@ -896,6 +930,25 @@
     }
 
     let cameraPreviewStream = null;
+    let asrMicStream = null;
+    let asrMicAudioContext = null;
+    let asrMicAnalyser = null;
+    let asrMicFrame = null;
+    let asrMicLevelData = null;
+    let asrMicStartPending = false;
+    let asrMicOwnsStream = false;
+    const ASR_RECOGNITION_TEST_MS = 10000;
+    let asrRecognitionRecorder = null;
+    let asrRecognitionStream = null;
+    let asrRecognitionSessionId = null;
+    let asrRecognitionStartedAt = 0;
+    let asrRecognitionProgressTimer = null;
+    let asrRecognitionStopTimer = null;
+    let asrRecognitionChunkStartedAt = 0;
+    let asrRecognitionUploads = [];
+    let asrRecognitionRunning = false;
+    let asrRecognitionStopping = false;
+    let asrRecognitionStartToken = 0;
 
     async function openCameraStream() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -974,25 +1027,181 @@
       }
     }
 
-    function setASRValidationMessage(message) {
-      var el = document.getElementById('asrValidationMessage');
+    function setASRMicStatus(message, isError) {
+      const el = document.getElementById('asrMicStatus');
       if (!el) return;
-      if (!message) {
-        el.style.display = 'none';
-        el.textContent = '';
+      el.textContent = message;
+      el.style.color = isError ? '#c62828' : '#666';
+    }
+
+    function setASRMicLevel(level) {
+      const normalized = Math.max(0, Math.min(1, level || 0));
+      const percent = Math.round(normalized * 100);
+      document.getElementById('asrMicLevelBar').style.width = percent + '%';
+      document.getElementById('asrMicLevelText').textContent = '音量：' + percent + '%';
+    }
+
+    function updateASRMicMeter() {
+      if (!asrMicAnalyser || !asrMicLevelData) return;
+      asrMicAnalyser.getByteTimeDomainData(asrMicLevelData);
+      let sum = 0;
+      for (let i = 0; i < asrMicLevelData.length; i++) {
+        const centered = (asrMicLevelData[i] - 128) / 128;
+        sum += centered * centered;
+      }
+      const rms = Math.sqrt(sum / asrMicLevelData.length);
+      setASRMicLevel(Math.min(1, rms * 4));
+      asrMicFrame = requestAnimationFrame(updateASRMicMeter);
+    }
+
+    function attachASRMicMeter(stream, ownsStream) {
+      if (!stream || asrMicStream) return;
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      asrMicStream = stream;
+      asrMicOwnsStream = !!ownsStream;
+      asrMicAudioContext = new AudioContextCtor();
+      asrMicAnalyser = asrMicAudioContext.createAnalyser();
+      asrMicAnalyser.fftSize = 1024;
+      asrMicLevelData = new Uint8Array(asrMicAnalyser.fftSize);
+      asrMicAudioContext.createMediaStreamSource(asrMicStream).connect(asrMicAnalyser);
+      updateASRMicMeter();
+    }
+
+    async function startASRMicMeter(stream) {
+      if (asrMicStartPending || asrMicStream) return;
+      if (stream) {
+        attachASRMicMeter(stream, false);
+        document.getElementById('asrMicTestBtn').textContent = '测试麦克风音量';
+        setASRMicStatus('正在录音测试，请说话…', false);
         return;
       }
-      el.style.display = 'block';
-      el.textContent = message;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setASRMicStatus('当前环境不支持麦克风访问', true);
+        return;
+      }
+      const micTestBtn = document.getElementById('asrMicTestBtn');
+      asrMicStartPending = true;
+      micTestBtn.disabled = true;
+      micTestBtn.textContent = '请求麦克风权限...';
+      setASRMicStatus('正在请求麦克风权限…', false);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        attachASRMicMeter(stream, true);
+        asrMicStartPending = false;
+        micTestBtn.disabled = false;
+        micTestBtn.textContent = '停止麦克风测试';
+        setASRMicStatus('正在监听麦克风，请说话…', false);
+      } catch (error) {
+        const errorMessage = '麦克风启动失败：' + (error && error.message ? error.message : String(error));
+        stopASRMicMeter({ preserveStatus: true });
+        setASRMicStatus(errorMessage, true);
+      }
+    }
+
+    function stopASRMicMeter(options) {
+      const preserveStatus = !!(options && options.preserveStatus);
+      asrMicStartPending = false;
+      if (asrMicFrame) cancelAnimationFrame(asrMicFrame);
+      asrMicFrame = null;
+      if (asrMicStream && asrMicOwnsStream) {
+        asrMicStream.getTracks().forEach(track => track.stop());
+      }
+      asrMicStream = null;
+      asrMicOwnsStream = false;
+      if (asrMicAudioContext) {
+        asrMicAudioContext.close().catch(() => {});
+      }
+      asrMicAudioContext = null;
+      asrMicAnalyser = null;
+      asrMicLevelData = null;
+      setASRMicLevel(0);
+      document.getElementById('asrMicTestBtn').disabled = false;
+      document.getElementById('asrMicTestBtn').textContent = '测试麦克风音量';
+      if (!preserveStatus) {
+        setASRMicStatus('未开始测试', false);
+      }
+    }
+
+    function blobToBase64ForASRTest(blob) {
+      return new Promise(function(resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function() {
+          const result = String(reader.result || '');
+          resolve(result.includes(',') ? result.split(',')[1] : result);
+        };
+        reader.onerror = function() { reject(reader.error); };
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function setASRRecognitionProgress(percent, message) {
+      const bounded = Math.max(0, Math.min(100, percent || 0));
+      document.getElementById('asrRecognitionProgressBar').style.width = bounded + '%';
+      document.getElementById('asrRecognitionProgressText').textContent = message;
+    }
+
+    function setASRRecognitionResult(text) {
+      document.getElementById('asrRecognitionResult').value = text || '';
+    }
+
+    function appendASRRecognitionResult(text) {
+      const resultEl = document.getElementById('asrRecognitionResult');
+      if (!text) return;
+      resultEl.value = text;
+    }
+
+    function setASRValidationMessage(message) {
+      var el = document.getElementById('asrValidationMessage');
+      if (el) {
+        if (!message) {
+          el.style.display = 'none';
+          el.textContent = '';
+        } else {
+          el.style.display = 'block';
+          el.textContent = message;
+        }
+      }
+      if (message) {
+        setASRMicStatus(message, true);
+      }
     }
 
     function getMissingASREnabledFields(config) {
-      var missing = [];
+      const missing = [];
       if (!config.baseUrl) missing.push('Base URL');
       if (!config.model) missing.push('模型');
       if (!config.apiKey) missing.push('API Key');
       return missing;
     }
+
+    function validateASRRecognitionTestConfig(config) {
+      if (!config.enabled) {
+        setASRValidationMessage('语音输入未开启：请先勾选启用语音输入并保存配置');
+        showToast('请先启用语音输入并保存配置', 'error');
+        return false;
+      }
+      const missing = getMissingASREnabledFields(config);
+      if (missing.length > 0) {
+        const message = '语音输入未开启：缺少 ' + missing.join(' / ');
+        setASRValidationMessage(message);
+        showToast(message, 'error');
+        return false;
+      }
+      setASRValidationMessage('');
+      return true;
+    }
+
+    function getASRRecognitionMimeType() {
+      if (typeof MediaRecorder === 'undefined') return '';
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        return 'audio/webm;codecs=opus';
+      }
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm')) {
+        return 'audio/webm';
+      }
+      return '';
+    }
+
 
     function collectASRConfig() {
       return {
@@ -1014,6 +1223,215 @@
           maxSessionBytes: Number(document.getElementById('asrCacheMaxBytes').value || 10485760),
         },
       };
+    }
+
+    function cleanupStaleASRRecognitionStartup(resources) {
+      const recorder = resources && resources.recorder;
+      const stream = resources && resources.stream;
+      if (recorder && recorder.state !== 'inactive') {
+        try {
+          recorder.stop();
+        } catch (_error) {}
+      }
+      if (stream && asrMicStream === stream) {
+        stopASRMicMeter({ preserveStatus: true });
+      }
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    }
+
+    async function startASRRecognitionTest() {
+      if (asrRecognitionRunning || asrRecognitionStopping) return;
+      const config = collectASRConfig();
+      if (!validateASRRecognitionTestConfig(config)) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setASRMicStatus('当前环境不支持麦克风访问', true);
+        return;
+      }
+      if (typeof MediaRecorder === 'undefined') {
+        setASRMicStatus('当前环境不支持录音测试', true);
+        return;
+      }
+      if (!window.companion || !window.companion.voiceInput) {
+        setASRMicStatus('当前环境不支持语音输入测试', true);
+        return;
+      }
+
+      const startToken = asrRecognitionStartToken + 1;
+      asrRecognitionStartToken = startToken;
+      const startupResources = { stream: null, recorder: null };
+      try {
+        asrRecognitionRunning = true;
+        asrRecognitionUploads = [];
+        setASRRecognitionResult('');
+        setASRRecognitionProgress(0, '请说话… 0%');
+        const testBtn = document.getElementById('asrRecognitionTestBtn');
+        testBtn.disabled = false;
+        testBtn.textContent = '停止识别测试';
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        startupResources.stream = stream;
+        if (startToken !== asrRecognitionStartToken) {
+          cleanupStaleASRRecognitionStartup(startupResources);
+          return;
+        }
+        asrRecognitionStream = stream;
+        await startASRMicMeter(stream);
+
+        const mimeType = getASRRecognitionMimeType();
+        const session = await window.companion.voiceInput.start({ source: 'settings-test', mimeType });
+        if (startToken !== asrRecognitionStartToken) {
+          if (session && session.sessionId) {
+            await window.companion.voiceInput.cancel(session.sessionId).catch(() => {});
+          }
+          cleanupStaleASRRecognitionStartup(startupResources);
+          return;
+        }
+        asrRecognitionSessionId = session.sessionId;
+        const recorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream);
+        startupResources.recorder = recorder;
+        asrRecognitionRecorder = recorder;
+        const recorderMimeType = recorder.mimeType || mimeType || 'audio/webm';
+        asrRecognitionChunkStartedAt = Date.now();
+
+        recorder.ondataavailable = function(event) {
+          if (startToken !== asrRecognitionStartToken || !event.data || event.data.size === 0) return;
+          const sessionId = session.sessionId;
+          if (!sessionId) return;
+          const capturedAt = Date.now();
+          const durationMs = capturedAt - asrRecognitionChunkStartedAt;
+          const upload = blobToBase64ForASRTest(event.data).then(function(base64) {
+            return window.companion.voiceInput.appendAudioChunk({
+              sessionId,
+              chunk: { mimeType: recorderMimeType, base64, capturedAt, durationMs },
+            });
+          }).catch(function(error) {
+            setASRMicStatus('语音测试分片发送失败：' + (error && error.message ? error.message : String(error)), true);
+          });
+          asrRecognitionUploads.push(upload);
+          asrRecognitionChunkStartedAt = Date.now();
+        };
+
+        asrRecognitionStartedAt = Date.now();
+        asrRecognitionProgressTimer = setInterval(function() {
+          const elapsed = Date.now() - asrRecognitionStartedAt;
+          const percent = Math.min(100, Math.round(elapsed / ASR_RECOGNITION_TEST_MS * 100));
+          setASRRecognitionProgress(percent, percent < 100 ? '请说话… ' + percent + '%' : '正在识别…');
+        }, 100);
+
+        recorder.start(750);
+        setASRMicStatus('正在录音测试，请说话…', false);
+        asrRecognitionStopTimer = setTimeout(function() {
+          stopASRRecognitionTest(false);
+        }, ASR_RECOGNITION_TEST_MS);
+      } catch (error) {
+        const errorMessage = '语音识别测试启动失败：' + (error && error.message ? error.message : String(error));
+        if (startToken !== asrRecognitionStartToken) {
+          cleanupStaleASRRecognitionStartup(startupResources);
+          return;
+        }
+        await stopASRRecognitionTest(true, { preserveStatus: true });
+        setASRMicStatus(errorMessage, true);
+      }
+    }
+
+    function cleanupASRRecognitionLocalResources(options) {
+      const preserveStatus = !!(options && options.preserveStatus);
+      if (asrRecognitionProgressTimer) clearInterval(asrRecognitionProgressTimer);
+      asrRecognitionProgressTimer = null;
+      if (asrRecognitionStopTimer) clearTimeout(asrRecognitionStopTimer);
+      asrRecognitionStopTimer = null;
+      if (asrRecognitionRecorder && asrRecognitionRecorder.state !== 'inactive') {
+        try {
+          asrRecognitionRecorder.stop();
+        } catch (_error) {}
+      }
+      asrRecognitionRecorder = null;
+      stopASRMicMeter({ preserveStatus });
+      if (asrRecognitionStream) {
+        asrRecognitionStream.getTracks().forEach(track => track.stop());
+      }
+      asrRecognitionStream = null;
+    }
+
+    function cleanupASRRecognitionOnUnload() {
+      const sessionId = asrRecognitionSessionId;
+      asrRecognitionStartToken += 1;
+      asrRecognitionRunning = false;
+      asrRecognitionStopping = true;
+      cleanupASRRecognitionLocalResources({ preserveStatus: true });
+      asrRecognitionUploads = [];
+      asrRecognitionSessionId = null;
+      if (sessionId && window.companion && window.companion.voiceInput && window.companion.voiceInput.cancel) {
+        try {
+          window.companion.voiceInput.cancel(sessionId).catch(() => {});
+        } catch (_error) {}
+      }
+    }
+
+    async function stopASRRecognitionTest(cancel, options) {
+      if (asrRecognitionStopping) return;
+      if (!asrRecognitionRunning && !asrRecognitionSessionId && !asrRecognitionRecorder && !asrRecognitionStream) return;
+      const preserveStatus = !!(options && options.preserveStatus);
+      const sessionId = asrRecognitionSessionId;
+      const recorder = asrRecognitionRecorder;
+      asrRecognitionStartToken += 1;
+      asrRecognitionStopping = true;
+      asrRecognitionRunning = false;
+      const testBtn = document.getElementById('asrRecognitionTestBtn');
+      testBtn.disabled = true;
+      testBtn.textContent = '正在停止...';
+      if (asrRecognitionProgressTimer) clearInterval(asrRecognitionProgressTimer);
+      asrRecognitionProgressTimer = null;
+      if (asrRecognitionStopTimer) clearTimeout(asrRecognitionStopTimer);
+      asrRecognitionStopTimer = null;
+
+      if (recorder && recorder.state !== 'inactive') {
+        await new Promise(function(resolve) {
+          recorder.onstop = function() { resolve(); };
+          try {
+            recorder.stop();
+          } catch (_error) {
+            resolve();
+          }
+        });
+      }
+      asrRecognitionRecorder = null;
+
+      stopASRMicMeter({ preserveStatus });
+      if (asrRecognitionStream) {
+        asrRecognitionStream.getTracks().forEach(track => track.stop());
+      }
+      asrRecognitionStream = null;
+
+      const uploads = asrRecognitionUploads.slice();
+      asrRecognitionUploads = [];
+      await Promise.all(uploads);
+
+      try {
+        if (sessionId) {
+          if (cancel) {
+            await window.companion.voiceInput.cancel(sessionId);
+            if (!preserveStatus) setASRRecognitionProgress(0, '已取消');
+          } else {
+            setASRRecognitionProgress(100, '正在识别…');
+            await window.companion.voiceInput.stop(sessionId);
+          }
+        }
+      } catch (error) {
+        setASRMicStatus('语音识别测试结束失败：' + (error && error.message ? error.message : String(error)), true);
+        if (sessionId) {
+          await window.companion.voiceInput.cancel(sessionId).catch(() => {});
+        }
+      } finally {
+        asrRecognitionSessionId = null;
+        asrRecognitionStopping = false;
+        testBtn.disabled = false;
+        testBtn.textContent = '测试语音识别 10 秒';
+      }
     }
 
     async function loadChatInfo() {
@@ -1322,6 +1740,28 @@
       showToast('已应用语音输入供应商推荐配置；API Key 不会自动填写', 'success');
     });
 
+    document.getElementById('asrMicTestBtn').addEventListener('click', async function() {
+      if (asrMicStartPending) return;
+      if (asrRecognitionRunning) {
+        showToast('语音识别测试进行中，音量表会自动显示输入', 'error');
+        return;
+      }
+      if (asrMicStream) {
+        stopASRMicMeter();
+        return;
+      }
+      await startASRMicMeter();
+    });
+
+    document.getElementById('asrRecognitionTestBtn').addEventListener('click', async function() {
+      if (asrRecognitionStopping) return;
+      if (asrRecognitionRunning) {
+        await stopASRRecognitionTest(true);
+        return;
+      }
+      await startASRRecognitionTest();
+    });
+
     document.getElementById('saveASRBtn').addEventListener('click', async () => {
       debugASRSettings('save clicked');
       const config = collectASRConfig();
@@ -1406,7 +1846,11 @@
       showToast('摄像头预览已关闭', 'success');
     });
 
-    window.addEventListener('beforeunload', stopCameraPreview);
+    window.addEventListener('beforeunload', function() {
+      stopCameraPreview();
+      cleanupASRRecognitionOnUnload();
+      stopASRMicMeter();
+    });
 
     document.getElementById('testCameraAwarenessBtn').addEventListener('click', async function() {
       var btn = this;
@@ -1499,6 +1943,33 @@
     loadAppearance();
     loadTTSConfig();
     loadASRConfig();
+    if (window.companion && window.companion.voiceInput) {
+      window.companion.voiceInput.onStatus(function(payload) {
+        if (!asrRecognitionSessionId || payload.sessionId !== asrRecognitionSessionId) return;
+        if (payload.phase === 'voice-error') {
+          setASRMicStatus(payload.message || '语音识别失败', true);
+        } else if (payload.message) {
+          setASRMicStatus(payload.message, false);
+        }
+      });
+
+      window.companion.voiceInput.onTranscript(function(payload) {
+        if (!asrRecognitionSessionId || payload.sessionId !== asrRecognitionSessionId) return;
+        if (payload.type === 'partial') {
+          appendASRRecognitionResult(payload.text);
+        } else if (payload.type === 'final') {
+          const finalText = payload.text || document.getElementById('asrRecognitionResult').value || '未识别到文字';
+          setASRRecognitionResult(finalText);
+          setASRRecognitionProgress(100, '识别完成');
+          setASRMicStatus('识别完成', false);
+          asrRecognitionSessionId = null;
+        } else if (payload.type === 'error') {
+          setASRMicStatus(payload.message || '语音识别失败', true);
+          setASRRecognitionProgress(100, '识别失败');
+          asrRecognitionSessionId = null;
+        }
+      });
+    }
     loadCameraAwarenessConfig().then(restartCameraBackgroundTimer);
     loadLogPath();
     loadChatInfo();
