@@ -29,6 +29,7 @@ import { VisionImageAnalyzer } from '../core/vision-image-analyzer';
 import { IntentRouter } from '../core/intent-router';
 import { IntentClassifier } from '../core/intent-classifier';
 import { IntentExecutor } from '../core/intent-executor';
+import { ResponseWorkflowOrchestrator } from '../core/response-workflow-orchestrator';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -59,6 +60,7 @@ let visionImageAnalyzer: VisionImageAnalyzer;
 let cameraAwarenessManager: CameraAwarenessManager;
 let intentRouter: IntentRouter;
 let intentExecutor: IntentExecutor;
+let responseWorkflowOrchestrator: ResponseWorkflowOrchestrator;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -175,19 +177,42 @@ function createWindow(): void {
     windowActivityService,
   });
   chatManager.setScreenTargetPointer(screenTargetPointer);
+  responseWorkflowOrchestrator = new ResponseWorkflowOrchestrator({
+    screenAnalyzer,
+    screenTargetPointer,
+    chatResponder: chatManager,
+  });
+  chatManager.setResponseWorkflowOrchestrator(responseWorkflowOrchestrator);
   intentExecutor = new IntentExecutor({
     screenSummary: async (routed) => {
       const prompt = routed.request.text || '请总结当前屏幕';
-      const result = await screenAnalyzer.analyze(prompt);
-      return { status: 'handled', message: typeof result === 'string' ? result : JSON.stringify(result) };
+      const result = await responseWorkflowOrchestrator.run({
+        workflow: 'screen_summary_response',
+        source: routed.request.source === 'voice_asr' ? 'voice_asr' : 'text_chat',
+        userText: routed.request.text || prompt,
+        toolText: prompt,
+      });
+      return {
+        status: result.status === 'handled' ? 'handled' : 'failed',
+        message: result.status === 'handled' ? '' : result.fallbackMessage,
+        error: result.error,
+        debug: { workflow: result.workflow, debugSummary: result.debugSummary },
+      };
     },
     screenTargetPointer: async (routed) => {
       const target = routed.decision.target || routed.request.text || '';
       const pointerMessage = routed.request.text || target;
-      const result = await screenTargetPointer.handle(pointerMessage);
+      const result = await responseWorkflowOrchestrator.run({
+        workflow: 'screen_target_pointer_response',
+        source: routed.request.source === 'voice_asr' ? 'voice_asr' : 'text_chat',
+        userText: routed.request.text || pointerMessage,
+        toolText: pointerMessage,
+      });
       return {
-        status: result.handled ? 'handled' : 'skipped',
-        message: result.handled ? 'target pointer handled' : 'target pointer did not find a target',
+        status: result.status === 'handled' ? 'handled' : 'failed',
+        message: result.status === 'handled' ? '' : result.fallbackMessage,
+        error: result.error,
+        debug: { workflow: result.workflow, debugSummary: result.debugSummary },
       };
     },
     cameraCheckOnce: async () => ({

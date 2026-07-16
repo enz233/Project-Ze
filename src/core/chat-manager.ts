@@ -101,6 +101,30 @@ export class ChatManager {
         const screenMessage = userMessage.slice(1).trim() || '描述一下屏幕上有什么';
         this.sendChatStatus('screen', '正在看屏幕...');
 
+        if (this.responseWorkflowOrchestrator) {
+          const workflow = this.screenTargetPointer?.isPointerRequest(screenMessage)
+            ? 'screen_target_pointer_response'
+            : 'screen_summary_response';
+          const workflowResult = await this.responseWorkflowOrchestrator.run({
+            workflow,
+            source: 'screen_dot',
+            userText: userMessage,
+            toolText: screenMessage,
+          });
+          if (workflowResult.status === 'handled') {
+            this.memory.recordInteraction(
+              workflow === 'screen_target_pointer_response' ? 'screen-target-pointer' : 'screen-analysis',
+              screenMessage,
+              this.stateManager.getCurrentState()
+            );
+            return;
+          }
+          if (workflowResult.fallbackMessage) {
+            this.sendBubble(workflowResult.fallbackMessage);
+          }
+          return;
+        }
+
         if (this.screenTargetPointer?.isPointerRequest(screenMessage)) {
           const pointerResult = await this.screenTargetPointer.handle(screenMessage);
           const assistantMessage = pointerResult.message || '屏幕指示请求已取消';
@@ -470,7 +494,7 @@ export class ChatManager {
 
     const assistantMessage = this.getIntentAssistantMessage(routed, result);
     const shouldSuppressAssistantMessage =
-      routed.decision.intent === 'screen_target_pointer' &&
+      (routed.decision.intent === 'screen_target_pointer' || routed.decision.intent === 'screen_summary') &&
       routed.permission.status === 'allowed' &&
       result.status === 'handled';
     if (assistantMessage && !shouldSuppressAssistantMessage) {
