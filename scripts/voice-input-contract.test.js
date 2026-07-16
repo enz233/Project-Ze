@@ -373,6 +373,15 @@ function testSettingsFunASRLocalProviderContract() {
   assert.match(html, /window\.companion\.testASRConnection\(config\)/);
 }
 
+function testSettingsFunASRRecognitionTestUsesPCM() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf8');
+  assert.match(html, /function isLocalRealtimePCMRecognitionConfig\(config\)/);
+  assert.match(html, /isQwenASRRecognitionConfig\(config\) \|\| isFunASRConfig\(config\)/);
+  assert.match(html, /if \(isLocalRealtimePCMRecognitionConfig\(config\)\)/);
+  assert.match(html, /audio\/pcm;rate=16000/);
+  assert.match(html, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
+}
+
 function testRendererQwenMainVoiceUsesPCM() {
   const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
   assert.match(renderer, /function isQwenASRVoiceConfig\(config:\s*any\):\s*boolean\s*\{/);
@@ -1339,6 +1348,7 @@ async function run() {
   testJsonConfigStoreUpdateNormalizesMergedValue();
   testASRConnectionTestIPCContract();
   testSettingsFunASRLocalProviderContract();
+  testSettingsFunASRRecognitionTestUsesPCM();
   testSettingsAsrPresetContractMatchesCoreDefinitions();
   testRendererQwenMainVoiceUsesPCM();
   testAsrEngineFactoryAndParser();

@@ -1560,7 +1560,7 @@
         testBtn.disabled = false;
         testBtn.textContent = '停止识别测试';
 
-        if (isQwenASRRecognitionConfig(config)) {
+        if (isLocalRealtimePCMRecognitionConfig(config)) {
           await startQwenPCMRecognitionTest(config, startToken, startupResources);
           return;
         }
