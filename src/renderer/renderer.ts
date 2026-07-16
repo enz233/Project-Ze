@@ -486,7 +486,104 @@
     voiceInputBtnEl.textContent = active ? '■' : '🎙';
   }
 
-  async function startVoiceInput(source: 'button' | 'shortcut'): Promise<void> {
+  // function isQwenASRVoiceConfig(config)
+  function isQwenASRVoiceConfig(config: any): boolean {
+    return config && config.provider === 'qwen-asr-realtime';
+  }
+
+  function resampleVoiceFloat32ToTargetRate(samples: Float32Array, sourceRate: number, targetRate: number): Float32Array {
+    if (!samples || sourceRate === targetRate) return samples || new Float32Array(0);
+    var ratio = sourceRate / targetRate;
+    var outputLength = Math.max(1, Math.round(samples.length / ratio));
+    var output = new Float32Array(outputLength);
+    for (var i = 0; i < outputLength; i++) {
+      var sourceIndex = Math.min(samples.length - 1, Math.round(i * ratio));
+      output[i] = samples[sourceIndex] || 0;
+    }
+    return output;
+  }
+
+  function encodeVoicePCM16Base64(samples: Float32Array): string {
+    var buffer = new ArrayBuffer(samples.length * 2);
+    var view = new DataView(buffer);
+    for (var i = 0; i < samples.length; i++) {
+      var sample = Math.max(-1, Math.min(1, samples[i] || 0));
+      view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    }
+    var bytes = new Uint8Array(buffer);
+    var binary = '';
+    var batchSize = 0x8000;
+    for (var j = 0; j < bytes.length; j += batchSize) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(j, j + batchSize)));
+    }
+    return btoa(binary);
+  }
+
+  // function createQwenPCMVoiceRecorder(stream, sessionId)
+  function createQwenPCMVoiceRecorder(stream: MediaStream, sessionId: string): { state: string; onstop: null | (() => void); stop: () => void } {
+    var AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextCtor) throw new Error('当前环境不支持 Qwen-ASR PCM 音频采集');
+    var audioContext = new AudioContextCtor();
+    var source = audioContext.createMediaStreamSource(stream);
+    var processor = audioContext.createScriptProcessor(4096, 1, 1);
+    var targetRate = 16000;
+    var pendingSamples: Float32Array[] = [];
+    var lastFlushAt = Date.now();
+    var chunkStartedAt = Date.now();
+
+    function flushPCMChunk(force: boolean): void {
+      if (!force && Date.now() - lastFlushAt < 250) return;
+      if (pendingSamples.length === 0) return;
+      var sourceRate = audioContext.sampleRate || targetRate;
+      var totalLength = pendingSamples.reduce(function(sum, part) { return sum + part.length; }, 0);
+      var combined = new Float32Array(totalLength);
+      var offset = 0;
+      pendingSamples.forEach(function(part) {
+        combined.set(part, offset);
+        offset += part.length;
+      });
+      pendingSamples = [];
+      lastFlushAt = Date.now();
+      var capturedAt = Date.now();
+      var durationMs = capturedAt - chunkStartedAt;
+      chunkStartedAt = capturedAt;
+      var pcm = resampleVoiceFloat32ToTargetRate(combined, sourceRate, targetRate);
+      var base64 = encodeVoicePCM16Base64(pcm);
+      // @ts-ignore
+      var upload = window.companion.voiceInput.appendAudioChunk({
+        sessionId: sessionId,
+        chunk: { mimeType: 'audio/pcm;rate=16000', base64: base64, capturedAt: capturedAt, durationMs: durationMs },
+      }).catch(function (e: any) {
+        updateChatStatus({ phase: 'voice-error', message: '语音 PCM 分片发送失败' });
+        console.error('[VoiceInput] append PCM chunk failed', e);
+      });
+      voicePendingChunkUploads.push(upload);
+    }
+
+    processor.onaudioprocess = function(event: AudioProcessingEvent) {
+      var input = event.inputBuffer.getChannelData(0);
+      pendingSamples.push(new Float32Array(input));
+      flushPCMChunk(false);
+    };
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+
+    return {
+      state: 'recording',
+      onstop: null,
+      stop: function() {
+        if (this.state === 'inactive') return;
+        this.state = 'inactive';
+        flushPCMChunk(true);
+        processor.disconnect();
+        source.disconnect();
+        audioContext.close().catch(function() {});
+        if (typeof (this as any).onstop === 'function') (this as any).onstop();
+      },
+    };
+  }
+
+  async function startVoiceInput(source: 'button' | 'shortcut' = 'button'): Promise<void> {
     debugVoiceInput('start requested', { source: source, enabledCached: voiceInputEnabled, recording: voiceRecording });
     if (voiceRecording) return;
     try {
@@ -507,7 +604,10 @@
       voiceAutoSend = !!config.autoSendFinalTranscript;
       voiceHoldToTalkShortcut = config.holdToTalkShortcut || 'Ctrl+Shift+Space';
       var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      var qwenVoiceInput = isQwenASRVoiceConfig(config);
+      var mimeType = qwenVoiceInput
+        ? 'audio/pcm;rate=16000'
+        : (MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm');
       // @ts-ignore
       var session = await window.companion.voiceInput.start({ source: source, mimeType: mimeType });
       voiceSessionId = session.sessionId;
@@ -515,6 +615,19 @@
       voiceChunkSequence = 0;
       voicePendingChunkUploads = [];
       voicePartialBase = chatInputEl.value;
+      voiceChunkStartedAt = Date.now();
+
+      if (isQwenASRVoiceConfig(config)) {
+        voiceRecorder = createQwenPCMVoiceRecorder(stream, session.sessionId) as any;
+        var qwenRecorder = voiceRecorder as any;
+        qwenRecorder.onstop = function () {
+          stream.getTracks().forEach(function (track) { track.stop(); });
+        };
+        setVoiceRecording(true);
+        updateChatStatus({ phase: 'voice-recording', message: '正在录音（PCM16 16kHz），请说话…' });
+        return;
+      }
+
       voiceRecorder = new MediaRecorder(stream, { mimeType: mimeType });
       voiceRecorder.ondataavailable = function (event: BlobEvent) {
         if (!voiceSessionId || !event.data || event.data.size === 0) return;
@@ -543,7 +656,6 @@
       voiceRecorder.onstop = function () {
         stream.getTracks().forEach(function (track) { track.stop(); });
       };
-      voiceChunkStartedAt = Date.now();
       voiceRecorder.start(750);
       setVoiceRecording(true);
       updateChatStatus({ phase: 'voice-recording', message: '正在录音，请说话…' });
