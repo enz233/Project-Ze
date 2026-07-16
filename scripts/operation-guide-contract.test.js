@@ -2,6 +2,8 @@ const assert = require('assert');
 const { buildFallbackPlan, parseGuidePlan } = require('../dist/core/operation-guide-planner');
 const { extractOperationGuideSoftwareName, getOperationGuideControlCommand } = require('../dist/core/operation-guide-intent');
 const { parseProgressEvaluation } = require('../dist/core/operation-guide-progress-evaluator');
+const { normalizeOperationGuideConfig } = require('../dist/core/operation-guide-config');
+const { OperationGuideManager } = require('../dist/core/operation-guide-manager');
 
 function testNaturalGuideIntentStartsGuide() {
   assert.strictEqual(extractOperationGuideSoftwareName('/guide Codex'), 'Codex');
@@ -56,9 +58,47 @@ function testParseProgressEvaluation() {
   assert.deepStrictEqual(fallback, { completed: false, confidence: 0, currentStage: '', nextTargetVisible: false, reason: 'Unable to parse progress evaluation.' });
 }
 
+async function testConfigNormalize() {
+  const config = normalizeOperationGuideConfig({ enabled: true, searchEnabled: 'yes', maxTokens: 999999, apiKey: ' secret ' });
+  assert.strictEqual(config.enabled, true);
+  assert.strictEqual(config.searchEnabled, true);
+  assert.strictEqual(config.maxTokens <= 12000, true);
+  assert.strictEqual(config.apiKey, 'secret');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(config, 'unknown'), false);
+}
+
+async function testManagerStateMachine() {
+  const calls = [];
+  const manager = new OperationGuideManager({
+    getConfig: () => ({ enabled: true, searchEnabled: false, baseUrl: '', apiKey: '', model: '', maxTokens: 2000, systemPrompt: '', lastTargetSoftware: '' }),
+    plan: async goal => buildFallbackPlan(goal),
+    point: async request => { calls.push(request); return { ok: true, message: 'pointed' }; },
+    emitSnapshot: () => undefined,
+  });
+  await manager.start({ goal: 'Steam', source: 'test' });
+  assert.strictEqual(manager.getSnapshot().active, true);
+  assert.strictEqual(manager.getSnapshot().status, 'waiting');
+  assert.strictEqual(calls[0].target.includes('Steam') || calls[0].instruction.includes('Steam'), true);
+  const before = manager.getSnapshot().currentIndex;
+  await manager.reidentify();
+  assert.strictEqual(manager.getSnapshot().currentIndex, before);
+  await manager.next();
+  assert.strictEqual(manager.getSnapshot().currentIndex, before + 1);
+  manager.exit();
+  assert.strictEqual(manager.getSnapshot().active, false);
+  assert.strictEqual(manager.getSnapshot().status, 'idle');
+}
+
 testNaturalGuideIntentStartsGuide();
 testGuideControlCommands();
 testParseGuidePlanFromJsonEnvelope();
 testFallbackPlan();
 testParseProgressEvaluation();
 console.log('operation-guide-contract tests passed');
+
+async function runAsyncTests() {
+  await testConfigNormalize();
+  await testManagerStateMachine();
+}
+
+runAsyncTests().then(() => console.log('operation-guide async contract tests passed'));

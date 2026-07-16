@@ -1,76 +1,122 @@
-# Intent Router Task 2 Report
+# Operation Guide Fusion Task 2 Report
 
 ## 状态
 DONE
 
 ## 改动摘要
-- 新增 `src/core/intent-router.ts`。
-- 实现 `IntentRouter.route()`：调用 `IntentClassifier` 得到结构化意图后，应用本地权限策略，返回 `IntentRoutedDecision`。
-- 实现屏幕、视觉、指针移动、摄像头帧和配置写入等敏感 capability 的本地权限闸门：
-  - 普通聊天/ASR 文本可在明确用户请求时允许屏幕总结或目标指示。
-  - LLM fallback 的结构化建议不会绕过本地权限策略；敏感 capability 必须满足明确性和用户发起条件。
-  - 摄像头只允许明确、用户发起、且 `cameraEnabled()` 为 true 的一次性检测。
-  - `proactive_control` 的配置写入返回 `needs_confirmation`。
-- 实现最近 intent 决策 debug ring buffer：`getDebugSnapshot()` 返回只读快照副本，`recordExecution()` 可补充执行结果。
-- 扩展 `scripts/intent-router-contract.test.js`，覆盖明确屏幕请求允许、模糊摄像头 fallback 拒绝、摄像头配置关闭拒绝、debug snapshot 截断与字段记录。
-- 为对齐 Task 1 后的当前分支基线，先应用 Task 1 intent classifier commit，再合并当前 `master`，解决 `package.json` 测试脚本冲突，保留既有 screen pointer debug contract 并追加 intent-router contract。
+- 新增 `src/core/operation-guide-config.ts`。
+  - 定义 `OperationGuideConfig`、`DEFAULT_OPERATION_GUIDE_CONFIG`。
+  - 实现纯函数 `normalizeOperationGuideConfig(input)`：只保留白名单字段，修剪字符串，兼容布尔字符串，限制 `maxTokens` 到 1000~12000，默认 `maxTokens: 4000`。
+  - 实现 `OperationGuideConfigManager`，通过现有 `JsonConfigStore<OperationGuideConfig>` 持久化到 `operation-guide.json`；`get()` 返回当前配置，`update(partial)` 更新并返回新配置。
+- 新增 `src/core/operation-guide-manager.ts`。
+  - 实现注入式 `OperationGuideManagerDeps`：`getConfig`、`plan`、`point`、可选 `emitSnapshot`。
+  - 实现 `OperationGuideManager` 的 `start`、`next`、`reidentify`、`exit`、`getSnapshot`、`isActive`。
+  - 状态机覆盖 `idle`、`planning`、`pointing`、`waiting`、`completed`、`error`；`exit()` 清空活动会话并发出 idle snapshot。
+  - 每个异步续接通过 `sessionId` 校验，避免旧会话异步结果覆盖新会话。
+- 修改 `scripts/operation-guide-contract.test.js`。
+  - 增加配置归一化 contract test。
+  - 增加 manager 状态机 contract test，覆盖 start 指向第一步、reidentify 不改变 index、next 前进、exit 变为 idle/inactive。
+
+## 文件变更
+- `src/core/operation-guide-config.ts`：新增。
+- `src/core/operation-guide-manager.ts`：新增。
+- `scripts/operation-guide-contract.test.js`：追加 Task 2 contract tests。
+- `.superpowers/sdd/task-2-report.md`：更新本报告。
 
 ## 提交哈希
-- Task 1 基线应用提交：`684e460`
-- 合并当前 master 提交：`783b4e1`
-- Task 2 实现提交：`c1491b4`
+- Task 1 基线：`27e6235`
+- Task 2 提交：`178bccd`
 
-## 运行的测试命令和结果
-- `npm test`：PASS。
-  - `npm run build` / `tsc` 成功。
-  - `voice-input-contract tests passed`
-  - `screen-fingerprint-contract tests passed`
-  - `screen-capture-frame-contract tests passed`
-  - `screen-pointer-debug-contract tests passed`
-  - `intent-router contract tests passed`
-  - npm 仍输出既有 `electron_mirror` / `electron-mirror` 配置 warning，未影响结果。
-- `git diff --check`：PASS；仅 Windows 环境下 Git 提示 `src/core/intent-router.ts` 后续可能 LF→CRLF，未报告 whitespace error。
+## 测试命令和输出
 
-## 自审结果
-- 仅新增/修改 Intent Router Task 2 相关代码与 contract tests；未触碰 renderer、IPC 接入、执行器或 debug panel。
-- 权限策略独立于 classifier / LLM fallback 输出，敏感 capability 由本地 Router 最终裁决。
-- 摄像头路径未引入持续后台分析、身份识别、敏感属性判断、医学/心理诊断或图像/视频保存。
-- `getDebugSnapshot()` 返回数组副本，避免调用方直接修改内部 `recent` 记录数组。
-- `debugLimit` 环形保留行为由 contract test 覆盖。
+### RED 验证
+命令：
+```bash
+npm run build && node scripts/operation-guide-contract.test.js
+```
+结果：预期失败，因 Task 2 模块尚不存在。
+关键输出：
+```text
+> project-ze@0.3.2 build
+> tsc
+
+Error: Cannot find module '../dist/core/operation-guide-config'
+Require stack:
+- C:\Users\25623\Desktop\AItest\AI_pet\code\scripts\operation-guide-contract.test.js
+```
+
+### 退出状态新增断言 RED 验证
+命令：
+```bash
+npm run build && node scripts/operation-guide-contract.test.js
+```
+结果：预期失败，发现 `exit()` 返回 `exited` 而 brief 要求 emit idle snapshot。
+关键输出：
+```text
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+'exited' !== 'idle'
+```
+
+### Contract 验证
+命令：
+```bash
+npm run build && node scripts/operation-guide-contract.test.js
+```
+结果：PASS。
+关键输出：
+```text
+> project-ze@0.3.2 build
+> tsc
+
+operation-guide-contract tests passed
+operation-guide async contract tests passed
+```
+
+### 全量测试
+命令：
+```bash
+npm test
+```
+结果：PASS。
+完整关键输出：
+```text
+> project-ze@0.3.2 test
+> npm run build && node scripts/voice-input-contract.test.js && node scripts/screen-fingerprint-contract.test.js && node scripts/screen-capture-frame-contract.test.js && node scripts/screen-pointer-debug-contract.test.js && node scripts/screen-vision-request-contract.test.js && node scripts/point-visual-guard-contract.test.js && node scripts/screen-pointer-position-contract.test.js && node scripts/intent-router-contract.test.js && node scripts/response-workflow-contract.test.js && node scripts/operation-guide-contract.test.js
+
+> project-ze@0.3.2 build
+> tsc
+
+voice-input-contract tests passed
+screen-fingerprint-contract tests passed
+screen-capture-frame-contract tests passed
+screen-pointer-debug-contract tests passed
+screen-vision-request-contract tests passed
+point-visual-guard-contract tests passed
+screen-pointer-position-contract tests passed
+intent-router contract tests passed
+response-workflow contract tests passed
+operation-guide-contract tests passed
+operation-guide async contract tests passed
+```
+
+### Whitespace 检查
+命令：
+```bash
+git diff --check
+```
+结果：PASS；仅 Git 在 Windows 环境提示 LF 后续可能转换为 CRLF，未报告 whitespace error。
+
+## 自审
+- 符合 Task 2 范围：只新增 config manager、manager state machine，并扩展 operation-guide contract test。
+- 未替换既有 `ScreenAnalyzer` / `ScreenTargetPointer` / `MoveController` 等模块。
+- 未添加 Project-Chen MIDL 外设。
+- API key/runtime config 未提交；配置通过既有 `JsonConfigStore` 风格存储，默认值为空字符串。
+- Manager 依赖通过接口注入，测试未依赖实际屏幕观察、截图、搜索或指针实现。
+- `plan` 输出与 pointer request 均被视作运行时短生命周期数据，仅保存在当前 manager snapshot 中；未写入持久文件。
+- `getSnapshot()` 返回克隆对象，避免调用方直接修改内部状态。
+- `exit()` 现在按 brief 清空活动状态并发出 idle snapshot。
 
 ## concerns
-none
-
----
-
-## Fix Report（2026-07-16）
-
-### 状态
-DONE
-
-### 改动摘要
-- 在 `IntentRouter.route()` 中基于最终 `decision.intent` 补全敏感 intent 的必要 capabilities，并去重后统一用于 permission gate 与 debug snapshot。
-- 覆盖的补全映射：
-  - `screen_summary` → `screen_capture`, `vision`, `llm`
-  - `screen_target_pointer` → `screen_capture`, `vision`, `move_pointer`
-  - `camera_check_once` → `camera_frame`
-  - `proactive_control` → `config_write`
-- 修复 LLM fallback 通过 `requires: []` 伪造敏感 intent 时绕过本地权限 gate 的问题；摄像头关闭和 explicitness 检查仍由 Router 强制执行。
-- 将非法/负数 `debugLimit` clamp 为 `0`，避免 ring buffer 清理循环在负数限制下挂起。
-- 补充 contract tests：摄像头 requires 为空仍拒绝、屏幕总结 debug capabilities 补全、`debugLimit: -1` 不挂起且不保留 recent 记录。
-
-### 提交哈希
-- 修复代码与 contract tests：`a528508`
-
-### 测试命令和结果
-- `npm test`：PASS。
-  - `npm run build` / `tsc` 成功。
-  - `voice-input-contract tests passed`
-  - `screen-fingerprint-contract tests passed`
-  - `screen-capture-frame-contract tests passed`
-  - `intent-router contract tests passed`
-  - npm 仍输出既有 `electron_mirror` / `electron-mirror` 配置 warning，未影响结果。
-- `git diff --check`：PASS。
-
-### concerns
-none
+- `.superpowers/sdd/progress.md` 在任务开始时已有未关联改动，未纳入 Task 2 提交。
+- npm 在测试期间输出既有 `electron_mirror` / `electron-mirror` 配置 warning，未影响构建或测试结果。
