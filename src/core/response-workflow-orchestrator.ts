@@ -3,6 +3,7 @@ import {
   ScreenSummaryTool,
   ScreenTargetPointerTool,
   WorkflowActionResult,
+  WorkflowActionStatus,
   WorkflowChatResponder,
   WorkflowExecutionResult,
   WorkflowObservation,
@@ -115,7 +116,7 @@ export class ResponseWorkflowOrchestrator {
     };
   }
 
-  private pointerMessageForModel(moved: boolean, status: string, message: string): string {
+  private pointerMessageForModel(moved: boolean, status: WorkflowActionStatus, message: string): string {
     if (moved) return '已经移动到目标附近并切换 point visual 指向目标。';
     if (status === 'cancelled') return '目标指向流程已取消，没有移动。请按取消原因向用户简短解释。';
     if (status === 'skipped') return '没有执行移动。请说明目标未找到、不够明确或不适合指向。';

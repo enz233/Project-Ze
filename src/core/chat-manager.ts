@@ -112,16 +112,26 @@ export class ChatManager {
             toolText: screenMessage,
           });
           if (workflowResult.status === 'handled') {
-            this.memory.recordInteraction(
-              workflow === 'screen_target_pointer_response' ? 'screen-target-pointer' : 'screen-analysis',
-              screenMessage,
-              this.stateManager.getCurrentState()
-            );
             return;
           }
           if (workflowResult.fallbackMessage) {
             this.sendBubble(workflowResult.fallbackMessage);
           }
+          if (workflow === 'screen_target_pointer_response' && this.screenTargetPointer) {
+            const pointerResult = await this.screenTargetPointer.handle(screenMessage);
+            const assistantMessage = pointerResult.message || '屏幕指示请求已取消';
+            this.memory.addMessage('user', userMessage);
+            this.memory.addMessage('assistant', assistantMessage);
+            this.memory.recordInteraction('screen-target-pointer', screenMessage, this.stateManager.getCurrentState());
+            return;
+          }
+
+          this.sendBubble('正在看屏幕...');
+          const screenResult = await this.screenAnalyzer.analyze(screenMessage);
+          this.sendBubble(screenResult);
+          this.memory.addMessage('user', userMessage);
+          this.memory.addMessage('assistant', screenResult);
+          this.memory.recordInteraction('screen-analysis', screenMessage, this.stateManager.getCurrentState());
           return;
         }
 

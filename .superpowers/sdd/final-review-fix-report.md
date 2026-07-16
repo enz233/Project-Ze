@@ -28,3 +28,12 @@ Fixed final whole-branch review Important findings and the optional Minor debug 
 - STATUS: Fixed remaining Important review finding in `src/core/chat-manager.ts`. Pointer intent assistant messages are now suppressed only when permission is `allowed` and execution status is `handled`; skipped/failed/denied/needs_confirmation safety messages are shown and still recorded in assistant history.
 - Tests: `npm test` passed (build + voice-input, screen-fingerprint, screen-capture-frame, intent-router contracts). `git diff --check` passed with no output.
 - concerns: npm emitted existing unknown `electron_mirror` / `electron-mirror` config warnings during test.
+
+## Follow-up 2026-07-16 response workflow final branch review fixes
+- STATUS: Fixed final Response Workflow Orchestrator review findings in `src/core/chat-manager.ts` and `src/core/response-workflow-orchestrator.ts`.
+- Source changes:
+  - Removed duplicate `. screen` workflow handled-branch `memory.recordInteraction(...)`; workflow delivery already records the interaction.
+  - Restored old direct screen fallback behavior after workflow non-handled results without re-entering the workflow: summary fallback shows useful workflow fallback text, then runs `screenAnalyzer.analyze(screenMessage)` and saves/sends through the old path; pointer fallback runs `screenTargetPointer.handle(screenMessage)` and saves its assistant message as before.
+  - Typed `pointerMessageForModel(..., status, ...)` with `WorkflowActionStatus` from `response-workflow-types`.
+- Commands/results: `npm test` passed (build + all contract tests, including `response-workflow contract tests passed`). `git diff --check` passed; Git emitted existing LF-to-CRLF working-copy warnings but no whitespace errors.
+- concerns: npm emitted existing unknown `electron_mirror` / `electron-mirror` config warnings during test.
