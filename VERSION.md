@@ -3,7 +3,8 @@
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
 ## Unreleased
-- ASR Qwen-ASR 实时识别：新增专用 `qwen-asr-realtime` WebSocket 引擎，使用 Workspace ID 专属域名和握手 `Authorization` 请求头，不再通过 OpenAI-compatible `/audio/transcriptions` 路径调用 Qwen-ASR；补充 `docs/qwen-asr-configuration.md` 配置说明，将 final/completed 事件等待窗口延长到 15 秒，并在服务端结束但没有返回转写文本时显示可操作诊断，避免静默显示“未识别到文字”。
+- Response Workflow Orchestrator：屏幕总结和屏幕目标指向结果先转为短期 workflow context，再交给聊天模型生成统一 `<item>` 气泡回复；原始屏幕 observation 不默认进入长期记忆。
+- ASR Qwen-ASR 实时识别：新增专用 `qwen-asr-realtime` WebSocket 引擎，使用 Workspace ID 专属域名和握手 `Authorization` 请求头，不再通过 OpenAI-compatible `/audio/transcriptions` 路径调用 Qwen-ASR；补充 `docs/qwen-asr-configuration.md` 配置说明，将 final/completed 事件等待窗口延长到 15 秒，在服务端结束但没有返回转写文本时显示可操作诊断，并将设置页 Qwen-ASR 测试采集改为 PCM16 16kHz，避免 webm/opus 音频格式导致空转写。
 - ASR 设置简化修正：普通模式保留供应商预设和 Base URL，仍默认隐藏实际引擎、Realtime/Transcription Path、流式模式和缓存等高级字段。
 - 屏幕目标指示视觉时长修复：point 差分活跃期间阻止 idle/blink/sleepy 等普通精灵直接覆盖当前 point pose，确保约 7 秒后才由 point 会话恢复普通视觉；新增 point visual guard 契约测试
 - 屏幕目标指示定位修复：普通屏幕分析继续使用 Vision `detail: low`，point 目标定位改用 `detail: high`，提升按钮、链接和文字入口的可见性，避免定位请求退化为“看不清楚”

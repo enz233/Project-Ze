@@ -49,6 +49,10 @@ export interface ScreenTargetPointerResult {
   cancelReason?: ScreenTargetPointerCancelReason;
 }
 
+export interface ScreenTargetPointerHandleOptions {
+  suppressResultBubble?: boolean;
+}
+
 interface ScreenTargetPointerOptions {
   mainWindow: BrowserWindow;
   screenAnalyzer: ScreenAnalyzer;
@@ -118,13 +122,18 @@ export class ScreenTargetPointer {
     return trimmed.startsWith('.') ? trimmed.slice(1).trim() : trimmed;
   }
 
-  async handle(message: string): Promise<ScreenTargetPointerResult> {
+  async handle(message: string, options: ScreenTargetPointerHandleOptions = {}): Promise<ScreenTargetPointerResult> {
     if (!this.isPointerRequest(message)) {
       return { handled: false, moved: false, message: '' };
     }
 
     const screenMessage = this.normalizePointerMessage(message);
     const id = this.startSession();
+    const showResultBubble = (text: string): void => {
+      if (!options.suppressResultBubble) {
+        this.showBubble(text);
+      }
+    };
     const beforeTitle = await this.windowActivityService.getActiveWindowTitle();
     debugScreenTargetPointer('[ScreenTargetPointer][debug] session start:', {
       sessionId: id,
@@ -164,13 +173,13 @@ export class ScreenTargetPointer {
       const afterLocateTitle = await this.windowActivityService.getActiveWindowTitle();
       if (this.hasScreenChanged(beforeTitle, afterLocateTitle)) {
         debugScreenTargetPointer('[ScreenTargetPointer][debug] screen changed after locate:', { sessionId: id, beforeTitlePresent: !!beforeTitle, afterTitlePresent: !!afterLocateTitle });
-        return this.cancelWithMessage('screen-changed');
+        return this.cancelWithMessage('screen-changed', options.suppressResultBubble);
       }
 
       const result = located.result;
       if (!this.canMove(result)) {
         const failureMessage = this.failureMessage(screenMessage, result);
-        this.showBubble(failureMessage);
+        showResultBubble(failureMessage);
         this.finishSession();
         return { handled: true, moved: false, message: failureMessage, locateResult: result };
       }
@@ -181,7 +190,7 @@ export class ScreenTargetPointer {
       }
       if (fingerprintChanged) {
         debugScreenTargetPointer('[ScreenTargetPointer][debug] screen changed before move:', { sessionId: id });
-        return this.screenChangedResult(result);
+        return this.screenChangedResult(result, options.suppressResultBubble);
       }
 
       const screenPoint = this.screenAnalyzer.mapPointToScreen(located.frame, result.point!);
@@ -227,7 +236,7 @@ export class ScreenTargetPointer {
           screenChangedDuringMove,
           moveCancelled: moveResult.cancelled,
         });
-        return this.screenChangedResult(result);
+        return this.screenChangedResult(result, options.suppressResultBubble);
       }
 
       debugScreenTargetPointer('[ScreenTargetPointer][debug] move finished:', {
@@ -241,14 +250,14 @@ export class ScreenTargetPointer {
         const messageText = '好啦好啦，我不挡你~';
         this.clearPointVisual();
         this.finishSession();
-        this.showBubble(messageText);
+        showResultBubble(messageText);
         return { handled: true, moved: false, message: messageText, locateResult: result, cancelReason: 'manual' };
       }
 
       this.state = 'pointing';
       this.sendPointVisual({ active: true, pose: pose.pose, reason: 'screen-target-pointer' });
       const successMessage = this.successMessage(result);
-      this.showBubble(successMessage);
+      showResultBubble(successMessage);
       this.startPointScreenMonitor(id, beforeTitle);
       this.schedulePointClear(id);
       return { handled: true, moved: true, message: successMessage, locateResult: result };
@@ -257,7 +266,7 @@ export class ScreenTargetPointer {
       console.error('[ScreenTargetPointer] 指示失败:', error?.message || error);
       this.clearPointVisual();
       this.finishSession();
-      this.showBubble(messageText);
+      showResultBubble(messageText);
       return { handled: true, moved: false, message: messageText };
     }
   }
@@ -439,16 +448,27 @@ export class ScreenTargetPointer {
       .slice(0, 20) || '目标';
   }
 
-  private cancelWithMessage(reason: ScreenTargetPointerCancelReason): ScreenTargetPointerResult {
-    this.cancel(reason);
+  private cancelWithMessage(reason: ScreenTargetPointerCancelReason, suppressResultBubble = false): ScreenTargetPointerResult {
+    if (suppressResultBubble && reason === 'screen-changed') {
+      this.sessionId++;
+      this.state = 'cancelled';
+      this.moveController.cancel('manual');
+      this.clearPointVisual();
+      this.clearHoldTimer();
+      this.clearMoveMonitor();
+    } else {
+      this.cancel(reason);
+    }
     return { handled: true, moved: false, message: this.screenChangedMessage(), cancelReason: reason };
   }
 
-  private screenChangedResult(result?: ScreenTargetLocateResult): ScreenTargetPointerResult {
+  private screenChangedResult(result?: ScreenTargetLocateResult, suppressResultBubble = false): ScreenTargetPointerResult {
     const messageText = this.screenChangedMessage();
     this.clearPointVisual();
     this.finishSession();
-    this.showBubble(messageText);
+    if (!suppressResultBubble) {
+      this.showBubble(messageText);
+    }
     return { handled: true, moved: false, message: messageText, locateResult: result, cancelReason: 'screen-changed' };
   }
 

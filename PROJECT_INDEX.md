@@ -64,6 +64,8 @@ src/
 - `bubble-orchestrator.ts`：主进程气泡编排边界，接收带来源/优先级的气泡请求，并把实际投递委托给 `BubbleManager`。
 - `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；当前稳定职责是截图、坐标映射元信息与 Vision 分析。普通屏幕分析继续使用低细节 Vision 图像，point 目标定位使用 `screen-vision-request.ts` 指定高细节图像以保留 UI 文字/坐标识别能力；`ScreenCaptureFrame.fingerprint`、`screen-capture-frame.ts` 按显示器比例推导缩略图尺寸，以及 `PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时将 point 前后实际 PNG 截图保存到 Electron `userData/screen-pointer-debug/` 属于 Unreleased 稳定性/诊断增强。
 - `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、移动调用和指向气泡；八方向 point 指向姿态、指向后恢复、fingerprint diff 屏幕变化取消属于 Unreleased 增强。
+- `response-workflow-types.ts` / `response-workflow-orchestrator.ts`（Unreleased）：已授权工具结果到统一聊天模型输出的工作流边界；第一版接入屏幕总结和屏幕目标指向，把 `ScreenAnalyzer` / `ScreenTargetPointer` 的结构化结果转为短期 `WorkflowResponseContext`，再调用 `ChatManager.respondFromWorkflow(...)` 生成 `<item>` 气泡回复。原始屏幕 observation 不默认进入长期记忆。
+- `intent-*.ts`（Unreleased）：多模态入口意图分类、权限闸门、debug 快照和薄执行分发；屏幕相关 allowed intent 会进入 Response Workflow，而不是由屏幕模块直接生成最终用户回复。
 - `intent-types.ts`：多模态意图入口的稳定类型边界，定义输入来源、intent、能力需求、权限结果、执行结果和 Debug 记录。
 - `intent-classifier.ts`：规则优先的意图分类器，覆盖普通聊天、屏幕总结、目标指示、摄像头一次性检测、语音/设置/主动回应帮助，并为 LLM fallback 提供结构化校验边界。
 - `intent-router.ts`：Intent Router 主入口，应用屏幕/摄像头/移动/配置写入等隐私权限策略，并维护最近 intent 决策快照。
@@ -127,7 +129,7 @@ src/
 - **情感前缀**：根据状态给 AI 消息加情感上下文，切换后 4 秒保持上一个状态
 - **情境化主动回应**：本地规则先判断是否应该回应，AI 仅用于高价值场景短句改写，不用于决定是否打扰；阈值、分类、模板和 AI 改写 reason 已配置化
 - **TTS 架构**：`TTSManager` 保持唯一编排入口，读取配置并调用 `createTTSEngine(config)` 获取供应商引擎；供应商引擎实现 `TTSEngine.synthesize(text)` 并返回 base64 音频，Electron 播放、字幕、停止和 `playbackId` 完成确认仍只在 `TTSManager`、preload 和 renderer 链路中处理
-- **屏幕目标指示**：`.` 屏幕分析入口中命中明确“指出/在哪/帮我找”等关键词时，`ChatManager` 委托 `ScreenTargetPointer` 调用 Vision 结构化定位；置信度足够时通过 `MoveController` 把桌宠移动到目标旁边并给出指向气泡。八方向 `point-visual`、约 7 秒后只恢复普通视觉、Vision 前后 `ScreenCaptureFrame.fingerprint` diff 取消旧坐标属于 Unreleased 增强；wheel IPC、全局输入 hook 和持续截图监控暂缓，避免隐私、误触发和复杂度问题。
+- **屏幕目标指示**：`.` 屏幕分析入口中命中明确“指出/在哪/帮我找”等关键词时，`ChatManager` 委托 `ScreenTargetPointer` 调用 Vision 结构化定位；置信度足够时通过 `MoveController` 把桌宠移动到目标旁边并给出指向气泡。八方向 `point-visual`、约 7 秒后只恢复普通视觉、Vision 前后 `ScreenCaptureFrame.fingerprint` diff 取消旧坐标属于 Unreleased 增强；wheel IPC、全局输入 hook 和持续截图监控暂缓，避免隐私、误触发和复杂度问题。Unreleased 的 Response Workflow 接入后，目标定位和移动仍由 `ScreenTargetPointer` 执行，但最终说明文案通过 `ChatManager.respondFromWorkflow(...)` 统一生成聊天气泡。
 - **Intent Router（Unreleased）**：普通聊天和 ASR 文本可在明确请求时路由到屏幕总结或目标指示；LLM fallback 只建议结构化意图，最终是否允许截图、摄像头、移动或写配置由本地权限策略决定。
 
 ## IPC 通道一览
