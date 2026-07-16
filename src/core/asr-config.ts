@@ -25,6 +25,7 @@ export interface ASRProviderPresetDefinition {
 
 export interface ASRConfig {
   enabled: boolean;
+  advancedSettingsEnabled: boolean;
   providerPreset: ASRProviderPreset;
   provider: ASRProvider;
   baseUrl: string;
@@ -113,7 +114,8 @@ function matchesPresetManagedFields(config: ASRConfig, preset: ASRProviderPreset
     && config.model === definition.model
     && config.realtimePath === definition.realtimePath
     && config.transcriptionPath === definition.transcriptionPath
-    && config.streamingMode === definition.streamingMode
+    && (config.streamingMode === definition.streamingMode
+      || (preset === 'openai' && config.streamingMode === DEFAULT_ASR_CONFIG.streamingMode))
     && config.language === definition.language;
 }
 
@@ -123,6 +125,36 @@ export function inferASRProviderPreset(config: ASRConfig): ASRProviderPreset {
   return 'custom-openai-compatible';
 }
 
+function hasDefaultCache(cache: ASRCacheConfig): boolean {
+  return cache.enabled === DEFAULT_ASR_CONFIG.cache.enabled
+    && cache.retentionMinutes === DEFAULT_ASR_CONFIG.cache.retentionMinutes
+    && cache.maxSessionBytes === DEFAULT_ASR_CONFIG.cache.maxSessionBytes;
+}
+
+function hasLegacyCustomizedAdvancedFields(raw: Record<string, unknown>, normalized: ASRConfig): boolean {
+  if (isASRProviderPreset(raw.providerPreset) && raw.providerPreset !== DEFAULT_ASR_PROVIDER_PRESET) return true;
+  if (normalized.provider !== DEFAULT_ASR_CONFIG.provider) return true;
+  if (normalized.baseUrl !== DEFAULT_ASR_CONFIG.baseUrl) return true;
+  if (normalized.realtimePath !== DEFAULT_ASR_CONFIG.realtimePath) return true;
+  if (normalized.transcriptionPath !== DEFAULT_ASR_CONFIG.transcriptionPath) return true;
+  if (!hasDefaultCache(normalized.cache)) return true;
+  return false;
+}
+
+function applyNormalModeAdvancedDefaults(config: ASRConfig): ASRConfig {
+  return {
+    ...config,
+    advancedSettingsEnabled: false,
+    providerPreset: DEFAULT_ASR_PROVIDER_PRESET,
+    provider: DEFAULT_ASR_CONFIG.provider,
+    baseUrl: DEFAULT_ASR_CONFIG.baseUrl,
+    realtimePath: DEFAULT_ASR_CONFIG.realtimePath,
+    transcriptionPath: DEFAULT_ASR_CONFIG.transcriptionPath,
+    streamingMode: DEFAULT_ASR_CONFIG.streamingMode,
+    cache: { ...DEFAULT_ASR_CONFIG.cache },
+  };
+}
+
 export function normalizeASRConfigForLoad(config: Partial<ASRConfig>): ASRConfig {
   const raw = config as Record<string, unknown>;
   const defaultCache = DEFAULT_ASR_CONFIG.cache;
@@ -130,10 +162,11 @@ export function normalizeASRConfigForLoad(config: Partial<ASRConfig>): ASRConfig
     ? raw.cache as Partial<ASRCacheConfig>
     : {};
 
-  const normalized: ASRConfig = {
+  let normalized: ASRConfig = {
     ...DEFAULT_ASR_CONFIG,
     ...config,
     enabled: normalizeBoolean(raw.enabled, DEFAULT_ASR_CONFIG.enabled),
+    advancedSettingsEnabled: DEFAULT_ASR_CONFIG.advancedSettingsEnabled,
     provider: isASRProvider(raw.provider) ? raw.provider : DEFAULT_ASR_CONFIG.provider,
     baseUrl: normalizeString(raw.baseUrl, DEFAULT_ASR_CONFIG.baseUrl),
     apiKey: normalizeString(raw.apiKey, DEFAULT_ASR_CONFIG.apiKey),
@@ -157,7 +190,12 @@ export function normalizeASRConfigForLoad(config: Partial<ASRConfig>): ASRConfig
     && (config.providerPreset === 'custom-openai-compatible' || matchesPresetManagedFields(normalized, config.providerPreset))
     ? config.providerPreset
     : inferASRProviderPreset(normalized);
-  return normalized;
+
+  normalized.advancedSettingsEnabled = typeof raw.advancedSettingsEnabled === 'boolean'
+    ? raw.advancedSettingsEnabled
+    : hasLegacyCustomizedAdvancedFields(raw, normalized);
+
+  return normalized.advancedSettingsEnabled ? normalized : applyNormalModeAdvancedDefaults(normalized);
 }
 
 export function applyASRProviderPreset(config: ASRConfig, preset: ASRProviderPreset): ASRConfig {
@@ -180,6 +218,7 @@ const OPENAI_ASR_PRESET = ASR_PROVIDER_PRESETS.openai;
 
 export const DEFAULT_ASR_CONFIG: ASRConfig = {
   enabled: false,
+  advancedSettingsEnabled: false,
   providerPreset: DEFAULT_ASR_PROVIDER_PRESET,
   provider: OPENAI_ASR_PRESET.provider,
   baseUrl: OPENAI_ASR_PRESET.baseUrl,
@@ -187,7 +226,7 @@ export const DEFAULT_ASR_CONFIG: ASRConfig = {
   model: OPENAI_ASR_PRESET.model,
   realtimePath: OPENAI_ASR_PRESET.realtimePath,
   transcriptionPath: OPENAI_ASR_PRESET.transcriptionPath,
-  streamingMode: OPENAI_ASR_PRESET.streamingMode,
+  streamingMode: 'chunked-fallback',
   language: OPENAI_ASR_PRESET.language,
   autoSendFinalTranscript: false,
   holdToTalkShortcut: 'Ctrl+Shift+Space',

@@ -542,8 +542,13 @@
 
       <div class="field">
         <label><input type="checkbox" id="asrEnabled"> 启用语音输入</label>
-        <div class="hint">右键输入框中显示麦克风按钮；快捷键默认为 Ctrl+Shift+Space 长按说话。开启前需要填写 Base URL、API Key 和模型。</div>
+        <div class="hint">右键输入框中显示麦克风按钮；快捷键默认为 Ctrl+Shift+Space 长按说话。普通模式只需要填写 API Key 和模型。</div>
         <div class="hint" id="asrValidationMessage" style="display: none; color: #c62828; margin-top: 6px;"></div>
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="asrAdvancedSettingsEnabled"> 显示高级 ASR 设置</label>
+        <div class="hint">默认关闭。只有需要自定义供应商、Base URL、Realtime/Transcription Path、流式模式或缓存时再开启。</div>
       </div>
 
       <div class="field">
@@ -552,31 +557,71 @@
         <div class="hint">按住快捷键开始录音，松开后结束识别。</div>
       </div>
 
-      <div class="field">
-        <label>供应商预设</label>
-        <select id="asrProviderPreset">
-          <option value="openai">OpenAI</option>
-          <option value="aliyun-bailian">阿里百炼 / DashScope</option>
-          <option value="custom-openai-compatible">自定义 OpenAI-compatible</option>
-        </select>
-        <div class="hint" id="asrProviderPresetNote">OpenAI 官方语音识别接口，使用当前 OpenAI-compatible ASR 引擎。</div>
-      </div>
+      <div id="asrAdvancedSettingsSection" style="display: none;">
+        <h2 style="margin-top: 20px;">高级 ASR 设置</h2>
+        <hr class="divider">
+        <div class="hint" style="margin-bottom: 10px; color: #666;">
+          仅在需要第三方 OpenAI-compatible endpoint、Realtime WebSocket 或自定义缓存策略时开启。普通语音识别测试默认使用 chunked-fallback。
+        </div>
 
-      <div class="field">
-        <label>实际引擎</label>
-        <select id="asrProvider" disabled aria-readonly="true">
-          <option value="openai-compatible">OpenAI-compatible</option>
-        </select>
-        <div class="hint">实际引擎由供应商预设决定；本轮所有预设都复用 OpenAI-compatible ASR 引擎。</div>
-      </div>
+        <div class="field">
+          <label>供应商预设</label>
+          <select id="asrProviderPreset">
+            <option value="openai">OpenAI</option>
+            <option value="aliyun-bailian">阿里百炼 / DashScope</option>
+            <option value="custom-openai-compatible">自定义 OpenAI-compatible</option>
+          </select>
+          <div class="hint" id="asrProviderPresetNote">OpenAI 官方语音识别接口，使用当前 OpenAI-compatible ASR 引擎。</div>
+        </div>
 
-      <div class="btn-row">
-        <button class="btn btn-secondary" id="applyASRPresetBtn">应用推荐配置</button>
-      </div>
+        <div class="field">
+          <label>实际引擎</label>
+          <select id="asrProvider" disabled aria-readonly="true">
+            <option value="openai-compatible">OpenAI-compatible</option>
+          </select>
+          <div class="hint">实际引擎由供应商预设决定；本轮所有预设都复用 OpenAI-compatible ASR 引擎。</div>
+        </div>
 
-      <div class="field">
-        <label>Base URL（启用后必填）</label>
-        <input type="text" id="asrBaseUrl" placeholder="https://api.openai.com/v1">
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="applyASRPresetBtn">应用推荐配置</button>
+        </div>
+
+        <div class="field">
+          <label>Base URL（启用后必填）</label>
+          <input type="text" id="asrBaseUrl" placeholder="https://api.openai.com/v1">
+        </div>
+
+        <div class="field">
+          <label>Realtime Path</label>
+          <input type="text" id="asrRealtimePath" placeholder="/realtime">
+        </div>
+
+        <div class="field">
+          <label>Transcription Path</label>
+          <input type="text" id="asrTranscriptionPath" placeholder="/audio/transcriptions">
+        </div>
+
+        <div class="field">
+          <label>流式模式</label>
+          <select id="asrStreamingMode">
+            <option value="realtime">Realtime</option>
+            <option value="chunked-fallback">Chunked fallback</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label><input type="checkbox" id="asrCacheEnabled"> 启用短期音频缓存</label>
+        </div>
+
+        <div class="field">
+          <label>缓存保留分钟</label>
+          <input type="text" id="asrCacheRetention" placeholder="30">
+        </div>
+
+        <div class="field">
+          <label>单次录音最大字节</label>
+          <input type="text" id="asrCacheMaxBytes" placeholder="10485760">
+        </div>
       </div>
 
       <div class="field password-wrap">
@@ -590,27 +635,8 @@
       </div>
 
       <div class="field">
-        <label>Realtime Path</label>
-        <input type="text" id="asrRealtimePath" placeholder="/realtime">
-      </div>
-
-      <div class="field">
-        <label>Transcription Path</label>
-        <input type="text" id="asrTranscriptionPath" placeholder="/audio/transcriptions">
-      </div>
-
-      <div class="field">
-        <label>流式模式</label>
-        <select id="asrStreamingMode">
-          <option value="realtime">Realtime</option>
-          <option value="chunked-fallback">Chunked fallback</option>
-        </select>
-      </div>
-
-      <div class="field">
         <label>语言</label>
         <input type="text" id="asrLanguage" placeholder="zh">
-        <div class="hint" id="asrValidationMessage" style="color:#c62828;"></div>
       </div>
 
       <h2 style="margin-top: 20px;">语音输入测试</h2>
@@ -649,20 +675,6 @@
       <div class="field">
         <label><input type="checkbox" id="asrAutoSend"> 识别完成后自动发送</label>
         <div class="hint">默认关闭；关闭时需要按 Enter 发送。</div>
-      </div>
-
-      <div class="field">
-        <label><input type="checkbox" id="asrCacheEnabled"> 启用短期音频缓存</label>
-      </div>
-
-      <div class="field">
-        <label>缓存保留分钟</label>
-        <input type="text" id="asrCacheRetention" placeholder="30">
-      </div>
-
-      <div class="field">
-        <label>单次录音最大字节</label>
-        <input type="text" id="asrCacheMaxBytes" placeholder="10485760">
       </div>
 
       <div class="btn-row">
@@ -859,6 +871,32 @@
       return asrProviderPresets[id] || asrProviderPresets.openai;
     }
 
+    function getDefaultASRAdvancedFields() {
+      return {
+        providerPreset: 'openai',
+        provider: 'openai-compatible',
+        baseUrl: 'https://api.openai.com/v1',
+        realtimePath: '/realtime',
+        transcriptionPath: '/audio/transcriptions',
+        streamingMode: 'chunked-fallback',
+        cache: {
+          enabled: true,
+          retentionMinutes: 30,
+          maxSessionBytes: 10485760,
+        },
+      };
+    }
+
+    function isASRAdvancedSettingsEnabled() {
+      return !!document.getElementById('asrAdvancedSettingsEnabled').checked;
+    }
+
+    function toggleASRAdvancedSettings() {
+      var section = document.getElementById('asrAdvancedSettingsSection');
+      var enabled = isASRAdvancedSettingsEnabled();
+      section.style.display = enabled ? 'block' : 'none';
+    }
+
     function updateASRPresetNote() {
       var presetId = document.getElementById('asrProviderPreset').value || 'openai';
       var preset = getASRPresetDefinition(presetId);
@@ -882,6 +920,7 @@
     async function loadASRConfig() {
       const config = await window.companion.loadASRConfig();
       document.getElementById('asrEnabled').checked = !!config.enabled;
+      document.getElementById('asrAdvancedSettingsEnabled').checked = !!config.advancedSettingsEnabled;
       document.getElementById('asrHoldToTalkShortcut').value = config.holdToTalkShortcut || 'Ctrl+Shift+Space';
       document.getElementById('asrProviderPreset').value = config.providerPreset || 'openai';
       document.getElementById('asrProvider').value = config.provider || 'openai-compatible';
@@ -898,6 +937,7 @@
       document.getElementById('asrCacheEnabled').checked = config.cache?.enabled !== false;
       document.getElementById('asrCacheRetention').value = String(config.cache?.retentionMinutes ?? 30);
       document.getElementById('asrCacheMaxBytes').value = String(config.cache?.maxSessionBytes ?? 10485760);
+      toggleASRAdvancedSettings();
     }
 
     async function loadCameraAwarenessConfig() {
@@ -1144,6 +1184,14 @@
       document.getElementById('asrRecognitionResult').value = text || '';
     }
 
+    function formatASRRecognitionErrorMessage(message) {
+      var text = message || '语音识别失败';
+      if (text.indexOf('ASR realtime connection did not open') >= 0) {
+        return '实时识别连接失败：当前服务商、模型或网络可能不支持 Realtime WebSocket。可关闭高级 ASR 设置，或将流式模式改为 chunked-fallback 后重试。';
+      }
+      return text;
+    }
+
     function appendASRRecognitionResult(text) {
       const resultEl = document.getElementById('asrRecognitionResult');
       if (!text) return;
@@ -1191,6 +1239,20 @@
       return true;
     }
 
+    async function saveASRConfigForRecognitionTest(config) {
+      var savedConfig = await window.companion.saveASRConfig(config);
+      setASRValidationMessage('');
+      debugASRSettings('recognition test config saved', {
+        enabled: !!(savedConfig && savedConfig.enabled),
+        advancedSettingsEnabled: !!(savedConfig && savedConfig.advancedSettingsEnabled),
+        streamingMode: savedConfig && savedConfig.streamingMode,
+        providerPreset: savedConfig && savedConfig.providerPreset,
+        hasApiKey: !!(savedConfig && savedConfig.apiKey),
+        model: savedConfig && savedConfig.model,
+      });
+      return savedConfig;
+    }
+
     function getASRRecognitionMimeType() {
       if (typeof MediaRecorder === 'undefined') return '';
       if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
@@ -1204,24 +1266,37 @@
 
 
     function collectASRConfig() {
-      return {
-        enabled: document.getElementById('asrEnabled').checked,
-        holdToTalkShortcut: document.getElementById('asrHoldToTalkShortcut').value.trim() || 'Ctrl+Shift+Space',
+      var advancedEnabled = isASRAdvancedSettingsEnabled();
+      var defaults = getDefaultASRAdvancedFields();
+      var advanced = advancedEnabled ? {
         providerPreset: document.getElementById('asrProviderPreset').value || 'openai',
         provider: document.getElementById('asrProvider').value,
         baseUrl: document.getElementById('asrBaseUrl').value.trim(),
-        apiKey: document.getElementById('asrApiKey').value,
-        model: document.getElementById('asrModel').value.trim(),
         realtimePath: document.getElementById('asrRealtimePath').value.trim(),
         transcriptionPath: document.getElementById('asrTranscriptionPath').value.trim(),
         streamingMode: document.getElementById('asrStreamingMode').value,
-        language: document.getElementById('asrLanguage').value.trim(),
-        autoSendFinalTranscript: document.getElementById('asrAutoSend').checked,
         cache: {
           enabled: document.getElementById('asrCacheEnabled').checked,
           retentionMinutes: Number(document.getElementById('asrCacheRetention').value || 30),
           maxSessionBytes: Number(document.getElementById('asrCacheMaxBytes').value || 10485760),
         },
+      } : defaults;
+
+      return {
+        enabled: document.getElementById('asrEnabled').checked,
+        advancedSettingsEnabled: isASRAdvancedSettingsEnabled(),
+        holdToTalkShortcut: document.getElementById('asrHoldToTalkShortcut').value.trim() || 'Ctrl+Shift+Space',
+        providerPreset: advanced.providerPreset,
+        provider: advanced.provider,
+        baseUrl: advanced.baseUrl,
+        apiKey: document.getElementById('asrApiKey').value,
+        model: document.getElementById('asrModel').value.trim(),
+        realtimePath: advanced.realtimePath,
+        transcriptionPath: advanced.transcriptionPath,
+        streamingMode: advanced.streamingMode,
+        language: document.getElementById('asrLanguage').value.trim() || 'zh',
+        autoSendFinalTranscript: document.getElementById('asrAutoSend').checked,
+        cache: advanced.cache,
       };
     }
 
@@ -1245,6 +1320,10 @@
       if (asrRecognitionRunning || asrRecognitionStopping) return;
       const config = collectASRConfig();
       if (!validateASRRecognitionTestConfig(config)) return;
+      if (!window.companion || !window.companion.saveASRConfig || !window.companion.voiceInput) {
+        setASRMicStatus('当前环境不支持语音输入测试', true);
+        return;
+      }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setASRMicStatus('当前环境不支持麦克风访问', true);
         return;
@@ -1253,15 +1332,12 @@
         setASRMicStatus('当前环境不支持录音测试', true);
         return;
       }
-      if (!window.companion || !window.companion.voiceInput) {
-        setASRMicStatus('当前环境不支持语音输入测试', true);
-        return;
-      }
 
       const startToken = asrRecognitionStartToken + 1;
       asrRecognitionStartToken = startToken;
       const startupResources = { stream: null, recorder: null };
       try {
+        await saveASRConfigForRecognitionTest(config);
         asrRecognitionRunning = true;
         asrRecognitionUploads = [];
         setASRRecognitionResult('');
@@ -1328,13 +1404,13 @@
           stopASRRecognitionTest(false);
         }, ASR_RECOGNITION_TEST_MS);
       } catch (error) {
-        const errorMessage = '语音识别测试启动失败：' + (error && error.message ? error.message : String(error));
+        const message = formatASRRecognitionErrorMessage(error && error.message ? error.message : String(error));
         if (startToken !== asrRecognitionStartToken) {
           cleanupStaleASRRecognitionStartup(startupResources);
           return;
         }
         await stopASRRecognitionTest(true, { preserveStatus: true });
-        setASRMicStatus(errorMessage, true);
+        setASRMicStatus('语音识别测试启动失败：' + message, true);
       }
     }
 
@@ -1762,6 +1838,8 @@
       await startASRRecognitionTest();
     });
 
+    document.getElementById('asrAdvancedSettingsEnabled').addEventListener('change', toggleASRAdvancedSettings);
+
     document.getElementById('saveASRBtn').addEventListener('click', async () => {
       debugASRSettings('save clicked');
       const config = collectASRConfig();
@@ -1947,7 +2025,7 @@
       window.companion.voiceInput.onStatus(function(payload) {
         if (!asrRecognitionSessionId || payload.sessionId !== asrRecognitionSessionId) return;
         if (payload.phase === 'voice-error') {
-          setASRMicStatus(payload.message || '语音识别失败', true);
+          setASRMicStatus(formatASRRecognitionErrorMessage(payload.message || '语音识别失败'), true);
         } else if (payload.message) {
           setASRMicStatus(payload.message, false);
         }
@@ -1964,7 +2042,7 @@
           setASRMicStatus('识别完成', false);
           asrRecognitionSessionId = null;
         } else if (payload.type === 'error') {
-          setASRMicStatus(payload.message || '语音识别失败', true);
+          setASRMicStatus(formatASRRecognitionErrorMessage(payload.message || '语音识别失败'), true);
           setASRRecognitionProgress(100, '识别失败');
           asrRecognitionSessionId = null;
         }

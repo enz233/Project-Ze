@@ -3,6 +3,7 @@
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
 ## Unreleased
+- ASR 设置简化：默认隐藏供应商、Base URL、Realtime/Transcription Path、流式模式和缓存等高级字段；普通模式默认使用 `chunked-fallback`，识别测试前会保存当前有效配置，并对 Realtime WebSocket 连接失败给出可操作提示
 - 屏幕目标指示视觉时长修复：point 差分活跃期间阻止 idle/blink/sleepy 等普通精灵直接覆盖当前 point pose，确保约 7 秒后才由 point 会话恢复普通视觉；新增 point visual guard 契约测试
 - 屏幕目标指示定位修复：普通屏幕分析继续使用 Vision `detail: low`，point 目标定位改用 `detail: high`，提升按钮、链接和文字入口的可见性，避免定位请求退化为“看不清楚”
 - 屏幕目标指示坐标映射修复：截图缩略图高度改为按显示器宽高比从 1280 宽推导，避免 1707x1067 等非 16:9 屏幕被固定拉伸到 1280x720 后造成 Vision point Y 轴映射偏移
