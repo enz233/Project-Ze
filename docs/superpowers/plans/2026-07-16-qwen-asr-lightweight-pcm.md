@@ -43,11 +43,11 @@
   - `if (isQwenASRVoiceConfig(config))`
   - existing `MediaRecorder.isTypeSupported('audio/webm;codecs=opus')`
 
-- [ ] **Step 1: Locate renderer contract test area**
+- [x] **Step 1: Locate renderer contract test area**
 
 Open only `scripts/voice-input-contract.test.js` and find the existing settings/renderer assertions around ASR recognition and voice input. Keep the new test near other voice input contract assertions.
 
-- [ ] **Step 2: Add failing test**
+- [x] **Step 2: Add failing test**
 
 Add this function near the existing HTML/renderer contract tests:
 
@@ -69,7 +69,7 @@ Then call it in the main test runner area with the other synchronous contract te
 testRendererQwenMainVoiceUsesPCM();
 ```
 
-- [ ] **Step 3: Run test to verify RED**
+- [x] **Step 3: Run test to verify RED**
 
 Run:
 
@@ -79,7 +79,7 @@ npm test
 
 Expected: FAIL because `renderer.ts` does not yet contain `isQwenASRVoiceConfig` or `createQwenPCMVoiceRecorder`.
 
-- [ ] **Step 4: Commit test only**
+- [x] **Step 4: Commit test only**
 
 ```bash
 git add scripts/voice-input-contract.test.js
@@ -107,7 +107,7 @@ git commit -m "test(voice): cover qwen main pcm input"
   - `encodeVoicePCM16Base64(samples: Float32Array): string`
   - `createQwenPCMVoiceRecorder(stream: MediaStream, sessionId: string): { state: string; onstop: null | (() => void); stop: () => void }`
 
-- [ ] **Step 1: Add Qwen helper functions before `startVoiceInput()`**
+- [x] **Step 1: Add Qwen helper functions before `startVoiceInput()`**
 
 In `src/renderer/renderer.ts`, insert these helpers immediately before `async function startVoiceInput(source: 'button' | 'shortcut' = 'button')`:
 
@@ -207,7 +207,7 @@ In `src/renderer/renderer.ts`, insert these helpers immediately before `async fu
   }
 ```
 
-- [ ] **Step 2: Branch `startVoiceInput()` for Qwen config**
+- [x] **Step 2: Branch `startVoiceInput()` for Qwen config**
 
 Inside `startVoiceInput()`, replace the existing MediaRecorder setup block after `voiceHoldToTalkShortcut = ...` with this structure. Keep the surrounding config loading and error handling unchanged:
 
@@ -266,7 +266,7 @@ Inside `startVoiceInput()`, replace the existing MediaRecorder setup block after
       updateChatStatus({ phase: 'voice-recording', message: '正在录音，请说话…' });
 ```
 
-- [ ] **Step 3: Ensure Qwen recorder releases microphone tracks on stop**
+- [x] **Step 3: Ensure Qwen recorder releases microphone tracks on stop**
 
 In the Qwen branch from Step 2, immediately after creating the Qwen recorder, assign an `onstop` handler:
 
@@ -290,7 +290,7 @@ The final Qwen branch should be:
       }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run:
 
@@ -300,7 +300,7 @@ npm test
 
 Expected: PASS.
 
-- [ ] **Step 5: Run build**
+- [x] **Step 5: Run build**
 
 Run:
 
@@ -310,7 +310,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit implementation**
+- [x] **Step 6: Commit implementation**
 
 ```bash
 git add src/renderer/renderer.ts scripts/voice-input-contract.test.js
@@ -331,7 +331,7 @@ git commit -m "fix(voice): send pcm for qwen main asr"
 - Consumes: implemented behavior from Task 2.
 - Produces: docs stating Qwen-ASR settings test and main chat voice input both send PCM16 16kHz.
 
-- [ ] **Step 1: Update Qwen configuration doc**
+- [x] **Step 1: Update Qwen configuration doc**
 
 In `docs/qwen-asr-configuration.md`, update the troubleshooting section line that currently says the settings page test sends PCM16. Replace it with wording that states both settings test and main chat Qwen path send PCM16:
 
@@ -339,7 +339,7 @@ In `docs/qwen-asr-configuration.md`, update the troubleshooting section line tha
 3. 设置页的 Qwen-ASR 识别测试和主聊天 Qwen-ASR 语音输入都会绕过浏览器 `MediaRecorder` 的 `audio/webm;codecs=opus`，改用 Web Audio 采集并发送 `audio/pcm;rate=16000` PCM16 小端音频，避免实时 ASR 模型因 webm/opus 不兼容而只结束会话、不返回文本。
 ```
 
-- [ ] **Step 2: Update project index**
+- [x] **Step 2: Update project index**
 
 In `PROJECT_INDEX.md`, update the ASR engine bullet to mention the lightweight PCM main-entry behavior:
 
@@ -347,7 +347,7 @@ In `PROJECT_INDEX.md`, update the ASR engine bullet to mention the lightweight P
 - `asr-engine.ts` / `asr-openai-compatible.ts` / `asr-qwen-realtime.ts`：ASR 引擎接口与 provider 实现，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设复用 OpenAI-compatible 引擎，Qwen-ASR 实时识别使用专用 WebSocket 引擎和 `Authorization` 握手请求头；配置方式见 `docs/qwen-asr-configuration.md`，当前 Qwen final/completed 事件会在 `session.finish` 后保留 15 秒等待窗口，设置页测试和主聊天语音入口都会向 Qwen 发送 PCM16 16kHz 音频。
 ```
 
-- [ ] **Step 3: Update version notes**
+- [x] **Step 3: Update version notes**
 
 In `VERSION.md`, under `Unreleased`, add this bullet near the ASR bullets:
 
@@ -355,11 +355,11 @@ In `VERSION.md`, under `Unreleased`, add this bullet near the ASR bullets:
 - Qwen-ASR 主聊天语音输入改用 Web Audio PCM16 16kHz 分片，避免实时 ASR 模型因 webm/opus 输入不兼容而连接结束但无识别文本。
 ```
 
-- [ ] **Step 4: Mark this plan task checkboxes as completed as you execute**
+- [x] **Step 4: Mark this plan task checkboxes as completed as you execute**
 
 Update `docs/superpowers/plans/2026-07-16-qwen-asr-lightweight-pcm.md` so the executed task checkboxes reflect the completed state.
 
-- [ ] **Step 5: Run final verification**
+- [x] **Step 5: Run final verification**
 
 Run:
 
@@ -371,7 +371,7 @@ git diff --check
 
 Expected: PASS for tests and build; no output from `git diff --check`.
 
-- [ ] **Step 6: Commit docs and plan**
+- [x] **Step 6: Commit docs and plan**
 
 ```bash
 git add docs/qwen-asr-configuration.md PROJECT_INDEX.md VERSION.md docs/superpowers/plans/2026-07-16-qwen-asr-lightweight-pcm.md
