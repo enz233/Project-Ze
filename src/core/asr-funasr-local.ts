@@ -61,19 +61,21 @@ export function createFunASREndEvent(): { is_speaking: false } {
 export function normalizeFunASREvent(raw: unknown, sessionId: string): ASRTranscriptEvent | null {
   if (!raw || typeof raw !== 'object') return null;
   const data = raw as Record<string, unknown>;
+  const text = getStringField(data, ['text', 'sentence', 'result']).trim();
+  if (text) {
+    const mode = getStringField(data, ['mode', 'type']);
+    const isFinal = data.is_final === true || data.final === true || isFinalMode(mode);
+    return isFinal
+      ? { type: 'final', text, sessionId }
+      : { type: 'partial', text, sessionId };
+  }
+
   const message = getStringField(data, ['error', 'message']);
   if (message) {
     return { type: 'error', message, sessionId, recoverable: false };
   }
 
-  const text = getStringField(data, ['text', 'sentence', 'result']).trim();
-  if (!text) return null;
-
-  const mode = getStringField(data, ['mode', 'type']);
-  const isFinal = data.is_final === true || data.final === true || isFinalMode(mode);
-  return isFinal
-    ? { type: 'final', text, sessionId }
-    : { type: 'partial', text, sessionId };
+  return null;
 }
 
 function isTerminalEvent(event: ASRTranscriptEvent): boolean {
@@ -294,10 +296,15 @@ export class FunASRLocalEngine implements ASREngine {
       closeSocket(socket);
     }
 
-    while (pending.length > 0) {
-      const event = pending.shift()!;
-      terminalReceived = terminalReceived || isTerminalEvent(event);
-      yield event;
+    if (terminalReceived) {
+      pending.length = 0;
+    } else {
+      while (pending.length > 0) {
+        const event = pending.shift()!;
+        terminalReceived = terminalReceived || isTerminalEvent(event);
+        yield event;
+        if (terminalReceived) pending.length = 0;
+      }
     }
 
     if (!terminalReceived && !input.signal?.aborted) {

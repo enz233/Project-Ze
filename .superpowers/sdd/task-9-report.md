@@ -40,3 +40,23 @@ Date: 2026-07-16
 - `npm run build` passed.
 - `node scripts/voice-input-contract.test.js` passed.
 - `git diff --check` passed.
+
+## Remaining FunASR correctness fixes
+
+Date: 2026-07-16
+
+### Changes
+
+- Settings recognition test no longer requires `MediaRecorder` for local PCM providers (Qwen-ASR/FunASR); MediaRecorder remains required for non-local PCM/chunked providers.
+- `normalizeFunASREvent()` now prefers transcript text over informational `message` fields while preserving true `error`/message-only payloads as fatal errors.
+- `FunASRLocalEngine.stream()` discards queued late socket errors after a terminal final transcript so successful recognition is not converted to failure.
+- FunASR preset/application/load collection clears API Key and model so local FunASR config does not persist stale cloud credentials; non-FunASR presets retain existing key behavior.
+- Settings ASR connection test now validates FunASR Base URL only for FunASR and returns the unsupported independent-test message for other providers instead of missing API key/model validation.
+- Added contract coverage for all above cases.
+
+### Tests
+
+- `npm test` passed.
+- `npm run build` passed.
+- `node scripts/voice-input-contract.test.js` passed.
+- `git diff --check` passed with only LF-to-CRLF warning for `src/core/asr-funasr-local.ts`.

@@ -98,6 +98,7 @@ function testAsrProviderPresets() {
   assert.strictEqual(funasrApplied.provider, 'funasr-local-runtime');
   assert.strictEqual(funasrApplied.baseUrl, 'ws://127.0.0.1:10096');
   assert.strictEqual(funasrApplied.model, '');
+  assert.strictEqual(funasrApplied.apiKey, '');
   assert.strictEqual(funasrApplied.streamingMode, 'realtime');
 
   const funasrEngine = createASREngine(funasrApplied);
@@ -370,6 +371,7 @@ function testSettingsFunASRLocalProviderContract() {
   assert.match(html, /function isFunASRConfig\(config\)/);
   assert.match(html, /FunASR Base URL 必须以 ws:\/\/ 或 wss:\/\/ 开头/);
   assert.match(html, /id="asrConnectionTestBtn"/);
+  assert.match(html, /setASRValidationMessage\('当前 ASR provider 暂不支持独立连接测试，请使用“测试语音识别 10 秒”。'\)/);
   assert.match(html, /window\.companion\.testASRConnection\(config\)/);
 }
 
@@ -377,7 +379,10 @@ function testSettingsFunASRRecognitionTestUsesPCM() {
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf8');
   assert.match(html, /function isLocalRealtimePCMRecognitionConfig\(config\)/);
   assert.match(html, /isQwenASRRecognitionConfig\(config\) \|\| isFunASRConfig\(config\)/);
-  assert.match(html, /if \(isLocalRealtimePCMRecognitionConfig\(config\)\)/);
+  assert.match(html, /document\.getElementById\('asrApiKey'\)\.value = preset\.provider === 'funasr-local-runtime' \? '' : \(config\.apiKey \?\? ''\)/);
+  assert.match(html, /apiKey: preset\.provider === 'funasr-local-runtime' \? '' : document\.getElementById\('asrApiKey'\)\.value/);
+  assert.match(html, /model: preset\.provider === 'funasr-local-runtime' \? '' : document\.getElementById\('asrModel'\)\.value\.trim\(\)/);
+  assert.match(html, /if \(typeof MediaRecorder === 'undefined' && !isLocalRealtimePCMRecognitionConfig\(config\)\)/);
   assert.match(html, /audio\/pcm;rate=16000/);
   assert.match(html, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
 }
@@ -683,6 +688,10 @@ function testFunASRLocalEngineHelpers() {
   assert.deepStrictEqual(
     normalizeFunASREvent({ is_final: true, text: '结束' }, 's1'),
     { type: 'final', text: '结束', sessionId: 's1' }
+  );
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ text: '带消息文本', message: 'server info', mode: '2pass-offline' }, 's1'),
+    { type: 'final', text: '带消息文本', sessionId: 's1' }
   );
   assert.deepStrictEqual(
     normalizeFunASREvent({ error: 'bad audio' }, 's1'),
@@ -1053,6 +1062,44 @@ async function testFunASRLocalStreamContinuesAfterRecoverableInvalidPayload() {
   assert.deepStrictEqual(events, [
     { type: 'error', message: 'Invalid FunASR event payload', sessionId: 's1', recoverable: true },
     { type: 'final', text: '最终文本', sessionId: 's1' },
+  ]);
+}
+
+async function testFunASRLocalStreamIgnoresLateErrorAfterFinal() {
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      if (typeof payload === 'string' && JSON.parse(payload).is_speaking === false) {
+        setTimeout(() => {
+          this.emit('message', Buffer.from(JSON.stringify({ text: '成功文本', mode: '2pass-offline' })));
+          this.emit('error', new Error('late socket failure'));
+        }, 25);
+      }
+    }
+
+    close() {
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const events = await collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, { chunks: async function* noChunks() {} });
+  assert.deepStrictEqual(events, [
+    { type: 'final', text: '成功文本', sessionId: 's1' },
   ]);
 }
 
@@ -1519,6 +1566,7 @@ async function run() {
   await testFunASRLocalStreamYieldsChunkSendFailureAsError();
   await testFunASRLocalStreamDoesNotDuplicatePreOpenFailure();
   await testFunASRLocalStreamContinuesAfterRecoverableInvalidPayload();
+  await testFunASRLocalStreamIgnoresLateErrorAfterFinal();
   await testFunASRLocalConnectionErrorClosesSocket();
   await testQwenRealtimeStreamWaitsForDelayedFinal();
   await testQwenRealtimeStreamReportsMissingTranscription();

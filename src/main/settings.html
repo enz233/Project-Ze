@@ -967,8 +967,8 @@
       const preset = getASRPresetDefinition(config.providerPreset || 'openai');
       document.getElementById('asrBaseUrl').value = config.baseUrl ?? preset.baseUrl;
       document.getElementById('asrWorkspaceId').value = config.workspaceId ?? '';
-      document.getElementById('asrApiKey').value = config.apiKey ?? '';
-      document.getElementById('asrModel').value = config.model ?? preset.model;
+      document.getElementById('asrApiKey').value = preset.provider === 'funasr-local-runtime' ? '' : (config.apiKey ?? '');
+      document.getElementById('asrModel').value = preset.provider === 'funasr-local-runtime' ? '' : (config.model ?? preset.model);
       document.getElementById('asrRealtimePath').value = config.realtimePath ?? preset.realtimePath;
       document.getElementById('asrTranscriptionPath').value = config.transcriptionPath ?? preset.transcriptionPath;
       document.getElementById('asrStreamingMode').value = config.streamingMode ?? preset.streamingMode;
@@ -1501,8 +1501,8 @@
         provider: preset.provider,
         baseUrl: document.getElementById('asrBaseUrl').value.trim(),
         workspaceId: document.getElementById('asrWorkspaceId').value.trim(),
-        apiKey: document.getElementById('asrApiKey').value,
-        model: document.getElementById('asrModel').value.trim(),
+        apiKey: preset.provider === 'funasr-local-runtime' ? '' : document.getElementById('asrApiKey').value,
+        model: preset.provider === 'funasr-local-runtime' ? '' : document.getElementById('asrModel').value.trim(),
         realtimePath: advanced.realtimePath,
         transcriptionPath: advanced.transcriptionPath,
         streamingMode: advanced.streamingMode,
@@ -1540,7 +1540,7 @@
         setASRMicStatus('当前环境不支持麦克风访问', true);
         return;
       }
-      if (typeof MediaRecorder === 'undefined') {
+      if (typeof MediaRecorder === 'undefined' && !isLocalRealtimePCMRecognitionConfig(config)) {
         setASRMicStatus('当前环境不支持录音测试', true);
         return;
       }
@@ -2049,17 +2049,16 @@
     document.getElementById('asrConnectionTestBtn').addEventListener('click', async function() {
       const btn = this;
       const config = collectASRConfig();
-      const missing = getMissingASREnabledFields(config);
-      if (missing.length > 0) {
-        const message = 'ASR 连接测试缺少 ' + missing.join(' / ');
-        setASRValidationMessage(message);
-        showToast(message, 'error');
-        return;
-      }
-      const funasrUrlWarning = validateFunASRBaseUrl(config);
-      if (funasrUrlWarning && funasrUrlWarning.indexOf('远程 FunASR 地址') < 0) {
-        setASRValidationMessage(funasrUrlWarning);
-        showToast(funasrUrlWarning, 'error');
+      if (isFunASRConfig(config)) {
+        const funasrUrlWarning = validateFunASRBaseUrl(config);
+        if (funasrUrlWarning && funasrUrlWarning.indexOf('远程 FunASR 地址') < 0) {
+          setASRValidationMessage(funasrUrlWarning);
+          showToast(funasrUrlWarning, 'error');
+          return;
+        }
+      } else {
+        setASRValidationMessage('当前 ASR provider 暂不支持独立连接测试，请使用“测试语音识别 10 秒”。');
+        showToast('当前 ASR provider 暂不支持独立连接测试，请使用“测试语音识别 10 秒”。', 'error');
         return;
       }
       if (!window.companion || !window.companion.testASRConnection) {

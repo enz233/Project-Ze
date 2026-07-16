@@ -246,6 +246,7 @@ export function applyASRProviderPreset(config: ASRConfig, preset: ASRProviderPre
     transcriptionPath: definition.transcriptionPath,
     streamingMode: definition.streamingMode,
     language: definition.language,
+    apiKey: definition.provider === 'funasr-local-runtime' ? '' : config.apiKey,
   };
 }
 
