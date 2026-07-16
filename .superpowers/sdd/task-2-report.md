@@ -45,4 +45,4 @@ DONE
 ## Correction: review follow-up
 - Previous report metadata was stale: it said `screenChangedResult()` still showed its bubble because only explicit `handle()` branches were changed, but review confirmed screen-changed final result paths are also part of workflow-controlled `handle()` output.
 - Fixed `handle(..., { suppressResultBubble: true })` screen-changed paths by suppressing final result bubbles from `cancelWithMessage('screen-changed')` and `screenChangedResult(result)` while leaving external `cancel(reason)` feedback unchanged.
-- Fix commit: pending at correction write time; final hash recorded in assistant handoff.
+- Fix commit: `8d92280` (`fix: suppress workflow screen-change pointer bubbles`).
