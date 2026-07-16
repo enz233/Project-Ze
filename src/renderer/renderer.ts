@@ -158,17 +158,39 @@
   }
 
   var isDraggingGlobal = false;
+  var pointerInsideCompanion = false;
+  var pointerInsideChatInput = false;
+
+  function keepWindowInteractiveForChatInput(): void {
+    // @ts-ignore
+    window.companion.sendMouseEnter();
+  }
+
+  function releaseWindowInteractionAfterChatInput(): void {
+    if (isDraggingGlobal) return;
+    if (!chatInputWrapEl.classList.contains('hidden')) return;
+    if (pointerInsideCompanion || pointerInsideChatInput) return;
+    // @ts-ignore
+    window.companion.sendMouseLeave();
+  }
 
   function setupClickThrough(): void {
     companionEl.addEventListener('mouseenter', function () {
+      pointerInsideCompanion = true;
       // @ts-ignore
       window.companion.sendMouseEnter();
     });
     companionEl.addEventListener('mouseleave', function () {
-      // 拖拽期间不切换穿透，否则鼠标离开角色区域后拖拽会断
-      if (isDraggingGlobal) return;
-      // @ts-ignore
-      window.companion.sendMouseLeave();
+      pointerInsideCompanion = false;
+      releaseWindowInteractionAfterChatInput();
+    });
+    chatInputWrapEl.addEventListener('mouseenter', function () {
+      pointerInsideChatInput = true;
+      keepWindowInteractiveForChatInput();
+    });
+    chatInputWrapEl.addEventListener('mouseleave', function () {
+      pointerInsideChatInput = false;
+      releaseWindowInteractionAfterChatInput();
     });
   }
 
@@ -372,6 +394,7 @@
 
   function openChatInput(text: string): void {
     chatInputWrapEl.classList.remove('hidden');
+    keepWindowInteractiveForChatInput();
     chatInputEl.value = text;
     refreshVoiceInputConfig();
     chatInputEl.focus();
@@ -384,12 +407,14 @@
   function keepChatInputOpen(): void {
     var wasHidden = chatInputWrapEl.classList.contains('hidden');
     chatInputWrapEl.classList.remove('hidden');
+    keepWindowInteractiveForChatInput();
     chatInputEl.focus();
     debugVoiceInput('keep chat input open', { wasHidden: wasHidden, valueLength: chatInputEl.value.length });
   }
 
   function closeChatInput(clearText: boolean): void {
     chatInputWrapEl.classList.add('hidden');
+    releaseWindowInteractionAfterChatInput();
     if (clearText) {
       chatInputEl.value = '';
     }

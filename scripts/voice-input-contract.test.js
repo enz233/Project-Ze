@@ -330,6 +330,18 @@ function testRendererQwenMainVoiceUsesPCM() {
   assert.match(renderer, /语音输入启动失败：/);
 }
 
+function testRendererVoiceInputKeepsChatAreaInteractive() {
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
+  assert.match(renderer, /function keepWindowInteractiveForChatInput\(\):\s*void\s*\{/);
+  assert.match(renderer, /function releaseWindowInteractionAfterChatInput\(\):\s*void\s*\{/);
+  assert.match(renderer, /chatInputWrapEl\.addEventListener\('mouseenter'/);
+  assert.match(renderer, /chatInputWrapEl\.addEventListener\('mouseleave'/);
+  assert.match(renderer, /openChatInput[\s\S]*?keepWindowInteractiveForChatInput\(\)/);
+  assert.match(renderer, /keepChatInputOpen[\s\S]*?keepWindowInteractiveForChatInput\(\)/);
+  assert.match(renderer, /closeChatInput[\s\S]*?releaseWindowInteractionAfterChatInput\(\)/);
+  assert.match(renderer, /if \(!chatInputWrapEl\.classList\.contains\('hidden'\)\) return/);
+}
+
 function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   const { ASR_PROVIDER_PRESETS } = load('core/asr-config.js');
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf-8');
@@ -860,6 +872,7 @@ async function run() {
   testJsonConfigStoreUpdateNormalizesMergedValue();
   testSettingsAsrPresetContractMatchesCoreDefinitions();
   testRendererQwenMainVoiceUsesPCM();
+  testRendererVoiceInputKeepsChatAreaInteractive();
   testAsrEngineFactoryAndParser();
   testQwenAsrRealtimeHelpers();
   await testQwenRealtimeStreamWaitsForDelayedFinal();

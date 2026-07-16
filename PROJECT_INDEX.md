@@ -146,7 +146,7 @@ src/
 | window-move-by | {deltaX, deltaY} | 移动窗口 |
 | move-to | MoveToRequest | 调试/后续模块用：平滑移动桌宠到目标坐标，执行 workArea clamp；X/Y 单轴分段属于 Unreleased Move 优化 |
 | teleport-to | MoveToRequest | 调试/后续模块用：直接切换桌宠到目标坐标，仍执行 clamp；当前作为设置页 Move 测试能力记录，后续 Move 优化会继续稳定其视觉边界 |
-| mouse-enter/leave | - | 鼠标进出 |
+| mouse-enter/leave | - | 鼠标进出；聊天输入框显示期间 renderer 会保持窗口可交互，输入框区域也参与 enter/leave 穿透控制，避免麦克风按钮点击被 click-through 吞掉 |
 | lonely-action | boolean | lonely 动画状态 |
 | state-finished | - | 动画状态结束 |
 | open-settings | - | 打开设置窗口 |
