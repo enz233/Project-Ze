@@ -79,6 +79,59 @@ export class VisionImageAnalyzer {
     }
   }
 
+  async analyzeCameraVisualQuery(frame: CameraFrameInput, userPrompt: string): Promise<string> {
+    const config = this.configManager.get();
+    if (!config.visionApiKey || !config.visionBaseURL || !config.visionModel) {
+      return '摄像头分析还没有配置 Vision API。';
+    }
+
+    const prompt = buildCameraVisualQueryPrompt(userPrompt);
+
+    try {
+      const response = await fetch(`${config.visionBaseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.visionApiKey}`,
+        },
+        body: JSON.stringify({
+          model: config.visionModel,
+          messages: [
+            {
+              role: 'system',
+              content: [
+                'You are a camera vision observer for Project-Ze.',
+                'Answer only what can be reasonably observed from one low-resolution camera frame.',
+                'Follow the user question, but avoid identity recognition and sensitive attribute inference.',
+                'Reply in concise natural Chinese, no Markdown.',
+              ].join('\n'),
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: toDataUri(frame), detail: 'low' } },
+              ],
+            },
+          ],
+          max_tokens: 220,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[VisionImageAnalyzer] Camera visual query failed (${response.status}): ${errorText}`);
+        return '摄像头分析失败了。';
+      }
+
+      const data = (await response.json()) as VisionChatCompletionResponse;
+      return cleanCameraPromptReply(data.choices?.[0]?.message?.content ?? '');
+    } catch (error: any) {
+      console.error('[VisionImageAnalyzer] Camera visual query failed:', error.message);
+      return '摄像头分析失败了。';
+    }
+  }
+
   async detectCameraAwareness(
     frame: CameraFrameInput,
     options: CameraAwarenessDetectOptions
@@ -173,6 +226,18 @@ export function buildCameraPromptAnalysisPrompt(userPrompt: string): string {
     '可以回答用户的请求，但要简短、温柔、克制。',
     '不要识别身份，不要推断年龄、性别、种族等敏感属性，不要输出隐私细节。',
     '如果请求不适合根据摄像头画面回答，就给一句简短的陪伴式回应。',
+  ].join('\n');
+}
+
+export function buildCameraVisualQueryPrompt(userPrompt: string): string {
+  const prompt = userPrompt.trim() || '请根据这张摄像头画面做一个简短观察。';
+  return [
+    `用户通过自然语言主动请求摄像头视觉帮助：${prompt}`,
+    '请根据这张低分辨率摄像头单帧回答用户问题。',
+    '优先回答用户真正关心的可见内容，例如衣着颜色、手里物品、画面中可见物、姿态或环境状态。',
+    '如果画面不清楚，请说明不确定，不要编造。',
+    '不要确认具体身份，不要推断年龄、性别、种族、健康诊断等敏感属性；如果用户问到这些，改为说明可观察到的非敏感线索。',
+    '回答要短、自然、像 Ze 在旁边轻声说话。',
   ].join('\n');
 }
 

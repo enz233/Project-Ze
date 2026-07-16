@@ -439,7 +439,7 @@
     });
   }
 
-  async function captureCameraFrame(source: 'chat-command' | 'background'): Promise<any> {
+  async function captureCameraFrame(source: 'chat-command' | 'background' | 'intent-command'): Promise<any> {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error('当前环境不支持摄像头访问');
     }
@@ -809,7 +809,8 @@
     window.companion.cameraAwareness.onBackgroundCaptureRequest(async function (payload: any) {
       var requestId = payload && payload.requestId;
       try {
-        var frame = await captureCameraFrame('background');
+        var source: 'background' | 'intent-command' = payload && payload.source === 'intent-command' ? 'intent-command' : 'background';
+        var frame = await captureCameraFrame(source);
         // @ts-ignore
         await window.companion.cameraAwareness.submitBackgroundFrame({ requestId: requestId, frame: frame });
       } catch (e: any) {

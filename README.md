@@ -38,7 +38,7 @@ Desktop Companion → AI Companion → Embodied Agent → Physical Robot
 | Screen Analysis | Vision API 截屏分析；显式 `.` 请求可总结页面或定位目标 | ✔ |
 | Screen Target Pointer | `.` 显式目标指示中定位目标并移动到目标旁；point 指向为 Unreleased 增强 | ✔ |
 | Voice Input (ASR) | 麦克风按钮 + 长按快捷键，流式识别到聊天输入框 | ✔ |
-| Camera Awareness | 可选后台低频摄像头感知、`*` 单帧分析、离开后回来轻柔回应 | ✔ |
+| Camera Awareness | 可选后台低频摄像头感知、`*` 单帧分析、自然语言摄像头视觉查询、离开后回来轻柔回应 | ✔ |
 | Relationship | 好感度 + 熟悉度系统 | ✔ |
 | Activity Monitor | 窗口标题感知 | ✔ |
 | Contextual Proactive Reactions | 配置化的工作/休息切换与长专注轻柔回应 | ✔ |
@@ -71,6 +71,7 @@ F11 → 设置 → 填写 API Key → 测试连接
 | F12 | 开发者工具 |
 | `*` 开头消息 | 摄像头单帧分析；无额外提示词时输出一句问候 |
 | `.` 开头消息 | 截屏分析；明确“指出/在哪/帮我找”等请求会进入目标定位与指向流程 |
+| “看看我在不在 / 看看我手里拿的是什么” | 通过 Intent Router 触发摄像头一次性检测或视觉查询 |
 | 麦克风按钮 | 点击开始/结束语音输入 |
 | `Ctrl+Shift+Space` | 长按说话，松开结束 |
 | F11 → 摄像头感知 | 启用轻量摄像头感知、立即检测一次、可选低频检测、本地实时预览 |

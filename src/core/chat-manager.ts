@@ -417,7 +417,7 @@ export class ChatManager {
     const result = await this.intentExecutor.execute(routed);
     this.intentRouter.recordExecution(result);
 
-    const assistantMessage = this.getIntentAssistantMessage(routed, result);
+    const assistantMessage = await this.getIntentAssistantMessage(routed, result);
     const shouldSuppressAssistantMessage =
       routed.decision.intent === 'screen_target_pointer' &&
       routed.permission.status === 'allowed' &&
@@ -435,7 +435,10 @@ export class ChatManager {
     return true;
   }
 
-  private getIntentAssistantMessage(routed: IntentRoutedDecision, result: IntentExecutionResult): string {
+  private async getIntentAssistantMessage(routed: IntentRoutedDecision, result: IntentExecutionResult): Promise<string> {
+    const workflowMessage = await this.tryBuildWorkflowFinalResponse(routed, result);
+    if (workflowMessage) return workflowMessage;
+
     if (result.message) return result.message;
     if (result.error) return `Intent failed: ${result.error}`;
     if (routed.permission.status === 'denied' || routed.permission.status === 'needs_confirmation') {
@@ -444,6 +447,48 @@ export class ChatManager {
     if (result.status === 'failed') return 'Intent failed safely without fallback to chat.';
     if (result.status === 'skipped') return 'Intent skipped safely without fallback to chat.';
     return '';
+  }
+
+  private async tryBuildWorkflowFinalResponse(
+    routed: IntentRoutedDecision,
+    result: IntentExecutionResult
+  ): Promise<string> {
+    if (!result.debug || result.debug.finalChatResponse !== true || !result.message) {
+      return '';
+    }
+
+    const workflow = String(result.debug.workflow || routed.decision.intent);
+    const userText = String(result.debug.userText || routed.request.text || '');
+    const observation = String(result.debug.observation || result.message);
+
+    try {
+      const response = await this.aiService.chat([
+        {
+          role: 'system',
+          content: [
+            '你是 Ze，一个安静、温柔、有陪伴感的桌面伙伴。',
+            '你会收到一个已经通过权限检查的工具工作流结果。',
+            '请把它改写成一句自然中文回复给用户。',
+            '不要声称看到了工具没有提供的信息。',
+            '不要输出 Markdown，不要输出 XML 标签。',
+            '控制在 60 个中文字符以内。',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: [
+            `workflow: ${workflow}`,
+            `user request: ${userText}`,
+            `tool observation: ${observation}`,
+          ].join('\n'),
+        },
+      ]);
+      const trimmed = (response || '').trim();
+      return (trimmed || result.message).slice(0, 80);
+    } catch (error: any) {
+      getLogger().log('chat', `[Intent] workflow final response failed: ${error?.message || String(error)}`);
+      return result.message;
+    }
   }
 
   private getInteractionTypeForIntent(intent: string): string {

@@ -7,6 +7,7 @@
 - The renderer still owns camera access and one-frame capture; the core manager still owns presence state transitions.
 - Returned reactions only fire on stable `absent -> present` transitions and still go through proactive bubble cooldown gates.
 - Added terminal debug output after each background camera detection, showing frame presence, confidence, stable state, reason, and source.
+- Connected camera one-shot checks and general camera visual questions to the Intent Router workflow.
 
 ## 2026-07-16 Camera prompt command
 

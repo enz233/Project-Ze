@@ -35,7 +35,7 @@ export interface CameraFrameInput {
   width: number;
   height: number;
   capturedAt: number;
-  source: 'settings-test' | 'background' | 'chat-command';
+  source: 'settings-test' | 'background' | 'chat-command' | 'intent-command';
 }
 
 export interface CameraAwarenessDetectOptions {

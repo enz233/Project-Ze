@@ -220,10 +220,36 @@ function createWindow(): void {
         message: result.handled ? 'target pointer handled' : 'target pointer did not find a target',
       };
     },
-    cameraCheckOnce: async () => ({
-      status: 'skipped',
-      message: '摄像头一次性检测需要设置页提供当前帧；第一版对话入口只完成权限路由，不自动打开摄像头。',
-    }),
+    cameraCheckOnce: async (routed) => {
+      const frame = await requestCameraIntentFrame();
+      const result = await cameraAwarenessManager.detectOnce(frame);
+      const message = formatCameraCheckOnceMessage(result.presence, result.confidence, result.reason);
+      return {
+        status: 'handled',
+        message,
+        debug: {
+          finalChatResponse: true,
+          workflow: 'camera_check_once',
+          userText: routed.request.text || '',
+          observation: message,
+        },
+      };
+    },
+    cameraVisualQuery: async (routed) => {
+      const frame = await requestCameraIntentFrame();
+      const userPrompt = routed.request.text || '请看一下摄像头画面。';
+      const observation = await visionImageAnalyzer.analyzeCameraVisualQuery(frame, userPrompt);
+      return {
+        status: 'handled',
+        message: observation,
+        debug: {
+          finalChatResponse: true,
+          workflow: 'camera_visual_query',
+          userText: userPrompt,
+          observation,
+        },
+      };
+    },
     voiceInputHelp: async () => ({
       status: 'handled',
       message: '请检查语音输入是否启用、API Key/Base URL/模型是否已配置，并查看 Debug 日志中的 voice-input 状态。',
@@ -707,20 +733,39 @@ function requestCameraPromptAnalysis(prompt: string): Promise<string> {
 }
 
 function requestCameraBackgroundFrame(): Promise<CameraFrameInput> {
+  return requestCameraFrame('background');
+}
+
+function requestCameraIntentFrame(): Promise<CameraFrameInput> {
+  return requestCameraFrame('intent-command');
+}
+
+function requestCameraFrame(source: 'background' | 'intent-command'): Promise<CameraFrameInput> {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return Promise.reject(new Error('camera window is not ready'));
   }
 
-  const requestId = `camera-background-${Date.now()}-${++cameraBackgroundFrameRequestSeq}`;
+  const requestId = `camera-${source}-${Date.now()}-${++cameraBackgroundFrameRequestSeq}`;
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       pendingCameraBackgroundFrameRequests.delete(requestId);
-      reject(new Error('background camera capture timed out'));
+      reject(new Error(`${source} camera capture timed out`));
     }, 15000);
 
     pendingCameraBackgroundFrameRequests.set(requestId, { resolve, reject, timeout });
-    mainWindow?.webContents.send(CAMERA_AWARENESS_IPC.backgroundCaptureRequest, { requestId });
+    mainWindow?.webContents.send(CAMERA_AWARENESS_IPC.backgroundCaptureRequest, { requestId, source });
   });
+}
+
+function formatCameraCheckOnceMessage(presence: string, confidence: number, reason: string): string {
+  const percent = formatCameraConfidence(confidence);
+  if (presence === 'present') {
+    return `我看到镜头里有人，置信度 ${percent}。`;
+  }
+  if (presence === 'absent') {
+    return `这次没有看到镜头里有人，置信度 ${percent}。`;
+  }
+  return `这帧不太确定，原因是 ${reason || 'uncertain'}。`;
 }
 
 function logCameraAwarenessDebug(snapshot: CameraAwarenessSnapshot, frame?: CameraFrameInput): void {

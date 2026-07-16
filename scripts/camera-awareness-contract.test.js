@@ -95,6 +95,7 @@ function testCameraIpcChannelNames() {
 function testCameraPromptAnalysisHelpers() {
   const {
     buildCameraPromptAnalysisPrompt,
+    buildCameraVisualQueryPrompt,
     cleanCameraPromptReply,
   } = load('core/vision-image-analyzer.js');
 
@@ -108,6 +109,11 @@ function testCameraPromptAnalysisHelpers() {
 
   assert.strictEqual(cleanCameraPromptReply('```text\n你好呀。\n```'), '你好呀。');
   assert.strictEqual(cleanCameraPromptReply(''), '我在这里。');
+
+  const visualQueryPrompt = buildCameraVisualQueryPrompt('看看我今天穿的衣服是什么颜色');
+  assert(visualQueryPrompt.includes('自然语言主动请求摄像头视觉帮助'));
+  assert(visualQueryPrompt.includes('看看我今天穿的衣服是什么颜色'));
+  assert(visualQueryPrompt.includes('可见内容'));
 }
 
 async function testCameraAwarenessManagerStateMachine() {
@@ -284,7 +290,11 @@ function testCameraSettingsIntegrationHooks() {
   assert(mainTs.includes('setCameraPromptAnalyzer'));
   assert(mainTs.includes("camera-analysis:capture-request"));
   assert(mainTs.includes('requestCameraBackgroundFrame'));
+  assert(mainTs.includes('requestCameraIntentFrame'));
   assert(mainTs.includes('CAMERA_AWARENESS_IPC.backgroundCaptureRequest'));
+  assert(mainTs.includes('cameraVisualQuery: async'));
+  assert(mainTs.includes('analyzeCameraVisualQuery'));
+  assert(mainTs.includes('cameraAwarenessManager.detectOnce(frame)'));
   assert(mainTs.includes('logCameraAwarenessDebug(snapshot, frame)'));
   assert(mainTs.includes("person:'") || mainTs.includes("'person:'"));
   assert(mainTs.includes("'| state:'"));
@@ -322,9 +332,12 @@ function testCameraSettingsIntegrationHooks() {
   const rendererTs = readProjectFile('src/renderer/renderer.ts');
   assert(chatManagerTs.includes("userMessage.startsWith('*')"));
   assert(chatManagerTs.includes('setCameraPromptAnalyzer'));
+  assert(chatManagerTs.includes('tryBuildWorkflowFinalResponse'));
   assert(rendererTs.includes('captureCameraPromptFrame'));
   assert(rendererTs.includes("source: 'chat-command'"));
-  assert(rendererTs.includes("captureCameraFrame('background')"));
+  assert(rendererTs.includes("payload.source === 'intent-command'"));
+  assert(rendererTs.includes('captureCameraFrame(source)'));
+  assert(rendererTs.includes("'intent-command'"));
   assert(rendererTs.includes('onPromptCaptureRequest'));
   assert(rendererTs.includes('onBackgroundCaptureRequest'));
   assert(rendererTs.includes('submitBackgroundFrame'));

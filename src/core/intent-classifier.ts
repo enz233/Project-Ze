@@ -29,6 +29,7 @@ const INTENT_KINDS: IntentKind[] = [
   'screen_summary',
   'screen_target_pointer',
   'camera_check_once',
+  'camera_visual_query',
   'voice_input_help',
   'settings_debug_help',
   'proactive_explain',
@@ -98,6 +99,10 @@ export class IntentClassifier {
 
     if (matchesAny(text, ['检测一下摄像头状态', '看一下摄像头状态', '摄像头感知有没有工作', '看看我在不在', '检测一下我在不在'])) {
       return decision('camera_check_once', 0.9, 'user explicitly requests one camera awareness check', 'explicit', ['camera_frame'], false);
+    }
+
+    if (isCameraVisualQuery(text)) {
+      return decision('camera_visual_query', 0.88, 'user explicitly asks a camera visual question', 'explicit', ['camera_frame', 'vision', 'llm'], false);
     }
 
     const target = extractTarget(text);
@@ -199,4 +204,10 @@ function extractTarget(text: string): string | undefined {
   const match = normalized.match(/(?:指出|帮我找|找到)([^，。！？?]{1,24})/);
   if (match?.[1]) return match[1].replace(/在哪|在哪里|位置/g, '').trim() || undefined;
   return undefined;
+}
+
+function isCameraVisualQuery(text: string): boolean {
+  const cameraWords = ['摄像头', '镜头', '看看我', '看一下我', '帮我看看我', '我穿', '穿的', '衣服', '我手里', '我拿', '我现在', '我这边'];
+  const visualQuestionWords = ['看看', '看一下', '帮我看', '什么颜色', '怎么样', '有什么', '有没有', '拿的是什么', '穿得', '适合出门', '出门'];
+  return matchesAny(text, cameraWords) && matchesAny(text, visualQuestionWords);
 }
