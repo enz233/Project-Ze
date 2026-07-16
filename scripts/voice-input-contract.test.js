@@ -679,6 +679,98 @@ async function testQwenRealtimeStreamReportsMissingTranscription() {
   }]);
 }
 
+async function testQwenRealtimeStreamPromotesPartialTextOnSessionFinished() {
+  class FakeQwenWebSocket {
+    constructor(url, options) {
+      this.url = url;
+      this.options = options;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      const parsed = JSON.parse(payload);
+      if (parsed.type === 'input_audio_buffer.append') {
+        setTimeout(() => {
+          this.emit('message', Buffer.from(JSON.stringify({
+            type: 'conversation.item.input_audio_transcription.text',
+            text: '用户已经正确出现的输入',
+          })));
+        }, 0);
+      }
+      if (parsed.type === 'session.finish') {
+        setTimeout(() => {
+          this.emit('message', Buffer.from(JSON.stringify({ type: 'session.finished' })));
+          this.emit('close');
+        }, 25);
+      }
+    }
+
+    close() {
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const events = await collectQwenEventsWithFakeSocket(FakeQwenWebSocket);
+  assert.deepStrictEqual(events, [
+    { type: 'partial', text: '用户已经正确出现的输入', sessionId: 's1' },
+    { type: 'final', text: '用户已经正确出现的输入', sessionId: 's1' },
+  ]);
+}
+
+async function testQwenRealtimeStreamPromotesAlreadyYieldedPartialTextOnSessionFinished() {
+  class FakeQwenWebSocket {
+    constructor(url, options) {
+      this.url = url;
+      this.options = options;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      const parsed = JSON.parse(payload);
+      if (parsed.type === 'input_audio_buffer.append') {
+        this.emit('message', Buffer.from(JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.text',
+          text: '已经提前显示的输入',
+        })));
+      }
+      if (parsed.type === 'session.finish') {
+        setTimeout(() => {
+          this.emit('message', Buffer.from(JSON.stringify({ type: 'session.finished' })));
+          this.emit('close');
+        }, 25);
+      }
+    }
+
+    close() {
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const events = await collectQwenEventsWithFakeSocket(FakeQwenWebSocket);
+  assert.deepStrictEqual(events, [
+    { type: 'partial', text: '已经提前显示的输入', sessionId: 's1' },
+    { type: 'final', text: '已经提前显示的输入', sessionId: 's1' },
+  ]);
+}
+
 async function testQwenRealtimeStreamReportsCloseWithoutTranscription() {
   class FakeQwenWebSocket {
     constructor(url, options) {
@@ -877,6 +969,8 @@ async function run() {
   testQwenAsrRealtimeHelpers();
   await testQwenRealtimeStreamWaitsForDelayedFinal();
   await testQwenRealtimeStreamReportsMissingTranscription();
+  await testQwenRealtimeStreamPromotesPartialTextOnSessionFinished();
+  await testQwenRealtimeStreamPromotesAlreadyYieldedPartialTextOnSessionFinished();
   await testQwenRealtimeStreamReportsCloseWithoutTranscription();
   await testRealtimeTerminalEventHelper();
   await testRealtimeStreamWaitsForPostCommitFinal();

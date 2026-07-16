@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- Qwen-ASR 结束态误报修复：当服务端已返回非空 partial 文本、但结束时只返回 `session.finished` 或空 completed 时，将最后一段 partial 提升为 final，避免输入框已有正确文字后又显示红色“未返回识别文本”误报。
 - Operation Guide 融合暂停标注：已提交 Project-Chen Operation Guide 的领域层、配置、planner/fallback、progress parser、manager 状态机和契约测试；融合暂停在计划 Task 2 后，尚未接入 Intent Router / IntentExecutor、main IPC、preload、settings、renderer guide panel 或最终用户文档。恢复时从 `docs/superpowers/plans/2026-07-16-operation-guide-fusion.md` 的 Task 3 继续。
 
 ## v0.3.2 (2026-07-16)
