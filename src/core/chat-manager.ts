@@ -13,6 +13,8 @@ import { TTSManager } from './tts-manager';
 import { IntentRouter } from './intent-router';
 import { IntentExecutor } from './intent-executor';
 import { IntentExecutionResult, IntentRequest, IntentRoutedDecision } from './intent-types';
+import { WorkflowChatResponseResult, WorkflowResponseContext } from './response-workflow-types';
+import { ResponseWorkflowOrchestrator } from './response-workflow-orchestrator';
 
 export class ChatManager {
   private aiService: AIService;
@@ -27,6 +29,7 @@ export class ChatManager {
   private screenTargetPointer: ScreenTargetPointer | null = null;
   private intentRouter?: IntentRouter;
   private intentExecutor?: IntentExecutor;
+  private responseWorkflowOrchestrator?: ResponseWorkflowOrchestrator;
   private isProcessing = false;
   private lastUserInteraction: number = Date.now();
   private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'speaking' | 'busy' | 'error', message: string = ''): void {
@@ -175,41 +178,9 @@ export class ChatManager {
         // 流式回调（目前不处理中间结果）
       });
 
-      // 解析响应并拆分长文本
-      const parsedItems = this.parseResponse(fullResponse);
-      const rawTexts = parsedItems.length > 0 ? parsedItems : [fullResponse || ''];
-      const texts: string[] = [];
-      for (const t of rawTexts) {
-        // 超过 30 字自动拆分
-        if (t.length > 30) {
-          const parts = this.splitText(t, 30);
-          texts.push(...parts);
-        } else {
-          texts.push(t);
-        }
-      }
-
-      // 保存 AI 回复到历史
-      this.memory.addMessage('assistant', fullResponse);
-
-      // 关系追踪：聊天增加好感和熟悉
-      this.memory.recordInteraction('chat', userMessage, this.stateManager.getCurrentState());
-      this.memory.changeAffection(0.3);     // 普通聊天 +0.3
-      this.memory.changeFamiliarity(0.1);   // 聊天后更熟悉 +0.1
-
-      // TTS 模式：批量合成，按顺序播放
-      // 非 TTS 模式：直接显示气泡
-      const ttsEnabled = this.ttsManager?.isEnabled() ?? false;
-      if (ttsEnabled && this.ttsManager) {
-        const ttsTexts = texts.map(t => t.slice(0, 200));
-        this.sendChatStatus('speaking', '播放回复中...');
-        const played = await this.ttsManager.speakAll(ttsTexts);
-        if (!played) {
-          await this.showTextSequence(texts);
-        }
-      } else {
-        await this.showTextSequence(texts);
-      }
+      await this.deliverAssistantResponse(fullResponse, 'chat', userMessage);
+      this.memory.changeAffection(0.3);
+      this.memory.changeFamiliarity(0.1);
 
       // 检查是否需要生成摘要（后台异步，不阻塞）
       if (this.memory.shouldSummarize()) {
@@ -223,6 +194,35 @@ export class ChatManager {
     } finally {
       this.isProcessing = false;
       this.sendChatStatus('idle');
+    }
+  }
+
+  private async deliverAssistantResponse(fullResponse: string, interactionType: string, interactionText: string): Promise<void> {
+    const parsedItems = this.parseResponse(fullResponse);
+    const rawTexts = parsedItems.length > 0 ? parsedItems : [fullResponse || ''];
+    const texts: string[] = [];
+    for (const t of rawTexts) {
+      if (t.length > 30) {
+        const parts = this.splitText(t, 30);
+        texts.push(...parts);
+      } else {
+        texts.push(t);
+      }
+    }
+
+    this.memory.addMessage('assistant', fullResponse);
+    this.memory.recordInteraction(interactionType, interactionText, this.stateManager.getCurrentState());
+
+    const ttsEnabled = this.ttsManager?.isEnabled() ?? false;
+    if (ttsEnabled && this.ttsManager) {
+      const ttsTexts = texts.map(t => t.slice(0, 200));
+      this.sendChatStatus('speaking', '播放回复中...');
+      const played = await this.ttsManager.speakAll(ttsTexts);
+      if (!played) {
+        await this.showTextSequence(texts);
+      }
+    } else {
+      await this.showTextSequence(texts);
     }
   }
 
@@ -384,6 +384,79 @@ export class ChatManager {
   setIntentRouter(intentRouter: IntentRouter, intentExecutor: IntentExecutor): void {
     this.intentRouter = intentRouter;
     this.intentExecutor = intentExecutor;
+  }
+
+  setResponseWorkflowOrchestrator(orchestrator: ResponseWorkflowOrchestrator): void {
+    this.responseWorkflowOrchestrator = orchestrator;
+  }
+
+  async respondFromWorkflow(context: WorkflowResponseContext): Promise<WorkflowChatResponseResult> {
+    if (!this.configManager.isValid()) {
+      throw new Error('AI 未配置');
+    }
+
+    const config = this.configManager.get();
+    const systemPrompt = this.memory.buildSystemPrompt(
+      config.systemPrompt,
+      RESPONSE_FORMAT_PROMPT,
+      this.buildWorkflowStatusPrompt(context)
+    );
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...this.memory.getRecentMessages(Math.max(0, config.historyMaxLength - 1)),
+      { role: 'user', content: this.buildWorkflowUserPrompt(context) },
+    ];
+
+    const fullResponse = await this.aiService.chatStream(messages, (_chunk, _total) => {});
+    if (context.privacy.allowVisibleReplyInHistory) {
+      this.memory.addMessage('user', context.userText);
+    }
+    await this.deliverAssistantResponse(fullResponse, `workflow-${context.workflow.replace(/_/g, '-')}`, context.userText);
+
+    if (this.memory.shouldSummarize()) {
+      this.summarizeAsync();
+    }
+
+    return {
+      fullResponse,
+      visibleReplyProduced: true,
+    };
+  }
+
+  private buildWorkflowStatusPrompt(context: WorkflowResponseContext): string {
+    const currentState = this.stateManager.getCurrentState();
+    const observationLines = context.observations.map((observation, index) => {
+      const parts = [
+        `观察${index + 1}: ${observation.kind}`,
+        observation.target ? `目标=${observation.target}` : '',
+        typeof observation.found === 'boolean' ? `found=${observation.found}` : '',
+        typeof observation.confidence === 'number' ? `confidence=${observation.confidence.toFixed(2)}` : '',
+        observation.reason ? `原因=${observation.reason}` : '',
+        observation.summary ? `摘要=${observation.summary.slice(0, 500)}` : '',
+        observation.warnings?.length ? `警告=${observation.warnings.join(',')}` : '',
+      ].filter(Boolean);
+      return parts.join('；');
+    });
+    const actionLines = context.actionResults.map((action, index) => (
+      `动作${index + 1}: ${action.action} / ${action.status}；${action.messageForModel}${action.debugReason ? `；原因=${action.debugReason}` : ''}`
+    ));
+
+    return [
+      `当前状态：${currentState}`,
+      '这是一个屏幕工作流回复。下面的工具结果只用于本轮回复，不要声称执行未发生的动作。',
+      '如果动作已 completed，可以自然说明已经指给用户看。',
+      '如果动作 skipped、failed 或 cancelled，简短说明原因，并建议用户重新描述或重试。',
+      '不要输出内部 JSON，不要主动暴露置信度数字，除非用户明确询问。',
+      ...observationLines,
+      ...actionLines,
+    ].join('\n');
+  }
+
+  private buildWorkflowUserPrompt(context: WorkflowResponseContext): string {
+    return [
+      `用户原始请求：${context.userText}`,
+      '请基于上面的屏幕工作流结果回复用户。',
+    ].join('\n');
   }
 
   private async tryHandleIntent(text: string, source: 'text_chat' | 'voice_asr'): Promise<boolean> {
