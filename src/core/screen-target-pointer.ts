@@ -173,7 +173,7 @@ export class ScreenTargetPointer {
       const afterLocateTitle = await this.windowActivityService.getActiveWindowTitle();
       if (this.hasScreenChanged(beforeTitle, afterLocateTitle)) {
         debugScreenTargetPointer('[ScreenTargetPointer][debug] screen changed after locate:', { sessionId: id, beforeTitlePresent: !!beforeTitle, afterTitlePresent: !!afterLocateTitle });
-        return this.cancelWithMessage('screen-changed');
+        return this.cancelWithMessage('screen-changed', options.suppressResultBubble);
       }
 
       const result = located.result;
@@ -190,7 +190,7 @@ export class ScreenTargetPointer {
       }
       if (fingerprintChanged) {
         debugScreenTargetPointer('[ScreenTargetPointer][debug] screen changed before move:', { sessionId: id });
-        return this.screenChangedResult(result);
+        return this.screenChangedResult(result, options.suppressResultBubble);
       }
 
       const screenPoint = this.screenAnalyzer.mapPointToScreen(located.frame, result.point!);
@@ -236,7 +236,7 @@ export class ScreenTargetPointer {
           screenChangedDuringMove,
           moveCancelled: moveResult.cancelled,
         });
-        return this.screenChangedResult(result);
+        return this.screenChangedResult(result, options.suppressResultBubble);
       }
 
       debugScreenTargetPointer('[ScreenTargetPointer][debug] move finished:', {
@@ -448,16 +448,27 @@ export class ScreenTargetPointer {
       .slice(0, 20) || '目标';
   }
 
-  private cancelWithMessage(reason: ScreenTargetPointerCancelReason): ScreenTargetPointerResult {
-    this.cancel(reason);
+  private cancelWithMessage(reason: ScreenTargetPointerCancelReason, suppressResultBubble = false): ScreenTargetPointerResult {
+    if (suppressResultBubble && reason === 'screen-changed') {
+      this.sessionId++;
+      this.state = 'cancelled';
+      this.moveController.cancel('manual');
+      this.clearPointVisual();
+      this.clearHoldTimer();
+      this.clearMoveMonitor();
+    } else {
+      this.cancel(reason);
+    }
     return { handled: true, moved: false, message: this.screenChangedMessage(), cancelReason: reason };
   }
 
-  private screenChangedResult(result?: ScreenTargetLocateResult): ScreenTargetPointerResult {
+  private screenChangedResult(result?: ScreenTargetLocateResult, suppressResultBubble = false): ScreenTargetPointerResult {
     const messageText = this.screenChangedMessage();
     this.clearPointVisual();
     this.finishSession();
-    this.showBubble(messageText);
+    if (!suppressResultBubble) {
+      this.showBubble(messageText);
+    }
     return { handled: true, moved: false, message: messageText, locateResult: result, cancelReason: 'screen-changed' };
   }
 
