@@ -13,6 +13,8 @@ import { TTSManager } from './tts-manager';
 import { IntentRouter } from './intent-router';
 import { IntentExecutor } from './intent-executor';
 import { IntentExecutionResult, IntentRequest, IntentRoutedDecision } from './intent-types';
+import { ResponseWorkflowOrchestrator } from './response-workflow-orchestrator';
+import { WorkflowChatResponseResult, WorkflowResponseContext } from './response-workflow-types';
 
 export class ChatManager {
   private aiService: AIService;
@@ -28,6 +30,7 @@ export class ChatManager {
   private cameraPromptAnalyzer: ((prompt: string) => Promise<string>) | null = null;
   private intentRouter?: IntentRouter;
   private intentExecutor?: IntentExecutor;
+  private responseWorkflowOrchestrator?: ResponseWorkflowOrchestrator;
   private isProcessing = false;
   private lastUserInteraction: number = Date.now();
   private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'camera' | 'speaking' | 'busy' | 'error', message: string = ''): void {
@@ -98,6 +101,25 @@ export class ChatManager {
       if (userMessage.startsWith('.')) {
         const screenMessage = userMessage.slice(1).trim() || '描述一下屏幕上有什么';
         this.sendChatStatus('screen', '正在看屏幕...');
+
+        if (this.responseWorkflowOrchestrator) {
+          const workflow = this.screenTargetPointer?.isPointerRequest(screenMessage)
+            ? 'screen_target_pointer_response'
+            : 'screen_summary_response';
+          const workflowResult = await this.responseWorkflowOrchestrator.run({
+            workflow,
+            source: 'screen_dot',
+            userText: userMessage,
+            toolText: screenMessage,
+          });
+          if (workflowResult.status === 'handled') {
+            return;
+          }
+          if (workflowResult.fallbackMessage) {
+            this.sendBubble(workflowResult.fallbackMessage);
+            return;
+          }
+        }
 
         if (this.screenTargetPointer?.isPointerRequest(screenMessage)) {
           const pointerResult = await this.screenTargetPointer.handle(screenMessage);
@@ -408,6 +430,115 @@ export class ChatManager {
     this.intentExecutor = intentExecutor;
   }
 
+  setResponseWorkflowOrchestrator(orchestrator: ResponseWorkflowOrchestrator): void {
+    this.responseWorkflowOrchestrator = orchestrator;
+  }
+
+  async respondFromWorkflow(context: WorkflowResponseContext): Promise<WorkflowChatResponseResult> {
+    if (!this.configManager.isValid()) {
+      throw new Error('AI 未配置');
+    }
+
+    const config = this.configManager.get();
+    const systemPrompt = this.memory.buildSystemPrompt(
+      config.systemPrompt,
+      RESPONSE_FORMAT_PROMPT,
+      this.buildWorkflowStatusPrompt(context)
+    );
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...this.memory.getRecentMessages(Math.max(0, config.historyMaxLength - 1)),
+      { role: 'user', content: this.buildWorkflowUserPrompt(context) },
+    ];
+
+    const fullResponse = await this.aiService.chatStream(messages, (_chunk, _total) => {});
+    if (context.privacy.allowVisibleReplyInHistory) {
+      this.memory.addMessage('user', context.userText);
+    }
+    await this.deliverAssistantResponse(
+      fullResponse,
+      `workflow-${context.workflow.replace(/_/g, '-')}`,
+      context.userText
+    );
+
+    if (this.memory.shouldSummarize()) {
+      this.summarizeAsync();
+    }
+
+    return {
+      fullResponse,
+      visibleReplyProduced: true,
+    };
+  }
+
+  private buildWorkflowStatusPrompt(context: WorkflowResponseContext): string {
+    const currentState = this.stateManager.getCurrentState();
+    const observationLines = context.observations.map((observation, index) => {
+      const parts = [
+        `观察${index + 1}: ${observation.kind}`,
+        observation.target ? `目标=${observation.target}` : '',
+        typeof observation.found === 'boolean' ? `found=${observation.found}` : '',
+        typeof observation.confidence === 'number' ? `confidence=${observation.confidence.toFixed(2)}` : '',
+        observation.presence ? `presence=${observation.presence}` : '',
+        observation.affect ? `affect=${observation.affect}` : '',
+        observation.reason ? `原因=${observation.reason}` : '',
+        observation.summary ? `摘要=${observation.summary.slice(0, 500)}` : '',
+        observation.warnings?.length ? `警告=${observation.warnings.join(',')}` : '',
+      ].filter(Boolean);
+      return parts.join('；');
+    });
+    const actionLines = context.actionResults.map((action, index) => (
+      `动作${index + 1}: ${action.action} / ${action.status}；${action.messageForModel}${action.debugReason ? `；原因=${action.debugReason}` : ''}`
+    ));
+
+    return [
+      `当前状态：${currentState}`,
+      '这是一个已授权工具工作流回复。工具结果只用于本轮回复，不要声称执行未发生的动作。',
+      '如果动作 completed，可以自然说明已经完成观察或指向。',
+      '如果动作 skipped、failed 或 cancelled，简短说明原因，并建议用户重新描述或重试。',
+      '摄像头结果来自单帧观察；不要识别具体身份，不要推断年龄、性别、种族、健康状态等敏感属性。',
+      '不要输出内部 JSON，不要主动暴露置信度数字，除非用户明确询问。',
+      ...observationLines,
+      ...actionLines,
+    ].join('\n');
+  }
+
+  private buildWorkflowUserPrompt(context: WorkflowResponseContext): string {
+    return [
+      `用户原始请求：${context.userText}`,
+      '请基于上面的工作流结果回复用户。',
+    ].join('\n');
+  }
+
+  private async deliverAssistantResponse(fullResponse: string, interactionType: string, interactionText: string): Promise<void> {
+    const parsedItems = this.parseResponse(fullResponse);
+    const rawTexts = parsedItems.length > 0 ? parsedItems : [fullResponse || ''];
+    const texts: string[] = [];
+    for (const t of rawTexts) {
+      if (t.length > 30) {
+        const parts = this.splitText(t, 30);
+        texts.push(...parts);
+      } else {
+        texts.push(t);
+      }
+    }
+
+    this.memory.addMessage('assistant', fullResponse);
+    this.memory.recordInteraction(interactionType, interactionText, this.stateManager.getCurrentState());
+
+    const ttsEnabled = this.ttsManager?.isEnabled() ?? false;
+    if (ttsEnabled && this.ttsManager) {
+      const ttsTexts = texts.map(t => t.slice(0, 200));
+      this.sendChatStatus('speaking', '播放回复中...');
+      const played = await this.ttsManager.speakAll(ttsTexts);
+      if (!played) {
+        await this.showTextSequence(texts);
+      }
+    } else {
+      await this.showTextSequence(texts);
+    }
+  }
+
   private async tryHandleIntent(text: string, source: 'text_chat' | 'voice_asr'): Promise<boolean> {
     if (!this.intentRouter || !this.intentExecutor) return false;
     const request: IntentRequest = { source, text, userInitiated: true };
@@ -417,9 +548,13 @@ export class ChatManager {
     const result = await this.intentExecutor.execute(routed);
     this.intentRouter.recordExecution(result);
 
+    if (this.isWorkflowFinalResponse(result)) {
+      return true;
+    }
+
     const assistantMessage = await this.getIntentAssistantMessage(routed, result);
     const shouldSuppressAssistantMessage =
-      routed.decision.intent === 'screen_target_pointer' &&
+      (routed.decision.intent === 'screen_target_pointer' || routed.decision.intent === 'screen_summary') &&
       routed.permission.status === 'allowed' &&
       result.status === 'handled';
     if (assistantMessage && !shouldSuppressAssistantMessage) {
@@ -435,10 +570,11 @@ export class ChatManager {
     return true;
   }
 
-  private async getIntentAssistantMessage(routed: IntentRoutedDecision, result: IntentExecutionResult): Promise<string> {
-    const workflowMessage = await this.tryBuildWorkflowFinalResponse(routed, result);
-    if (workflowMessage) return workflowMessage;
+  private isWorkflowFinalResponse(result: IntentExecutionResult): boolean {
+    return result.status === 'handled' && result.debug?.workflowFinalResponse === true;
+  }
 
+  private async getIntentAssistantMessage(routed: IntentRoutedDecision, result: IntentExecutionResult): Promise<string> {
     if (result.message) return result.message;
     if (result.error) return `Intent failed: ${result.error}`;
     if (routed.permission.status === 'denied' || routed.permission.status === 'needs_confirmation') {
@@ -447,48 +583,6 @@ export class ChatManager {
     if (result.status === 'failed') return 'Intent failed safely without fallback to chat.';
     if (result.status === 'skipped') return 'Intent skipped safely without fallback to chat.';
     return '';
-  }
-
-  private async tryBuildWorkflowFinalResponse(
-    routed: IntentRoutedDecision,
-    result: IntentExecutionResult
-  ): Promise<string> {
-    if (!result.debug || result.debug.finalChatResponse !== true || !result.message) {
-      return '';
-    }
-
-    const workflow = String(result.debug.workflow || routed.decision.intent);
-    const userText = String(result.debug.userText || routed.request.text || '');
-    const observation = String(result.debug.observation || result.message);
-
-    try {
-      const response = await this.aiService.chat([
-        {
-          role: 'system',
-          content: [
-            '你是 Ze，一个安静、温柔、有陪伴感的桌面伙伴。',
-            '你会收到一个已经通过权限检查的工具工作流结果。',
-            '请把它改写成一句自然中文回复给用户。',
-            '不要声称看到了工具没有提供的信息。',
-            '不要输出 Markdown，不要输出 XML 标签。',
-            '控制在 60 个中文字符以内。',
-          ].join('\n'),
-        },
-        {
-          role: 'user',
-          content: [
-            `workflow: ${workflow}`,
-            `user request: ${userText}`,
-            `tool observation: ${observation}`,
-          ].join('\n'),
-        },
-      ]);
-      const trimmed = (response || '').trim();
-      return (trimmed || result.message).slice(0, 80);
-    } catch (error: any) {
-      getLogger().log('chat', `[Intent] workflow final response failed: ${error?.message || String(error)}`);
-      return result.message;
-    }
   }
 
   private getInteractionTypeForIntent(intent: string): string {

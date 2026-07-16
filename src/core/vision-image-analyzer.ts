@@ -13,6 +13,7 @@ const AFFECT_VALUES: CameraAffect[] = ['positive', 'neutral', 'low_energy', 'unc
 const REASON_VALUES: CameraAwarenessReason[] = [
   'person_visible',
   'no_person_visible',
+  'foreground_face_too_small',
   'too_dark',
   'camera_blocked',
   'image_unclear',
@@ -158,7 +159,7 @@ export class VisionImageAnalyzer {
             {
               role: 'user',
               content: [
-                { type: 'text', text: buildCameraAwarenessPrompt(options.lightAffectEnabled) },
+                { type: 'text', text: buildCameraAwarenessPrompt(options.lightAffectEnabled, options) },
                 { type: 'image_url', image_url: { url: toDataUri(frame), detail: 'low' } },
               ],
             },
@@ -189,19 +190,30 @@ export function toDataUri(frame: CameraFrameInput): string {
   return `data:${frame.mimeType};base64,${frame.imageBase64}`;
 }
 
-export function buildCameraAwarenessPrompt(lightAffectEnabled: boolean): string {
+export function buildCameraAwarenessPrompt(
+  lightAffectEnabled: boolean,
+  options?: Partial<CameraAwarenessDetectOptions>
+): string {
   const affectInstruction = lightAffectEnabled
     ? '- 如果用户可见，affect 可为 positive / neutral / low_energy / unclear。affect 是非常粗略的陪伴线索，不是情绪诊断。'
     : '- 不要判断状态线索；affect 固定为 unclear。';
+  const foregroundInstruction = options?.foregroundFaceGateEnabled === false
+    ? ''
+    : [
+        '- Foreground face rule: judge only the nearest/largest foreground user, not smaller people behind them.',
+        `- A visible face around ${formatRatioPercent(options?.foregroundFaceMinHeightRatio ?? 0.05)} of frame height and ${formatRatioPercent(options?.foregroundFaceMinAreaRatio ?? 0.0012)} of frame area can count as foreground; allow slightly smaller if it is clearly the nearest foreground subject.`,
+        '- If only background/small people are visible, return absent with reason "foreground_face_too_small" or "no_person_visible".',
+      ].join('\n');
 
   return `你会收到一张低分辨率摄像头单帧。请只做 Project-Ze 桌宠的轻量陪伴判断。
 
 只输出 JSON：
-{"presence":"present|absent|uncertain","confidence":0到1,"affect":"positive|neutral|low_energy|unclear","reason":"person_visible|no_person_visible|too_dark|camera_blocked|image_unclear"}
+{"presence":"present|absent|uncertain","confidence":0到1,"affect":"positive|neutral|low_energy|unclear","reason":"person_visible|no_person_visible|foreground_face_too_small|too_dark|camera_blocked|image_unclear"}
 
 规则：
 - presence 只判断画面中是否有真实用户可见。
 - 如果看不清、太暗、遮挡、无法判断，返回 uncertain。
+${foregroundInstruction}
 ${affectInstruction}
 - 不识别身份。
 - 不判断年龄、性别、种族等敏感属性。
@@ -312,4 +324,10 @@ function normalizeConfidence(value: unknown): number {
 
 function normalizeEnum<T extends string>(value: unknown, allowed: T[], fallback: T): T {
   return typeof value === 'string' && allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+function formatRatioPercent(value: number): string {
+  const percent = Math.max(0, value) * 100;
+  const precision = percent < 1 ? 2 : 1;
+  return `${Number(percent.toFixed(precision))}%`;
 }

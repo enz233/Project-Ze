@@ -48,6 +48,146 @@ const CAPABILITIES: IntentCapability[] = [
   'bubble',
   'tts',
 ];
+const SCREEN_SUMMARY_PATTERNS = [
+  '帮我看看这个页面',
+  '帮我看一下这个页面',
+  '看看这个页面',
+  '看一下这个页面',
+  '看下这个页面',
+  '分析屏幕',
+  '分析一下屏幕',
+  '总结一下屏幕',
+  '读一下屏幕',
+  '帮我读一下屏幕',
+  '当前页面讲什么',
+  '当前页面是什么',
+  '看看当前页面',
+  '看一下当前页面',
+  '帮我看看当前页面',
+  '屏幕上是什么',
+  '屏幕里有什么',
+  '屏幕现在是什么',
+  '当前屏幕是什么',
+  '桌面在做什么',
+  '我的桌面在做什么',
+  '看看我的桌面',
+  '看一下我的桌面',
+  '桌面上是什么',
+  '桌面有什么',
+  '看看屏幕',
+  '看一下屏幕',
+  '看下屏幕',
+  '帮我看看屏幕',
+  '帮我看一下屏幕',
+  '帮我看下屏幕',
+  '看看当前屏幕',
+  '看一下当前屏幕',
+  '这个页面在讲什么',
+  '这个网页在讲什么',
+  '看看这个网页',
+  '帮我看看这个网页',
+  '分析一下这个页面',
+  '总结一下这个页面',
+  '看看这个界面',
+  '看一下这个界面',
+  '帮我看看这个界面',
+  '这个界面是什么',
+  '当前界面是什么',
+  '看看这个窗口',
+  '看一下这个窗口',
+  '帮我看看这个窗口',
+  '当前窗口是什么',
+  '窗口里有什么',
+  '这里帮我看一下',
+  '帮我看看这里',
+  '看一下这里',
+  '看看这里',
+  '这里是什么',
+  '这页讲什么',
+  '截屏分析',
+  '截图分析',
+  '截屏看一下',
+  '截图看一下',
+  '截个屏看看',
+  '截个图看看',
+  '帮我截屏看看',
+  '帮我截图看看',
+  '用截图看看',
+  '用截屏看看',
+];
+const SCREEN_VISUAL_ACTION_WORDS = [
+  '看看',
+  '看一下',
+  '看下',
+  '看一眼',
+  '你看',
+  '读一下',
+  '分析一下',
+  '分析',
+  '总结一下',
+  '解释一下',
+  '解释',
+  '识别一下',
+  '识别',
+  '讲什么',
+  '是什么',
+  '是啥',
+  '什么意思',
+  '啥意思',
+  '怎么回事',
+  '哪里不对',
+  '写了什么',
+  '有什么',
+];
+const SCREEN_CONTEXT_WORDS = [
+  '这个',
+  '这里',
+  '这边',
+  '这儿',
+  '这块',
+  '这页',
+  '上面',
+  '里面',
+  '当前',
+  '现在这个',
+  '屏幕',
+  '桌面',
+  '页面',
+  '网页',
+  '界面',
+  '窗口',
+  '截图',
+  '截屏',
+];
+const EXPLICIT_SCREEN_CONTEXT_WORDS = [
+  '屏幕',
+  '桌面',
+  '页面',
+  '网页',
+  '界面',
+  '窗口',
+  '截图',
+  '截屏',
+  '这页',
+];
+const ABSTRACT_DISCUSSION_WORDS = [
+  '代码',
+  '项目',
+  '方案',
+  '计划',
+  '模块',
+  '函数',
+  '文件',
+  '文档',
+  '接口',
+  '逻辑',
+  '设计',
+  '任务',
+  '提交',
+  'commit',
+  'git',
+  '阈值',
+];
 
 export class IntentClassifier {
   private readonly llmFallback?: IntentLlmFallback;
@@ -110,7 +250,7 @@ export class IntentClassifier {
       return decision('screen_target_pointer', 0.88, `user asks to locate target: ${target}`, 'explicit', ['screen_capture', 'vision', 'move_pointer'], false, target);
     }
 
-    if (request.source === 'screen_dot' || matchesAny(text, ['帮我看看这个页面', '看看这个页面', '分析屏幕', '当前页面讲什么', '屏幕上是什么', '这个页面在讲什么'])) {
+    if (request.source === 'screen_dot' || isScreenSummaryQuery(text)) {
       return decision('screen_summary', 0.86, 'user explicitly requests current screen summary', 'explicit', ['screen_capture', 'vision', 'llm'], false);
     }
 
@@ -206,7 +346,29 @@ function extractTarget(text: string): string | undefined {
   return undefined;
 }
 
+function isScreenSummaryQuery(text: string): boolean {
+  if (matchesAny(text, SCREEN_SUMMARY_PATTERNS)) return true;
+
+  const hasExplicitScreenContext = matchesAny(text, EXPLICIT_SCREEN_CONTEXT_WORDS);
+  const hasVisualAction = matchesAny(text, SCREEN_VISUAL_ACTION_WORDS);
+  if (!hasVisualAction) return false;
+
+  if (!hasExplicitScreenContext && matchesAny(text, ABSTRACT_DISCUSSION_WORDS)) {
+    return false;
+  }
+
+  const compactLength = text.replace(/\s+/g, '').length;
+  if (compactLength <= 8) return true;
+
+  return matchesAny(text, SCREEN_CONTEXT_WORDS);
+}
+
 function isCameraVisualQuery(text: string): boolean {
+  const explicitCameraWords = ['摄像头', '镜头'];
+  if (!matchesAny(text, explicitCameraWords) && matchesAny(text, EXPLICIT_SCREEN_CONTEXT_WORDS)) {
+    return false;
+  }
+
   const cameraWords = ['摄像头', '镜头', '看看我', '看一下我', '帮我看看我', '我穿', '穿的', '衣服', '我手里', '我拿', '我现在', '我这边'];
   const visualQuestionWords = ['看看', '看一下', '帮我看', '什么颜色', '怎么样', '有什么', '有没有', '拿的是什么', '穿得', '适合出门', '出门'];
   return matchesAny(text, cameraWords) && matchesAny(text, visualQuestionWords);

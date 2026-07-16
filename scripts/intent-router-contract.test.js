@@ -36,6 +36,36 @@ async function testRuleClassifierScreenSummaryFromNaturalLanguage() {
   assert.deepStrictEqual(decision.requiredCapabilities, ['screen_capture', 'vision', 'llm']);
 }
 
+async function testRuleClassifierScreenSummaryAdditionalTriggerWords() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const classifier = new IntentClassifier();
+  const samples = [
+    '帮我看一下屏幕',
+    '看看当前屏幕',
+    '看看我的桌面在做什么',
+    '你看看这个',
+    '这是什么意思',
+    '上面写了什么',
+    '这个界面是什么',
+    '当前窗口是什么',
+    '这里帮我看一下',
+    '截个屏看看',
+    '截图分析一下',
+  ];
+
+  for (const text of samples) {
+    const decision = await classifier.classify({
+      source: 'text_chat',
+      text,
+      userInitiated: true,
+    });
+
+    assert.strictEqual(decision.intent, 'screen_summary', text);
+    assert.strictEqual(decision.explicitness, 'explicit', text);
+    assert.deepStrictEqual(decision.requiredCapabilities, ['screen_capture', 'vision', 'llm'], text);
+  }
+}
+
 async function testRuleClassifierScreenTargetExtractsTarget() {
   const { IntentClassifier } = load('core/intent-classifier.js');
   const classifier = new IntentClassifier();
@@ -230,7 +260,7 @@ async function testRouterNegativeDebugLimitDoesNotHangAndKeepsNoRecentRecords() 
   assert.strictEqual(router.getDebugSnapshot().recent.length, 0);
 }
 
-async function testLlmFallbackCanClassifyAmbiguousPageRequest() {
+async function testLlmFallbackCanClassifyAmbiguousContextRequest() {
   const { IntentClassifier } = load('core/intent-classifier.js');
   const classifier = new IntentClassifier({
     enableLlmFallback: true,
@@ -245,7 +275,7 @@ async function testLlmFallbackCanClassifyAmbiguousPageRequest() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这里帮我看一下',
+    text: '这个有点奇怪',
     userInitiated: true,
   });
 
@@ -269,7 +299,7 @@ async function testLlmFallbackMissingTargetDowngradesToUnknown() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这个按钮帮我看看',
+    text: '这个按钮有点怪',
     userInitiated: true,
   });
 
@@ -286,7 +316,7 @@ async function testLlmFallbackInvalidJsonFallsBackToDraft() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这个设置帮我看一下',
+    text: '这个设置有点怪',
     userInitiated: true,
   });
 
@@ -310,7 +340,7 @@ async function testLlmFallbackInvalidIntentDropsSensitiveCapabilities() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这个设置帮我看一下',
+    text: '这个设置有点怪',
     userInitiated: true,
   });
 
@@ -334,7 +364,7 @@ async function testLlmFallbackLowConfidenceDropsSensitiveCapabilities() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这里帮我看一下',
+    text: '这个有点奇怪',
     userInitiated: true,
   });
 
@@ -358,7 +388,7 @@ async function testLlmFallbackLowConfidenceNormalChatDropsSensitiveCapabilities(
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这个设置帮我看一下',
+    text: '这个设置有点怪',
     userInitiated: true,
   });
 
@@ -435,6 +465,7 @@ async function testExecutorReportsMissingHandler() {
 async function run() {
   await testRuleClassifierNormalChatDoesNotNeedSensitiveCapabilities();
   await testRuleClassifierScreenSummaryFromNaturalLanguage();
+  await testRuleClassifierScreenSummaryAdditionalTriggerWords();
   await testRuleClassifierScreenTargetExtractsTarget();
   await testRuleClassifierCameraCheckIsExplicitOneShot();
   await testRuleClassifierCameraVisualQueryIsExplicit();
@@ -446,7 +477,7 @@ async function run() {
   await testRouterAddsCameraCapabilityBeforePermissionGate();
   await testRouterDebugSnapshotUsesIntentRequiredCapabilities();
   await testRouterNegativeDebugLimitDoesNotHangAndKeepsNoRecentRecords();
-  await testLlmFallbackCanClassifyAmbiguousPageRequest();
+  await testLlmFallbackCanClassifyAmbiguousContextRequest();
   await testLlmFallbackMissingTargetDowngradesToUnknown();
   await testLlmFallbackInvalidJsonFallsBackToDraft();
   await testLlmFallbackInvalidIntentDropsSensitiveCapabilities();

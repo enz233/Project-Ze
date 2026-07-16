@@ -30,6 +30,8 @@ import { VisionImageAnalyzer } from '../core/vision-image-analyzer';
 import { IntentRouter } from '../core/intent-router';
 import { IntentClassifier } from '../core/intent-classifier';
 import { IntentExecutor } from '../core/intent-executor';
+import { ResponseWorkflowOrchestrator } from '../core/response-workflow-orchestrator';
+import { WorkflowExecutionResult } from '../core/response-workflow-types';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -73,6 +75,7 @@ const pendingCameraBackgroundFrameRequests = new Map<string, {
 }>();
 let intentRouter: IntentRouter;
 let intentExecutor: IntentExecutor;
+let responseWorkflowOrchestrator: ResponseWorkflowOrchestrator;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -205,50 +208,63 @@ function createWindow(): void {
     windowActivityService,
   });
   chatManager.setScreenTargetPointer(screenTargetPointer);
+  responseWorkflowOrchestrator = new ResponseWorkflowOrchestrator({
+    screenAnalyzer,
+    screenTargetPointer,
+    cameraTools: {
+      checkPresence: async () => {
+        const frame = await requestCameraIntentFrame();
+        return await cameraAwarenessManager.detectOnce(frame);
+      },
+      analyzeVisualQuery: async (userPrompt: string) => {
+        const frame = await requestCameraIntentFrame();
+        return await visionImageAnalyzer.analyzeCameraVisualQuery(frame, userPrompt);
+      },
+    },
+    chatResponder: chatManager,
+  });
+  chatManager.setResponseWorkflowOrchestrator(responseWorkflowOrchestrator);
   intentExecutor = new IntentExecutor({
     screenSummary: async (routed) => {
       const prompt = routed.request.text || '请总结当前屏幕';
-      const result = await screenAnalyzer.analyze(prompt);
-      return { status: 'handled', message: typeof result === 'string' ? result : JSON.stringify(result) };
+      const result = await responseWorkflowOrchestrator.run({
+        workflow: 'screen_summary_response',
+        source: routed.request.source === 'voice_asr' ? 'voice_asr' : 'text_chat',
+        userText: routed.request.text || prompt,
+        toolText: prompt,
+      });
+      return workflowResultToIntentResult(result);
     },
     screenTargetPointer: async (routed) => {
       const target = routed.decision.target || routed.request.text || '';
       const pointerMessage = routed.request.text || target;
-      const result = await screenTargetPointer.handle(pointerMessage);
-      return {
-        status: result.handled ? 'handled' : 'skipped',
-        message: result.handled ? 'target pointer handled' : 'target pointer did not find a target',
-      };
+      const result = await responseWorkflowOrchestrator.run({
+        workflow: 'screen_target_pointer_response',
+        source: routed.request.source === 'voice_asr' ? 'voice_asr' : 'text_chat',
+        userText: routed.request.text || pointerMessage,
+        toolText: pointerMessage,
+      });
+      return workflowResultToIntentResult(result);
     },
     cameraCheckOnce: async (routed) => {
-      const frame = await requestCameraIntentFrame();
-      const result = await cameraAwarenessManager.detectOnce(frame);
-      const message = formatCameraCheckOnceMessage(result.presence, result.confidence, result.reason);
-      return {
-        status: 'handled',
-        message,
-        debug: {
-          finalChatResponse: true,
-          workflow: 'camera_check_once',
-          userText: routed.request.text || '',
-          observation: message,
-        },
-      };
+      const prompt = routed.request.text || '看看我在不在';
+      const result = await responseWorkflowOrchestrator.run({
+        workflow: 'camera_check_once_response',
+        source: routed.request.source === 'voice_asr' ? 'voice_asr' : 'text_chat',
+        userText: routed.request.text || prompt,
+        toolText: prompt,
+      });
+      return workflowResultToIntentResult(result);
     },
     cameraVisualQuery: async (routed) => {
-      const frame = await requestCameraIntentFrame();
       const userPrompt = routed.request.text || '请看一下摄像头画面。';
-      const observation = await visionImageAnalyzer.analyzeCameraVisualQuery(frame, userPrompt);
-      return {
-        status: 'handled',
-        message: observation,
-        debug: {
-          finalChatResponse: true,
-          workflow: 'camera_visual_query',
-          userText: userPrompt,
-          observation,
-        },
-      };
+      const result = await responseWorkflowOrchestrator.run({
+        workflow: 'camera_visual_query_response',
+        source: routed.request.source === 'voice_asr' ? 'voice_asr' : 'text_chat',
+        userText: userPrompt,
+        toolText: userPrompt,
+      });
+      return workflowResultToIntentResult(result);
     },
     voiceInputHelp: async () => ({
       status: 'handled',
@@ -715,6 +731,30 @@ function getMainWindowPosition(): { x: number; y: number } {
   return { x, y };
 }
 
+function workflowResultToIntentResult(result: WorkflowExecutionResult) {
+  if (result.status === 'handled') {
+    return {
+      status: 'handled' as const,
+      message: '',
+      debug: {
+        workflowFinalResponse: true,
+        workflow: result.workflow,
+        debugSummary: result.debugSummary,
+      },
+    };
+  }
+
+  return {
+    status: 'failed' as const,
+    message: result.fallbackMessage || '工作流执行失败了。',
+    error: result.error,
+    debug: {
+      workflow: result.workflow,
+      debugSummary: result.debugSummary,
+    },
+  };
+}
+
 function requestCameraPromptAnalysis(prompt: string): Promise<string> {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return Promise.resolve('摄像头窗口还没有准备好。');
@@ -753,8 +793,21 @@ function requestCameraFrame(source: 'background' | 'intent-command'): Promise<Ca
     }, 15000);
 
     pendingCameraBackgroundFrameRequests.set(requestId, { resolve, reject, timeout });
-    mainWindow?.webContents.send(CAMERA_AWARENESS_IPC.backgroundCaptureRequest, { requestId, source });
+    const payload: Record<string, unknown> = { requestId, source };
+    if (source === 'background') {
+      payload.foregroundFaceGate = getCameraForegroundFaceGateRequestConfig();
+    }
+    mainWindow?.webContents.send(CAMERA_AWARENESS_IPC.backgroundCaptureRequest, payload);
   });
+}
+
+function getCameraForegroundFaceGateRequestConfig(): Record<string, unknown> {
+  const config = cameraAwarenessManager?.getConfig();
+  return {
+    enabled: config?.foregroundFaceGateEnabled !== false,
+    minHeightRatio: config?.foregroundFaceMinHeightRatio ?? 0.05,
+    minAreaRatio: config?.foregroundFaceMinAreaRatio ?? 0.0012,
+  };
 }
 
 function formatCameraCheckOnceMessage(presence: string, confidence: number, reason: string): string {
@@ -770,15 +823,39 @@ function formatCameraCheckOnceMessage(presence: string, confidence: number, reas
 
 function logCameraAwarenessDebug(snapshot: CameraAwarenessSnapshot, frame?: CameraFrameInput): void {
   const detection = snapshot.lastDetection;
-  console.log(
+  const faceSummary = formatCameraFaceGateSummary(frame);
+  const parts = [
     '[CameraAwareness]',
     'person:', formatCameraPerson(detection?.presence),
-    '| presence:', detection?.presence ?? 'none',
-    '| confidence:', formatCameraConfidence(detection?.confidence),
     '| state:', snapshot.status,
     '| reason:', detection?.reason ?? 'none',
-    '| source:', frame?.source ?? 'unknown'
-  );
+    '| source:', frame?.source ?? 'unknown',
+  ];
+  if (faceSummary) {
+    parts.push('| face:', faceSummary);
+  }
+  if (detection?.presence === 'present') {
+    parts.push('| confidence:', formatCameraConfidence(detection.confidence));
+  }
+  console.log(...parts);
+}
+
+function formatCameraFaceGateSummary(frame?: CameraFrameInput): string {
+  const gate = frame?.foregroundFaceGate;
+  if (!gate || (gate.status !== 'passed' && gate.status !== 'blocked')) {
+    return '';
+  }
+
+  const decision = gate.status === 'passed' ? 'yes' : 'no';
+  const reason = gate.status === 'blocked' ? `${gate.reason} ` : '';
+  const face = formatCameraLargestFace(frame);
+  return `${decision} ${reason}${face}`.trim();
+}
+
+function formatCameraLargestFace(frame?: CameraFrameInput): string {
+  const face = frame?.foregroundFaceGate?.largestFace;
+  if (!face) return 'none';
+  return `height ${formatCameraRatio(face.heightRatio)}, area ${formatCameraRatio(face.areaRatio)}`;
 }
 
 function logCameraAwarenessCaptureError(error: Error, snapshot?: CameraAwarenessSnapshot): void {
@@ -801,6 +878,14 @@ function formatCameraConfidence(confidence?: number): string {
   const value = Number(confidence);
   if (!Number.isFinite(value)) return 'n/a';
   return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
+function formatCameraRatio(ratio?: number): string {
+  const value = Number(ratio);
+  if (!Number.isFinite(value)) return 'n/a';
+  const percent = Math.max(0, value) * 100;
+  const precision = percent < 1 ? 2 : 1;
+  return `${Number(percent.toFixed(precision))}%`;
 }
 
 setupIPC();

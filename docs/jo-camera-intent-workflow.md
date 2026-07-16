@@ -14,7 +14,7 @@
 - `camera_visual_query`
   - 用于“看看我今天穿的衣服是什么颜色”“看看我手里拿的是什么”“镜头里有什么”这类开放摄像头视觉问题。
   - 执行时拍摄一张 `intent-command` 单帧，并调用 `VisionImageAnalyzer.analyzeCameraVisualQuery(frame, userText)`。
-  - 视觉分析结果作为短期 workflow observation，再由 `ChatManager` 尝试交给聊天模型生成最终 Ze 风格回复。
+  - 视觉分析结果作为短期 workflow observation，再由 `ResponseWorkflowOrchestrator` 交给 `ChatManager.respondFromWorkflow(...)` 生成最终 Ze 风格回复。
 
 ## 保留的既有边界
 
@@ -50,7 +50,10 @@
   - 新增 `analyzeCameraVisualQuery()` 和 `buildCameraVisualQueryPrompt()`。
 
 - `src/core/chat-manager.ts`
-  - 对带 `finalChatResponse` debug 标记的摄像头 workflow 结果，尝试交给聊天模型生成最终可见回复。
+  - 新增正式的 `respondFromWorkflow(...)` 最终输出入口，摄像头 observation 不再通过临时 debug 标记润色。
+
+- `src/core/response-workflow-types.ts` / `src/core/response-workflow-orchestrator.ts`
+  - 摄像头人在/不在与视觉查询结果会转为 `camera_presence` / `camera_visual` observation，再统一流向聊天模型。
 
 - `scripts/intent-router-contract.test.js`
   - 覆盖 `camera_visual_query` 分类、权限和 executor 分发。
@@ -67,7 +70,8 @@
   -> IntentExecutor.cameraVisualQuery
   -> main 请求 renderer 拍摄 intent-command 单帧
   -> VisionImageAnalyzer.analyzeCameraVisualQuery(frame, userText)
-  -> ChatManager.tryBuildWorkflowFinalResponse(...)
+  -> ResponseWorkflowOrchestrator: camera_visual_query_response
+  -> ChatManager.respondFromWorkflow(...)
   -> 聊天模型生成最终 Ze 风格回复
 ```
 
@@ -78,7 +82,9 @@
   -> IntentExecutor.cameraCheckOnce
   -> main 请求 renderer 拍摄 intent-command 单帧
   -> CameraAwarenessManager.detectOnce(frame)
-  -> ChatManager 生成最终可见回复
+  -> ResponseWorkflowOrchestrator: camera_check_once_response
+  -> ChatManager.respondFromWorkflow(...)
+  -> 聊天模型生成最终可见回复
 ```
 
 ## 验证命令

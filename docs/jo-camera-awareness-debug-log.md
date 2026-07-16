@@ -9,17 +9,23 @@
 每次后台拍摄并完成检测后，主进程终端会输出：
 
 ```txt
-[CameraAwareness] person: yes | presence: present | confidence: 92% | state: present | reason: person_visible | source: background
+[CameraAwareness] person: yes | state: present | reason: person_visible | source: background | face: yes height 5.6%, area 0.14% | confidence: 92%
 ```
 
 字段含义：
 
 - `person`：当前这一帧是否看到人，`yes / no / uncertain / unknown`。
-- `presence`：Vision 单帧检测结果，`present / absent / uncertain`。
 - `confidence`：单帧检测置信度。
 - `state`：CameraAwarenessManager 稳定状态，`present / absent / uncertain / unavailable`。
 - `reason`：检测原因。
 - `source`：帧来源，后台低频检测为 `background`。
+- `face`：只在本地前景脸 gate 明确通过或拦截时出现；本地接口不可用时不会输出长串 `api_unavailable`。
+
+如果没有本地人脸框，或本地 `FaceDetector` 不可用，会压缩成：
+
+```txt
+[CameraAwareness] person: uncertain | state: present | reason: api_error | source: background
+```
 
 拍摄失败或超时时输出：
 

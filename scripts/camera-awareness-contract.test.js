@@ -19,6 +19,9 @@ function testCameraConfigDefaults() {
     detectionIntervalMs: 60 * 1000,
     absentAfterMs: 120 * 1000,
     minConfidence: 0.65,
+    foregroundFaceGateEnabled: true,
+    foregroundFaceMinHeightRatio: 0.05,
+    foregroundFaceMinAreaRatio: 0.0012,
     returnedReactionEnabled: true,
     debugPreviewEnabled: false,
   });
@@ -37,6 +40,17 @@ function testCameraParserAcceptsValidJson() {
     reason: 'person_visible',
     checkedAt: 1234,
   });
+}
+
+function testCameraParserAcceptsForegroundFaceTooSmallReason() {
+  const { parseCameraAwarenessResponse } = load('core/vision-image-analyzer.js');
+  const result = parseCameraAwarenessResponse(
+    '{"presence":"absent","confidence":0.88,"affect":"unclear","reason":"foreground_face_too_small"}',
+    4321
+  );
+  assert.strictEqual(result.presence, 'absent');
+  assert.strictEqual(result.reason, 'foreground_face_too_small');
+  assert.strictEqual(result.checkedAt, 4321);
 }
 
 function testCameraParserExtractsJsonFromText() {
@@ -94,10 +108,21 @@ function testCameraIpcChannelNames() {
 
 function testCameraPromptAnalysisHelpers() {
   const {
+    buildCameraAwarenessPrompt,
     buildCameraPromptAnalysisPrompt,
     buildCameraVisualQueryPrompt,
     cleanCameraPromptReply,
   } = load('core/vision-image-analyzer.js');
+
+  const awarenessPrompt = buildCameraAwarenessPrompt(true, {
+    foregroundFaceGateEnabled: true,
+    foregroundFaceMinHeightRatio: 0.05,
+    foregroundFaceMinAreaRatio: 0.0012,
+  });
+  assert(awarenessPrompt.includes('Foreground face rule'));
+  assert(awarenessPrompt.includes('5% of frame height'));
+  assert(awarenessPrompt.includes('0.12% of frame area'));
+  assert(awarenessPrompt.includes('foreground_face_too_small'));
 
   const defaultPrompt = buildCameraPromptAnalysisPrompt('');
   assert(defaultPrompt.includes('英文星号 *'));
@@ -189,6 +214,130 @@ async function testDetectOnceDoesNotTriggerBubble() {
   assert.strictEqual(result.presence, 'present');
   assert.strictEqual(manager.getSnapshot().status, 'unavailable');
   assert.strictEqual(bubbles.length, 0);
+}
+
+async function testCameraAwarenessManagerStartupAbsentThenReturn() {
+  const { CameraAwarenessManager } = load('core/camera-awareness-manager.js');
+  const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
+
+  let now = 1_000;
+  const detections = [];
+  const bubbles = [];
+  const configManager = {
+    get: () => ({ ...DEFAULT_CAMERA_AWARENESS_CONFIG, enabled: true, backgroundDetectionEnabled: true, absentAfterMs: 1000 }),
+    update: () => {},
+  };
+  const visionAnalyzer = {
+    detectCameraAwareness: async () => detections.shift(),
+  };
+  const manager = new CameraAwarenessManager(configManager, visionAnalyzer, {
+    bubbleOrchestrator: {
+      tryShowProactive: (text, source) => {
+        bubbles.push({ text, source });
+        return true;
+      },
+    },
+    now: () => now,
+  });
+  const frame = { imageBase64: 'AAAA', mimeType: 'image/jpeg', width: 320, height: 180, capturedAt: now, source: 'background' };
+
+  detections.push({ presence: 'absent', confidence: 0.9, affect: 'unclear', reason: 'no_person_visible', checkedAt: now });
+  let snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(snapshot.status, 'uncertain');
+  assert.strictEqual(bubbles.length, 0);
+
+  now += 1100;
+  detections.push({ presence: 'absent', confidence: 0.9, affect: 'unclear', reason: 'no_person_visible', checkedAt: now });
+  snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(snapshot.status, 'absent');
+  assert.strictEqual(bubbles.length, 0);
+
+  now += 100;
+  detections.push({ presence: 'present', confidence: 0.92, affect: 'neutral', reason: 'person_visible', checkedAt: now });
+  snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(snapshot.status, 'present');
+  assert.strictEqual(bubbles.length, 1);
+  assert.strictEqual(bubbles[0].source, 'camera_awareness');
+  assert.strictEqual(snapshot.lastReturnedAt, now);
+}
+
+async function testBackgroundForegroundFaceGateAllowsSampleLargestFace() {
+  const { CameraAwarenessManager } = load('core/camera-awareness-manager.js');
+  const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
+
+  let calls = 0;
+  const configManager = {
+    get: () => ({ ...DEFAULT_CAMERA_AWARENESS_CONFIG, enabled: true, backgroundDetectionEnabled: true }),
+    update: () => {},
+  };
+  const visionAnalyzer = {
+    detectCameraAwareness: async () => {
+      calls += 1;
+      return { presence: 'present', confidence: 0.99, affect: 'neutral', reason: 'person_visible', checkedAt: 1 };
+    },
+  };
+  const manager = new CameraAwarenessManager(configManager, visionAnalyzer, { now: () => 2468 });
+  const frame = {
+    imageBase64: 'AAAA',
+    mimeType: 'image/jpeg',
+    width: 320,
+    height: 180,
+    capturedAt: 2468,
+    source: 'background',
+    foregroundFaceGate: {
+      status: 'passed',
+      faceCount: 1,
+      largestFace: { x: 10, y: 10, width: 8, height: 10, heightRatio: 0.056, areaRatio: 0.0014 },
+      minHeightRatio: 0.05,
+      minAreaRatio: 0.0012,
+      reason: 'large_face_visible',
+    },
+  };
+
+  const snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(calls, 1);
+  assert.strictEqual(snapshot.lastDetection.presence, 'present');
+  assert.strictEqual(snapshot.lastDetection.reason, 'person_visible');
+}
+
+async function testBackgroundForegroundFaceGateBlocksTinyFacesBeforeVision() {
+  const { CameraAwarenessManager } = load('core/camera-awareness-manager.js');
+  const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
+
+  let calls = 0;
+  const configManager = {
+    get: () => ({ ...DEFAULT_CAMERA_AWARENESS_CONFIG, enabled: true, backgroundDetectionEnabled: true }),
+    update: () => {},
+  };
+  const visionAnalyzer = {
+    detectCameraAwareness: async () => {
+      calls += 1;
+      return { presence: 'present', confidence: 0.99, affect: 'neutral', reason: 'person_visible', checkedAt: 1 };
+    },
+  };
+  const manager = new CameraAwarenessManager(configManager, visionAnalyzer, { now: () => 2468 });
+  const frame = {
+    imageBase64: 'AAAA',
+    mimeType: 'image/jpeg',
+    width: 320,
+    height: 180,
+    capturedAt: 2468,
+    source: 'background',
+    foregroundFaceGate: {
+      status: 'blocked',
+      faceCount: 1,
+      largestFace: { x: 10, y: 10, width: 5, height: 7, heightRatio: 0.039, areaRatio: 0.0006 },
+      minHeightRatio: 0.05,
+      minAreaRatio: 0.0012,
+      reason: 'face_too_small',
+    },
+  };
+
+  const snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(calls, 0);
+  assert.strictEqual(snapshot.lastDetection.presence, 'absent');
+  assert.strictEqual(snapshot.lastDetection.reason, 'foreground_face_too_small');
+  assert.strictEqual(snapshot.lastDetection.checkedAt, 2468);
 }
 
 async function testCameraBackgroundRunnerFollowsConfig() {
@@ -298,6 +447,8 @@ function testCameraSettingsIntegrationHooks() {
   assert(mainTs.includes('logCameraAwarenessDebug(snapshot, frame)'));
   assert(mainTs.includes("person:'") || mainTs.includes("'person:'"));
   assert(mainTs.includes("'| state:'"));
+  assert(mainTs.includes('formatCameraFaceGateSummary'));
+  assert(mainTs.includes('getCameraForegroundFaceGateRequestConfig'));
   assert(mainTs.includes('logCameraAwarenessCaptureError(error, snapshot)'));
 
   assert(preloadTs.includes('cameraAwareness: {'));
@@ -332,11 +483,15 @@ function testCameraSettingsIntegrationHooks() {
   const rendererTs = readProjectFile('src/renderer/renderer.ts');
   assert(chatManagerTs.includes("userMessage.startsWith('*')"));
   assert(chatManagerTs.includes('setCameraPromptAnalyzer'));
-  assert(chatManagerTs.includes('tryBuildWorkflowFinalResponse'));
+  assert(chatManagerTs.includes('respondFromWorkflow'));
+  assert(chatManagerTs.includes('setResponseWorkflowOrchestrator'));
   assert(rendererTs.includes('captureCameraPromptFrame'));
   assert(rendererTs.includes("source: 'chat-command'"));
   assert(rendererTs.includes("payload.source === 'intent-command'"));
-  assert(rendererTs.includes('captureCameraFrame(source)'));
+  assert(rendererTs.includes('detectCameraForegroundFaceGate'));
+  assert(rendererTs.includes('FaceDetector'));
+  assert(rendererTs.includes('foregroundFaceGate'));
+  assert(rendererTs.includes('captureCameraFrame(source, payload && payload.foregroundFaceGate)'));
   assert(rendererTs.includes("'intent-command'"));
   assert(rendererTs.includes('onPromptCaptureRequest'));
   assert(rendererTs.includes('onBackgroundCaptureRequest'));
@@ -346,6 +501,7 @@ function testCameraSettingsIntegrationHooks() {
 async function run() {
   testCameraConfigDefaults();
   testCameraParserAcceptsValidJson();
+  testCameraParserAcceptsForegroundFaceTooSmallReason();
   testCameraParserExtractsJsonFromText();
   testCameraParserFallsBackOnInvalidJson();
   testCameraPromptAnalysisHelpers();
@@ -353,7 +509,10 @@ async function run() {
   testCameraIpcChannelNames();
   testCameraSettingsIntegrationHooks();
   await testCameraAwarenessManagerStateMachine();
+  await testCameraAwarenessManagerStartupAbsentThenReturn();
   await testDetectOnceDoesNotTriggerBubble();
+  await testBackgroundForegroundFaceGateAllowsSampleLargestFace();
+  await testBackgroundForegroundFaceGateBlocksTinyFacesBeforeVision();
   await testCameraBackgroundRunnerFollowsConfig();
   await testCameraBackgroundRunnerReportsCaptureError();
   console.log('camera-awareness-contract tests passed');
