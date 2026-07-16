@@ -12,7 +12,7 @@ Fixed final whole-branch review Important findings and the optional Minor debug 
   - Intent Router debug card now renders `requiredCapabilities`, `deniedCapabilities`, `executorStatus`, `executorMessage`, and `executorError`, preserving `escapeHtml` for rendered fields.
 
 ## 提交哈希
-6cf822c
+81fedf8
 
 ## 测试命令和结果
 - `npm test`
