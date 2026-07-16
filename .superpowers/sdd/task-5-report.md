@@ -8,7 +8,7 @@ STATUS: DONE
 - 更新 `docs/superpowers/plans/2026-07-16-intent-router.md` 中 Task 5 勾选状态。
 
 提交哈希:
-- da88c06
+- 59c1307
 
 测试命令和结果:
 - `npm test`
