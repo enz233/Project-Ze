@@ -1071,7 +1071,7 @@ git commit -m "feat: add intent executor dispatcher"
   - IPC channel: `intent-router:get-debug-snapshot`
   - Preload API: `window.companion.intentRouter.getDebugSnapshot(): Promise<IntentDebugSnapshot>`
 
-- [ ] **Step 1: Inspect only the small relevant snippets**
+- [x] **Step 1: Inspect only the small relevant snippets**
 
 Read these targeted sections:
 
@@ -1084,7 +1084,7 @@ Read these targeted sections:
 
 Expected: identify where to add one IPC handler, one preload method, and one Debug card section. Do not refactor unrelated debug UI.
 
-- [ ] **Step 2: Instantiate router in main process**
+- [x] **Step 2: Instantiate router in main process**
 
 In `src/main/main.ts`, add imports:
 
@@ -1110,7 +1110,7 @@ Inside the existing app initialization block, after `cameraAwarenessManager` is 
 
 If `getConfig()` returns a Promise in current source, use a synchronous boolean closure backed by a local flag updated in the camera config update handler instead. Do not make `cameraEnabled` async.
 
-- [ ] **Step 3: Add IPC handler**
+- [x] **Step 3: Add IPC handler**
 
 In the existing `setupIPC()` area of `src/main/main.ts`, add:
 
@@ -1120,7 +1120,7 @@ In the existing `setupIPC()` area of `src/main/main.ts`, add:
   });
 ```
 
-- [ ] **Step 4: Expose preload API**
+- [x] **Step 4: Expose preload API**
 
 In `src/main/preload.ts`, add a nested API under `window.companion`:
 
@@ -1140,7 +1140,7 @@ intentRouter: {
 
 Use `any` only in preload typing if existing APIs use `any`; otherwise import `IntentDebugSnapshot` as a type.
 
-- [ ] **Step 5: Add Debug panel card**
+- [x] **Step 5: Add Debug panel card**
 
 In `src/main/debug.html`, add a small card near existing Proactive / Camera / logs cards:
 
@@ -1194,7 +1194,7 @@ function escapeHtml(value) {
 
 Call `refreshIntentRouterDebug()` in the same interval or refresh loop as other debug sections.
 
-- [ ] **Step 6: Build and test**
+- [x] **Step 6: Build and test**
 
 Run:
 
@@ -1204,7 +1204,7 @@ npm test
 
 Expected: TypeScript compiles and all contract tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/main/main.ts src/main/preload.ts src/main/debug.html
