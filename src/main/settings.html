@@ -2310,6 +2310,10 @@
           setASRMicStatus('识别完成', false);
           asrRecognitionSessionId = null;
         } else if (payload.type === 'error') {
+          if (payload.recoverable === true) {
+            setASRMicStatus(formatASRRecognitionErrorMessage(payload.message || '语音识别暂时异常，正在继续识别'), false);
+            return;
+          }
           setASRMicStatus(formatASRRecognitionErrorMessage(payload.message || '语音识别失败'), true);
           setASRRecognitionProgress(100, '识别失败');
           asrRecognitionSessionId = null;

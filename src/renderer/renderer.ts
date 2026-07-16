@@ -902,6 +902,10 @@
         voiceLastSessionId = null;
       }
       if (payload.type === 'error') {
+        if (payload.recoverable === true) {
+          updateChatStatus({ phase: 'voice-warning', message: payload.message || '语音识别暂时异常，正在继续识别' });
+          return;
+        }
         updateChatStatus({ phase: 'voice-error', message: payload.message || '语音识别失败' });
         voiceLastSessionId = null;
       }

@@ -412,6 +412,24 @@ function testRendererFunASRMainVoiceUsesPCM() {
   assert.match(renderer, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
 }
 
+function testRendererRecoverableASRErrorIsNonTerminal() {
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
+  assert.match(
+    renderer,
+    /if \(payload\.type === 'error'\) \{[\s\S]*?if \(payload\.recoverable === true\) \{[\s\S]*?phase: 'voice-warning'[\s\S]*?return;[\s\S]*?phase: 'voice-error'[\s\S]*?voiceLastSessionId = null;[\s\S]*?\}/,
+    'renderer recoverable transcript errors must warn and return before clearing voiceLastSessionId'
+  );
+}
+
+function testSettingsRecoverableASRErrorIsNonTerminal() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf8');
+  assert.match(
+    html,
+    /else if \(payload\.type === 'error'\) \{[\s\S]*?if \(payload\.recoverable === true\) \{[\s\S]*?正在继续识别[\s\S]*?return;[\s\S]*?setASRRecognitionProgress\(100, '识别失败'\);[\s\S]*?asrRecognitionSessionId = null;[\s\S]*?\}/,
+    'settings recoverable transcript errors must return before failing the recognition test and clearing asrRecognitionSessionId'
+  );
+}
+
 function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   const { ASR_PROVIDER_PRESETS } = load('core/asr-config.js');
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf-8');
@@ -1489,6 +1507,8 @@ async function run() {
   testSettingsAsrPresetContractMatchesCoreDefinitions();
   testRendererQwenMainVoiceUsesPCM();
   testRendererFunASRMainVoiceUsesPCM();
+  testRendererRecoverableASRErrorIsNonTerminal();
+  testSettingsRecoverableASRErrorIsNonTerminal();
   testAsrEngineFactoryAndParser();
   testQwenAsrRealtimeHelpers();
   testFunASRLocalEngineHelpers();

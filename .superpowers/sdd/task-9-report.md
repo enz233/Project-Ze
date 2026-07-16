@@ -22,3 +22,21 @@ Date: 2026-07-16
 ## Commits
 
 - `c8d9358` fix: handle FunASR recoverable ASR errors
+- included in final commit: fix: keep recoverable ASR UI errors non-terminal
+
+## Final re-review UI consumer fix
+
+Date: 2026-07-16
+
+### Changes
+
+- Main chat transcript consumer treats `payload.type === 'error' && payload.recoverable === true` as a non-terminal warning and preserves `voiceLastSessionId` for later final/partial events.
+- Settings recognition-test transcript consumer treats recoverable errors as non-terminal status and preserves `asrRecognitionSessionId`; non-recoverable errors keep existing failed/terminal behavior.
+- Added focused source contract assertions for renderer and settings recoverable-error handling.
+
+### Tests
+
+- `npm test` passed.
+- `npm run build` passed.
+- `node scripts/voice-input-contract.test.js` passed.
+- `git diff --check` passed.
