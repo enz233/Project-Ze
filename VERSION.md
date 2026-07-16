@@ -3,6 +3,8 @@
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
 ## Unreleased
+
+## v0.3.2 (2026-07-16)
 - 语音输入触发修复：聊天输入框显示期间保持主窗口可交互，并让输入框区域参与 mouse enter/leave 穿透控制，避免麦克风按钮和页面级长按快捷键因窗口 click-through 看起来无响应。
 - 屏幕目标指示站位微调：保持八方向 point 差分选择逻辑不变，仅在最终 `moveTopLeft.x` 上增加 10px 水平校准，修正视觉上略偏左的问题；新增 screen pointer position 契约测试
 - Response Workflow Orchestrator：屏幕总结和屏幕目标指向结果先转为短期 workflow context，再交给聊天模型生成统一 `<item>` 气泡回复；原始屏幕 observation 不默认进入长期记忆。

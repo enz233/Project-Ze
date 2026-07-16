@@ -1,6 +1,6 @@
 # Project-Ze / Quiet Companion 项目索引
 
-> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.3.1 + Unreleased 文档同步
+> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.3.2
 
 ## 项目概述
 
@@ -215,7 +215,7 @@ src/
 
 | 版本 | 日期 | 主要内容 |
 |------|------|---------|
-| Unreleased | - | Intent Router 最小聊天路由接入、八方向 point visual、screen fingerprint 稳定性与诊断、Move 专用差分/单轴分段/teleportTo、ASR provider presets、renderer 动画守卫修复 |
+| v0.3.2 | 2026-07-16 | Response Workflow Orchestrator、Intent Router、Qwen-ASR 实时识别与 PCM16 主入口、语音输入触发修复、屏幕目标指示稳定性/诊断/站位微调、Move/renderer 稳定性增强 |
 | v0.3.1 | 2026-07-15 | Camera Awareness 第一版、设置页摄像头入口与实时预览、cameraAwareness IPC、Move clamp/测试入口、ScreenTargetPointer 初版 |
 | v0.3.0 | 2026-07-15 | 语音输入 ASR：麦克风按钮、长按快捷键、流式识别、ASR 配置、音频缓存接口 |
 | v0.1.0 | 2026-05-23 | 初始版本，7 状态系统 |
