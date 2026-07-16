@@ -53,7 +53,7 @@ export type MoveCancelReason = 'drag-start' | 'new-move' | 'manual' | 'window-de
 export interface MoveToRequest {
   x: number;
   y: number;
-  anchor?: MoveAnchor;      // 默认 'top-left'
+  anchor?: MoveAnchor;      // 默认 'center'
   durationMs?: number;      // 优先级高于 speedPxPerSec
   speedPxPerSec?: number;   // 默认 500
   reason?: string;          // 调用来源，例如 'observer' / 'debug' / 'screen-focus'
@@ -69,28 +69,30 @@ export interface MoveResult {
 
 ### 坐标语义
 
-`anchor` 默认值为 `top-left`：
+`anchor` 默认值为 `center`：
 
 ```ts
 moveController.moveTo({ x: 100, y: 100 });
 ```
 
-表示把 Electron 窗口左上角移动到屏幕坐标 `(100, 100)`。
+表示把桌宠窗口中心移动到屏幕坐标 `(100, 100)`。
 
-`anchor: 'center'`：
+`anchor: 'top-left'`：
 
 ```ts
-moveController.moveTo({ x: 960, y: 540, anchor: 'center' });
+moveController.moveTo({ x: 100, y: 100, anchor: 'top-left' });
 ```
 
-表示把桌宠窗口中心移动到屏幕坐标 `(960, 540)`。模块内部根据当前窗口尺寸换算左上角：
+表示把 Electron 窗口左上角移动到屏幕坐标 `(100, 100)`。
+
+当使用默认 `center` 时，模块内部根据当前窗口尺寸换算左上角：
 
 ```ts
 left = x - windowWidth / 2;
 top = y - windowHeight / 2;
 ```
 
-后续模块调用时建议显式写 `anchor`，除非确实想使用默认左上角。
+后续模块调用时建议显式写 `anchor`；不写时按窗口中心点移动。
 
 ## MoveController 职责
 
