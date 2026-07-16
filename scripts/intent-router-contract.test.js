@@ -36,6 +36,36 @@ async function testRuleClassifierScreenSummaryFromNaturalLanguage() {
   assert.deepStrictEqual(decision.requiredCapabilities, ['screen_capture', 'vision', 'llm']);
 }
 
+async function testRuleClassifierScreenSummaryAdditionalTriggerWords() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const classifier = new IntentClassifier();
+  const samples = [
+    '帮我看一下屏幕',
+    '看看当前屏幕',
+    '看看我的桌面在做什么',
+    '你看看这个',
+    '这是什么意思',
+    '上面写了什么',
+    '这个界面是什么',
+    '当前窗口是什么',
+    '这里帮我看一下',
+    '截个屏看看',
+    '截图分析一下',
+  ];
+
+  for (const text of samples) {
+    const decision = await classifier.classify({
+      source: 'text_chat',
+      text,
+      userInitiated: true,
+    });
+
+    assert.strictEqual(decision.intent, 'screen_summary', text);
+    assert.strictEqual(decision.explicitness, 'explicit', text);
+    assert.deepStrictEqual(decision.requiredCapabilities, ['screen_capture', 'vision', 'llm'], text);
+  }
+}
+
 async function testRuleClassifierScreenTargetExtractsTarget() {
   const { IntentClassifier } = load('core/intent-classifier.js');
   const classifier = new IntentClassifier();
@@ -64,6 +94,21 @@ async function testRuleClassifierCameraCheckIsExplicitOneShot() {
   assert.strictEqual(decision.intent, 'camera_check_once');
   assert.strictEqual(decision.explicitness, 'explicit');
   assert.deepStrictEqual(decision.requiredCapabilities, ['camera_frame']);
+}
+
+async function testRuleClassifierCameraVisualQueryIsExplicit() {
+  const { IntentClassifier } = load('core/intent-classifier.js');
+  const classifier = new IntentClassifier();
+
+  const decision = await classifier.classify({
+    source: 'text_chat',
+    text: '帮我看看我今天穿的衣服是什么颜色',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(decision.intent, 'camera_visual_query');
+  assert.strictEqual(decision.explicitness, 'explicit');
+  assert.deepStrictEqual(decision.requiredCapabilities, ['camera_frame', 'vision', 'llm']);
 }
 
 async function testRouterAllowsExplicitScreenSummaryFromTextChat() {
@@ -119,6 +164,22 @@ async function testRouterRequiresCameraConfigForCameraCheck() {
   assert.strictEqual(routed.decision.intent, 'camera_check_once');
   assert.strictEqual(routed.permission.status, 'denied');
   assert.match(routed.permission.reason, /camera awareness is disabled/);
+}
+
+async function testRouterRequiresCameraConfigForCameraVisualQuery() {
+  const { IntentRouter } = load('core/intent-router.js');
+  const router = new IntentRouter({ cameraEnabled: () => false });
+
+  const routed = await router.route({
+    source: 'text_chat',
+    text: '看看我手里拿的是什么',
+    userInitiated: true,
+  });
+
+  assert.strictEqual(routed.decision.intent, 'camera_visual_query');
+  assert.strictEqual(routed.permission.status, 'denied');
+  assert.match(routed.permission.reason, /camera awareness is disabled/);
+  assert.deepStrictEqual(routed.permission.deniedCapabilities, ['camera_frame']);
 }
 
 async function testRouterRecordsDebugSnapshot() {
@@ -199,7 +260,7 @@ async function testRouterNegativeDebugLimitDoesNotHangAndKeepsNoRecentRecords() 
   assert.strictEqual(router.getDebugSnapshot().recent.length, 0);
 }
 
-async function testLlmFallbackCanClassifyAmbiguousPageRequest() {
+async function testLlmFallbackCanClassifyAmbiguousContextRequest() {
   const { IntentClassifier } = load('core/intent-classifier.js');
   const classifier = new IntentClassifier({
     enableLlmFallback: true,
@@ -214,7 +275,7 @@ async function testLlmFallbackCanClassifyAmbiguousPageRequest() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这里帮我看一下',
+    text: '这个有点奇怪',
     userInitiated: true,
   });
 
@@ -238,7 +299,7 @@ async function testLlmFallbackMissingTargetDowngradesToUnknown() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这个按钮帮我看看',
+    text: '这个按钮有点怪',
     userInitiated: true,
   });
 
@@ -255,7 +316,7 @@ async function testLlmFallbackInvalidJsonFallsBackToDraft() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这个设置帮我看一下',
+    text: '这个设置有点怪',
     userInitiated: true,
   });
 
@@ -279,7 +340,7 @@ async function testLlmFallbackInvalidIntentDropsSensitiveCapabilities() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这个设置帮我看一下',
+    text: '这个设置有点怪',
     userInitiated: true,
   });
 
@@ -303,7 +364,7 @@ async function testLlmFallbackLowConfidenceDropsSensitiveCapabilities() {
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这里帮我看一下',
+    text: '这个有点奇怪',
     userInitiated: true,
   });
 
@@ -327,7 +388,7 @@ async function testLlmFallbackLowConfidenceNormalChatDropsSensitiveCapabilities(
 
   const decision = await classifier.classify({
     source: 'text_chat',
-    text: '这个设置帮我看一下',
+    text: '这个设置有点怪',
     userInitiated: true,
   });
 
@@ -352,6 +413,25 @@ async function testExecutorDispatchesAllowedScreenTarget() {
 
   assert.strictEqual(result.status, 'handled');
   assert.deepStrictEqual(calls, ['下载按钮']);
+}
+
+async function testExecutorDispatchesAllowedCameraVisualQuery() {
+  const { IntentRouter } = load('core/intent-router.js');
+  const { IntentExecutor } = load('core/intent-executor.js');
+  const router = new IntentRouter({ cameraEnabled: () => true });
+  const calls = [];
+  const executor = new IntentExecutor({
+    cameraVisualQuery: async (routed) => {
+      calls.push(routed.request.text);
+      return { status: 'handled', message: 'camera observation' };
+    },
+  });
+
+  const routed = await router.route({ source: 'text_chat', text: '看看我手里拿的是什么', userInitiated: true });
+  const result = await executor.execute(routed);
+
+  assert.strictEqual(result.status, 'handled');
+  assert.deepStrictEqual(calls, ['看看我手里拿的是什么']);
 }
 
 async function testExecutorSkipsDeniedDecision() {
@@ -385,22 +465,26 @@ async function testExecutorReportsMissingHandler() {
 async function run() {
   await testRuleClassifierNormalChatDoesNotNeedSensitiveCapabilities();
   await testRuleClassifierScreenSummaryFromNaturalLanguage();
+  await testRuleClassifierScreenSummaryAdditionalTriggerWords();
   await testRuleClassifierScreenTargetExtractsTarget();
   await testRuleClassifierCameraCheckIsExplicitOneShot();
+  await testRuleClassifierCameraVisualQueryIsExplicit();
   await testRouterAllowsExplicitScreenSummaryFromTextChat();
   await testRouterDeniesAmbiguousSensitiveFallback();
   await testRouterRequiresCameraConfigForCameraCheck();
+  await testRouterRequiresCameraConfigForCameraVisualQuery();
   await testRouterRecordsDebugSnapshot();
   await testRouterAddsCameraCapabilityBeforePermissionGate();
   await testRouterDebugSnapshotUsesIntentRequiredCapabilities();
   await testRouterNegativeDebugLimitDoesNotHangAndKeepsNoRecentRecords();
-  await testLlmFallbackCanClassifyAmbiguousPageRequest();
+  await testLlmFallbackCanClassifyAmbiguousContextRequest();
   await testLlmFallbackMissingTargetDowngradesToUnknown();
   await testLlmFallbackInvalidJsonFallsBackToDraft();
   await testLlmFallbackInvalidIntentDropsSensitiveCapabilities();
   await testLlmFallbackLowConfidenceDropsSensitiveCapabilities();
   await testLlmFallbackLowConfidenceNormalChatDropsSensitiveCapabilities();
   await testExecutorDispatchesAllowedScreenTarget();
+  await testExecutorDispatchesAllowedCameraVisualQuery();
   await testExecutorSkipsDeniedDecision();
   await testExecutorReportsMissingHandler();
   console.log('intent-router contract tests passed');

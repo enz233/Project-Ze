@@ -10,10 +10,6 @@ function readProjectFile(relativePath) {
   return fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8');
 }
 
-function assertIncludes(source, expected, message) {
-  assert(source.includes(expected), message);
-}
-
 function testCameraConfigDefaults() {
   const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
   assert.deepStrictEqual(DEFAULT_CAMERA_AWARENESS_CONFIG, {
@@ -23,6 +19,9 @@ function testCameraConfigDefaults() {
     detectionIntervalMs: 60 * 1000,
     absentAfterMs: 120 * 1000,
     minConfidence: 0.65,
+    foregroundFaceGateEnabled: true,
+    foregroundFaceMinHeightRatio: 0.05,
+    foregroundFaceMinAreaRatio: 0.0012,
     returnedReactionEnabled: true,
     debugPreviewEnabled: false,
   });
@@ -41,6 +40,17 @@ function testCameraParserAcceptsValidJson() {
     reason: 'person_visible',
     checkedAt: 1234,
   });
+}
+
+function testCameraParserAcceptsForegroundFaceTooSmallReason() {
+  const { parseCameraAwarenessResponse } = load('core/vision-image-analyzer.js');
+  const result = parseCameraAwarenessResponse(
+    '{"presence":"absent","confidence":0.88,"affect":"unclear","reason":"foreground_face_too_small"}',
+    4321
+  );
+  assert.strictEqual(result.presence, 'absent');
+  assert.strictEqual(result.reason, 'foreground_face_too_small');
+  assert.strictEqual(result.checkedAt, 4321);
 }
 
 function testCameraParserExtractsJsonFromText() {
@@ -78,6 +88,9 @@ function testTypeConstants() {
     detectOnce: 'camera-awareness:detect-once',
     processBackgroundFrame: 'camera-awareness:process-background-frame',
     getSnapshot: 'camera-awareness:get-snapshot',
+    analyzePrompt: 'camera-awareness:analyze-prompt',
+    backgroundCaptureRequest: 'camera-awareness:background-capture-request',
+    submitBackgroundFrame: 'camera-awareness:submit-background-frame',
   });
 }
 
@@ -88,6 +101,44 @@ function testCameraIpcChannelNames() {
   assert.strictEqual(CAMERA_AWARENESS_IPC.detectOnce, 'camera-awareness:detect-once');
   assert.strictEqual(CAMERA_AWARENESS_IPC.processBackgroundFrame, 'camera-awareness:process-background-frame');
   assert.strictEqual(CAMERA_AWARENESS_IPC.getSnapshot, 'camera-awareness:get-snapshot');
+  assert.strictEqual(CAMERA_AWARENESS_IPC.analyzePrompt, 'camera-awareness:analyze-prompt');
+  assert.strictEqual(CAMERA_AWARENESS_IPC.backgroundCaptureRequest, 'camera-awareness:background-capture-request');
+  assert.strictEqual(CAMERA_AWARENESS_IPC.submitBackgroundFrame, 'camera-awareness:submit-background-frame');
+}
+
+function testCameraPromptAnalysisHelpers() {
+  const {
+    buildCameraAwarenessPrompt,
+    buildCameraPromptAnalysisPrompt,
+    buildCameraVisualQueryPrompt,
+    cleanCameraPromptReply,
+  } = load('core/vision-image-analyzer.js');
+
+  const awarenessPrompt = buildCameraAwarenessPrompt(true, {
+    foregroundFaceGateEnabled: true,
+    foregroundFaceMinHeightRatio: 0.05,
+    foregroundFaceMinAreaRatio: 0.0012,
+  });
+  assert(awarenessPrompt.includes('Foreground face rule'));
+  assert(awarenessPrompt.includes('5% of frame height'));
+  assert(awarenessPrompt.includes('0.12% of frame area'));
+  assert(awarenessPrompt.includes('foreground_face_too_small'));
+
+  const defaultPrompt = buildCameraPromptAnalysisPrompt('');
+  assert(defaultPrompt.includes('英文星号 *'));
+  assert(defaultPrompt.includes('问候'));
+
+  const customPrompt = buildCameraPromptAnalysisPrompt('现在适合说什么？');
+  assert(customPrompt.includes('现在适合说什么？'));
+  assert(customPrompt.includes('英文星号 *'));
+
+  assert.strictEqual(cleanCameraPromptReply('```text\n你好呀。\n```'), '你好呀。');
+  assert.strictEqual(cleanCameraPromptReply(''), '我在这里。');
+
+  const visualQueryPrompt = buildCameraVisualQueryPrompt('看看我今天穿的衣服是什么颜色');
+  assert(visualQueryPrompt.includes('自然语言主动请求摄像头视觉帮助'));
+  assert(visualQueryPrompt.includes('看看我今天穿的衣服是什么颜色'));
+  assert(visualQueryPrompt.includes('可见内容'));
 }
 
 async function testCameraAwarenessManagerStateMachine() {
@@ -165,14 +216,204 @@ async function testDetectOnceDoesNotTriggerBubble() {
   assert.strictEqual(bubbles.length, 0);
 }
 
-function testCameraBackgroundRunnerContract() {
-  const root = path.join(__dirname, '..');
-  const runnerSource = fs.readFileSync(path.join(root, 'src/core/camera-awareness-background-runner.ts'), 'utf8');
-  assertIncludes(runnerSource, 'export class CameraAwarenessBackgroundRunner', 'background runner class should be exported');
-  assertIncludes(runnerSource, 'sync()', 'background runner should expose sync()');
-  assertIncludes(runnerSource, 'requestFrame', 'background runner should request frames through injected callback');
-  assertIncludes(runnerSource, 'processFrame', 'background runner should process returned frames through injected callback');
-  assertIncludes(runnerSource, 'recordError', 'background runner should record capture errors without changing presence state');
+async function testCameraAwarenessManagerStartupAbsentThenReturn() {
+  const { CameraAwarenessManager } = load('core/camera-awareness-manager.js');
+  const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
+
+  let now = 1_000;
+  const detections = [];
+  const bubbles = [];
+  const configManager = {
+    get: () => ({ ...DEFAULT_CAMERA_AWARENESS_CONFIG, enabled: true, backgroundDetectionEnabled: true, absentAfterMs: 1000 }),
+    update: () => {},
+  };
+  const visionAnalyzer = {
+    detectCameraAwareness: async () => detections.shift(),
+  };
+  const manager = new CameraAwarenessManager(configManager, visionAnalyzer, {
+    bubbleOrchestrator: {
+      tryShowProactive: (text, source) => {
+        bubbles.push({ text, source });
+        return true;
+      },
+    },
+    now: () => now,
+  });
+  const frame = { imageBase64: 'AAAA', mimeType: 'image/jpeg', width: 320, height: 180, capturedAt: now, source: 'background' };
+
+  detections.push({ presence: 'absent', confidence: 0.9, affect: 'unclear', reason: 'no_person_visible', checkedAt: now });
+  let snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(snapshot.status, 'uncertain');
+  assert.strictEqual(bubbles.length, 0);
+
+  now += 1100;
+  detections.push({ presence: 'absent', confidence: 0.9, affect: 'unclear', reason: 'no_person_visible', checkedAt: now });
+  snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(snapshot.status, 'absent');
+  assert.strictEqual(bubbles.length, 0);
+
+  now += 100;
+  detections.push({ presence: 'present', confidence: 0.92, affect: 'neutral', reason: 'person_visible', checkedAt: now });
+  snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(snapshot.status, 'present');
+  assert.strictEqual(bubbles.length, 1);
+  assert.strictEqual(bubbles[0].source, 'camera_awareness');
+  assert.strictEqual(snapshot.lastReturnedAt, now);
+}
+
+async function testBackgroundForegroundFaceGateAllowsSampleLargestFace() {
+  const { CameraAwarenessManager } = load('core/camera-awareness-manager.js');
+  const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
+
+  let calls = 0;
+  const configManager = {
+    get: () => ({ ...DEFAULT_CAMERA_AWARENESS_CONFIG, enabled: true, backgroundDetectionEnabled: true }),
+    update: () => {},
+  };
+  const visionAnalyzer = {
+    detectCameraAwareness: async () => {
+      calls += 1;
+      return { presence: 'present', confidence: 0.99, affect: 'neutral', reason: 'person_visible', checkedAt: 1 };
+    },
+  };
+  const manager = new CameraAwarenessManager(configManager, visionAnalyzer, { now: () => 2468 });
+  const frame = {
+    imageBase64: 'AAAA',
+    mimeType: 'image/jpeg',
+    width: 320,
+    height: 180,
+    capturedAt: 2468,
+    source: 'background',
+    foregroundFaceGate: {
+      status: 'passed',
+      faceCount: 1,
+      largestFace: { x: 10, y: 10, width: 8, height: 10, heightRatio: 0.056, areaRatio: 0.0014 },
+      minHeightRatio: 0.05,
+      minAreaRatio: 0.0012,
+      reason: 'large_face_visible',
+    },
+  };
+
+  const snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(calls, 1);
+  assert.strictEqual(snapshot.lastDetection.presence, 'present');
+  assert.strictEqual(snapshot.lastDetection.reason, 'person_visible');
+}
+
+async function testBackgroundForegroundFaceGateBlocksTinyFacesBeforeVision() {
+  const { CameraAwarenessManager } = load('core/camera-awareness-manager.js');
+  const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
+
+  let calls = 0;
+  const configManager = {
+    get: () => ({ ...DEFAULT_CAMERA_AWARENESS_CONFIG, enabled: true, backgroundDetectionEnabled: true }),
+    update: () => {},
+  };
+  const visionAnalyzer = {
+    detectCameraAwareness: async () => {
+      calls += 1;
+      return { presence: 'present', confidence: 0.99, affect: 'neutral', reason: 'person_visible', checkedAt: 1 };
+    },
+  };
+  const manager = new CameraAwarenessManager(configManager, visionAnalyzer, { now: () => 2468 });
+  const frame = {
+    imageBase64: 'AAAA',
+    mimeType: 'image/jpeg',
+    width: 320,
+    height: 180,
+    capturedAt: 2468,
+    source: 'background',
+    foregroundFaceGate: {
+      status: 'blocked',
+      faceCount: 1,
+      largestFace: { x: 10, y: 10, width: 5, height: 7, heightRatio: 0.039, areaRatio: 0.0006 },
+      minHeightRatio: 0.05,
+      minAreaRatio: 0.0012,
+      reason: 'face_too_small',
+    },
+  };
+
+  const snapshot = await manager.processBackgroundFrame(frame);
+  assert.strictEqual(calls, 0);
+  assert.strictEqual(snapshot.lastDetection.presence, 'absent');
+  assert.strictEqual(snapshot.lastDetection.reason, 'foreground_face_too_small');
+  assert.strictEqual(snapshot.lastDetection.checkedAt, 2468);
+}
+
+async function testCameraBackgroundRunnerFollowsConfig() {
+  const { CameraAwarenessBackgroundRunner } = load('core/camera-awareness-background-runner.js');
+  const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
+
+  let config = { ...DEFAULT_CAMERA_AWARENESS_CONFIG };
+  const scheduled = [];
+  const cleared = [];
+  const capturedFrames = [];
+  const processedFrames = [];
+  const runner = new CameraAwarenessBackgroundRunner({
+    getConfig: () => config,
+    requestFrame: async () => {
+      const frame = { imageBase64: 'AAAA', mimeType: 'image/jpeg', width: 320, height: 180, capturedAt: 1, source: 'background' };
+      capturedFrames.push(frame);
+      return frame;
+    },
+    processFrame: async (frame) => {
+      processedFrames.push(frame);
+      return {
+        status: 'present',
+        lastDetection: null,
+        lastChangedAt: null,
+        lastReturnedAt: null,
+        backgroundDetectionRunning: true,
+      };
+    },
+    recordError: () => {},
+    setTimer: (callback, delayMs) => {
+      scheduled.push({ callback, delayMs });
+      return scheduled.length;
+    },
+    clearTimer: (timer) => cleared.push(timer),
+  });
+
+  runner.sync();
+  assert.strictEqual(runner.isRunning(), false);
+  assert.strictEqual(scheduled.length, 0);
+
+  config = { ...DEFAULT_CAMERA_AWARENESS_CONFIG, enabled: true, backgroundDetectionEnabled: true, detectionIntervalMs: 30000 };
+  runner.sync();
+  assert.strictEqual(runner.isRunning(), true);
+  assert.strictEqual(scheduled[0].delayMs, 30000);
+
+  await runner.runOnce();
+  assert.strictEqual(capturedFrames.length, 1);
+  assert.strictEqual(processedFrames.length, 1);
+  assert.strictEqual(processedFrames[0].source, 'background');
+
+  config = { ...config, backgroundDetectionEnabled: false };
+  runner.sync();
+  assert.strictEqual(runner.isRunning(), false);
+  assert(cleared.length > 0);
+}
+
+async function testCameraBackgroundRunnerReportsCaptureError() {
+  const { CameraAwarenessBackgroundRunner } = load('core/camera-awareness-background-runner.js');
+  const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
+
+  const errors = [];
+  const runner = new CameraAwarenessBackgroundRunner({
+    getConfig: () => ({ ...DEFAULT_CAMERA_AWARENESS_CONFIG, enabled: true, backgroundDetectionEnabled: true }),
+    requestFrame: async () => {
+      throw new Error('permission denied');
+    },
+    processFrame: async () => {
+      throw new Error('should not process failed capture');
+    },
+    recordError: (error) => errors.push(error.message),
+    setTimer: () => 1,
+    clearTimer: () => {},
+  });
+
+  await runner.runOnce();
+  assert.deepStrictEqual(errors, ['permission denied']);
 }
 
 function testCameraSettingsIntegrationHooks() {
@@ -181,15 +422,33 @@ function testCameraSettingsIntegrationHooks() {
   const settingsHtml = readProjectFile('src/main/settings.html');
 
   assert(mainTs.includes("import { CameraAwarenessConfigManager } from '../core/camera-awareness-config';"));
+  assert(mainTs.includes("import { CameraAwarenessBackgroundRunner } from '../core/camera-awareness-background-runner';"));
   assert(mainTs.includes("import { CameraAwarenessManager } from '../core/camera-awareness-manager';"));
-  assert(mainTs.includes("import { CAMERA_AWARENESS_IPC, CameraFrameInput } from '../core/camera-awareness-types';"));
+  assert(mainTs.includes("import { CAMERA_AWARENESS_IPC, CameraAwarenessSnapshot, CameraFrameInput } from '../core/camera-awareness-types';"));
   assert(mainTs.includes("import { VisionImageAnalyzer } from '../core/vision-image-analyzer';"));
   assert(mainTs.includes('new CameraAwarenessManager('));
+  assert(mainTs.includes('new CameraAwarenessBackgroundRunner('));
   assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.getConfig'));
   assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.updateConfig'));
   assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.detectOnce'));
   assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.processBackgroundFrame'));
+  assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.submitBackgroundFrame'));
   assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.getSnapshot'));
+  assert(mainTs.includes('ipcMain.handle(CAMERA_AWARENESS_IPC.analyzePrompt'));
+  assert(mainTs.includes('setCameraPromptAnalyzer'));
+  assert(mainTs.includes("camera-analysis:capture-request"));
+  assert(mainTs.includes('requestCameraBackgroundFrame'));
+  assert(mainTs.includes('requestCameraIntentFrame'));
+  assert(mainTs.includes('CAMERA_AWARENESS_IPC.backgroundCaptureRequest'));
+  assert(mainTs.includes('cameraVisualQuery: async'));
+  assert(mainTs.includes('analyzeCameraVisualQuery'));
+  assert(mainTs.includes('cameraAwarenessManager.detectOnce(frame)'));
+  assert(mainTs.includes('logCameraAwarenessDebug(snapshot, frame)'));
+  assert(mainTs.includes("person:'") || mainTs.includes("'person:'"));
+  assert(mainTs.includes("'| state:'"));
+  assert(mainTs.includes('formatCameraFaceGateSummary'));
+  assert(mainTs.includes('getCameraForegroundFaceGateRequestConfig'));
+  assert(mainTs.includes('logCameraAwarenessCaptureError(error, snapshot)'));
 
   assert(preloadTs.includes('cameraAwareness: {'));
   assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:get-config')"));
@@ -197,6 +456,10 @@ function testCameraSettingsIntegrationHooks() {
   assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:detect-once', frame)"));
   assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:process-background-frame', frame)"));
   assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:get-snapshot')"));
+  assert(preloadTs.includes("ipcRenderer.on('camera-analysis:capture-request'"));
+  assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:analyze-prompt'"));
+  assert(preloadTs.includes("ipcRenderer.on('camera-awareness:background-capture-request'"));
+  assert(preloadTs.includes("ipcRenderer.invoke('camera-awareness:submit-background-frame'"));
 
   assert(settingsHtml.includes('data-tab="camera"'));
   assert(settingsHtml.includes('id="tab-camera"'));
@@ -212,20 +475,45 @@ function testCameraSettingsIntegrationHooks() {
   assert(settingsHtml.includes('navigator.mediaDevices.getUserMedia'));
   assert(settingsHtml.includes('source: source'));
   assert(settingsHtml.includes('window.companion.cameraAwareness.detectOnce(frame)'));
-  assert(settingsHtml.includes('window.companion.cameraAwareness.processBackgroundFrame(frame)'));
+  assert(settingsHtml.includes('window.companion.cameraAwareness.getSnapshot()'));
+  assert(!settingsHtml.includes('setInterval(runCameraBackgroundTick'));
+
+  const chatManagerTs = readProjectFile('src/core/chat-manager.ts');
+  const rendererTs = readProjectFile('src/renderer/renderer.ts');
+  assert(chatManagerTs.includes("userMessage.startsWith('*')"));
+  assert(chatManagerTs.includes('setCameraPromptAnalyzer'));
+  assert(chatManagerTs.includes('respondFromWorkflow'));
+  assert(chatManagerTs.includes('setResponseWorkflowOrchestrator'));
+  assert(rendererTs.includes('captureCameraPromptFrame'));
+  assert(rendererTs.includes("source: 'chat-command'"));
+  assert(rendererTs.includes("payload.source === 'intent-command'"));
+  assert(rendererTs.includes('detectCameraForegroundFaceGate'));
+  assert(rendererTs.includes('FaceDetector'));
+  assert(rendererTs.includes('foregroundFaceGate'));
+  assert(rendererTs.includes('captureCameraFrame(source, payload && payload.foregroundFaceGate)'));
+  assert(rendererTs.includes("'intent-command'"));
+  assert(rendererTs.includes('onPromptCaptureRequest'));
+  assert(rendererTs.includes('onBackgroundCaptureRequest'));
+  assert(rendererTs.includes('submitBackgroundFrame'));
 }
 
 async function run() {
   testCameraConfigDefaults();
   testCameraParserAcceptsValidJson();
+  testCameraParserAcceptsForegroundFaceTooSmallReason();
   testCameraParserExtractsJsonFromText();
   testCameraParserFallsBackOnInvalidJson();
+  testCameraPromptAnalysisHelpers();
   testTypeConstants();
   testCameraIpcChannelNames();
-  testCameraBackgroundRunnerContract();
   testCameraSettingsIntegrationHooks();
   await testCameraAwarenessManagerStateMachine();
+  await testCameraAwarenessManagerStartupAbsentThenReturn();
   await testDetectOnceDoesNotTriggerBubble();
+  await testBackgroundForegroundFaceGateAllowsSampleLargestFace();
+  await testBackgroundForegroundFaceGateBlocksTinyFacesBeforeVision();
+  await testCameraBackgroundRunnerFollowsConfig();
+  await testCameraBackgroundRunnerReportsCaptureError();
   console.log('camera-awareness-contract tests passed');
 }
 

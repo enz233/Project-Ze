@@ -7,6 +7,7 @@ export interface IntentExecutorHandlers {
   screenSummary?: IntentExecutorHandler;
   screenTargetPointer?: IntentExecutorHandler;
   cameraCheckOnce?: IntentExecutorHandler;
+  cameraVisualQuery?: IntentExecutorHandler;
   voiceInputHelp?: IntentExecutorHandler;
   settingsDebugHelp?: IntentExecutorHandler;
   proactiveExplain?: IntentExecutorHandler;
@@ -45,6 +46,7 @@ export class IntentExecutor {
       case 'screen_summary': return this.handlers.screenSummary;
       case 'screen_target_pointer': return this.handlers.screenTargetPointer;
       case 'camera_check_once': return this.handlers.cameraCheckOnce;
+      case 'camera_visual_query': return this.handlers.cameraVisualQuery;
       case 'voice_input_help': return this.handlers.voiceInputHelp;
       case 'settings_debug_help': return this.handlers.settingsDebugHelp;
       case 'proactive_explain': return this.handlers.proactiveExplain;

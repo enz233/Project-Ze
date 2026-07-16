@@ -65,10 +65,10 @@ src/
 - `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；当前稳定职责是截图、坐标映射元信息与 Vision 分析。普通屏幕分析继续使用低细节 Vision 图像，point 目标定位使用 `screen-vision-request.ts` 指定高细节图像以保留 UI 文字/坐标识别能力；`ScreenCaptureFrame.fingerprint`、`screen-capture-frame.ts` 按显示器比例推导缩略图尺寸，以及 `PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时将 point 前后实际 PNG 截图保存到 Electron `userData/screen-pointer-debug/` 属于 Unreleased 稳定性/诊断增强。
 - `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、移动调用和指向气泡；八方向 point 指向姿态、指向后恢复、最终移动 x 方向 +10px 轻量校准、fingerprint diff 屏幕变化取消属于 Unreleased 增强。
 - `screen-pointer-position.ts`（Unreleased）：屏幕目标指示最终站位 helper，按 `screenPoint - pointerOffset` 计算窗口左上角，并保留当前 point 素材的 `+10px` 水平校准；不参与八方向 pose 选择。
-- `response-workflow-types.ts` / `response-workflow-orchestrator.ts`（Unreleased）：已授权工具结果到统一聊天模型输出的工作流边界；第一版接入屏幕总结和屏幕目标指向，把 `ScreenAnalyzer` / `ScreenTargetPointer` 的结构化结果转为短期 `WorkflowResponseContext`，再调用 `ChatManager.respondFromWorkflow(...)` 生成 `<item>` 气泡回复。原始屏幕 observation 不默认进入长期记忆。
+- `response-workflow-types.ts` / `response-workflow-orchestrator.ts`（Unreleased）：已授权工具结果到统一聊天模型输出的工作流边界；已接入屏幕总结、屏幕目标指向、摄像头人在/不在检查和摄像头视觉查询，把 `ScreenAnalyzer` / `ScreenTargetPointer` / `CameraAwarenessManager` / `VisionImageAnalyzer` 的结构化结果转为短期 `WorkflowResponseContext`，再调用 `ChatManager.respondFromWorkflow(...)` 生成 `<item>` 气泡回复。原始屏幕/摄像头 observation 不默认进入长期记忆。
 - `intent-*.ts`（Unreleased）：多模态入口意图分类、权限闸门、debug 快照和薄执行分发；屏幕相关 allowed intent 会进入 Response Workflow，而不是由屏幕模块直接生成最终用户回复。
 - `intent-types.ts`：多模态意图入口的稳定类型边界，定义输入来源、intent、能力需求、权限结果、执行结果和 Debug 记录。
-- `intent-classifier.ts`：规则优先的意图分类器，覆盖普通聊天、屏幕总结、目标指示、摄像头一次性检测、语音/设置/主动回应帮助，并为 LLM fallback 提供结构化校验边界。
+- `intent-classifier.ts`：规则优先的意图分类器，覆盖普通聊天、屏幕总结、目标指示、摄像头一次性检测、摄像头视觉查询、“看看屏幕/你看看这个”等屏幕关键词、语音/设置/主动回应帮助，并为 LLM fallback 提供结构化校验边界。
 - `intent-router.ts`：Intent Router 主入口，应用屏幕/摄像头/移动/配置写入等隐私权限策略，并维护最近 intent 决策快照。
 - `intent-executor.ts`：薄分发层，根据已授权 intent 调用现有 ChatManager、ScreenAnalyzer、ScreenTargetPointer、CameraAwarenessManager 或诊断 helper。
 - `operation-guide-*.ts`（Unreleased / paused after Task 2）：Project-Chen Operation Guide 最小融合的领域层、配置、planner/fallback、progress parser 和 manager 状态机已存在并有契约测试；尚未接入 Intent Router / IntentExecutor、main IPC、preload、settings 或 renderer guide panel，因此当前不是可用入口功能。恢复时从 `docs/superpowers/plans/2026-07-16-operation-guide-fusion.md` 的 Task 3 继续。
@@ -80,10 +80,12 @@ src/
 - `asr-engine.ts` / `asr-openai-compatible.ts` / `asr-qwen-realtime.ts`：ASR 引擎接口与 provider 实现，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设复用 OpenAI-compatible 引擎，Qwen-ASR 实时识别使用专用 WebSocket 引擎和 `Authorization` 握手请求头；配置方式见 `docs/qwen-asr-configuration.md`，当前 Qwen final/completed 事件会在 `session.finish` 后保留 15 秒等待窗口，设置页测试和主聊天语音入口都会向 Qwen 发送 PCM16 16kHz 音频。
 - `voice-input-manager.ts`：语音输入 session 编排，连接音频 chunk、ASR engine、音频缓存和 transcript/status IPC。
 - `voice-audio-cache.ts`：短期语音缓存边界，保存 runtime-only 音频 chunk 并返回 `audioRef`。
-- `camera-awareness-types.ts`：摄像头感知配置、帧输入、检测结果、状态快照与 IPC 常量类型；不代表独立事件总线。
+- `camera-awareness-types.ts`：摄像头感知配置、帧输入、前景人脸 gate、检测结果、状态快照与 IPC 常量类型；帧来源包括 `settings-test`、`background`、`chat-command`、`intent-command`，不代表独立事件总线。
 - `camera-awareness-config.ts`：摄像头感知运行态默认配置与 Electron `userData/config/camera-awareness.json` 持久化。
-- `vision-image-analyzer.ts`：复用现有 Vision 配置，对设置页提供的低分辨率单帧做 presence / affect / reason 结构化解析，并限制身份、敏感属性和环境描述。
-- `camera-awareness-manager.ts`：摄像头感知状态机，提供 `detectOnce`、`processBackgroundFrame`、`getSnapshot`；仅在稳定 `absent -> present` 时尝试通过 `BubbleOrchestrator` 发出低优先级回来回应。
+- `vision-image-analyzer.ts`：复用现有 Vision 配置，对设置页、`*` 命令和自然语言摄像头查询提供的低分辨率单帧做 presence / affect / reason 或视觉查询解析，并限制身份、敏感属性和环境描述。
+- `camera-awareness-background-runner.ts`：主进程注入取帧回调的后台低频检测调度器，设置启用后按间隔请求 renderer 单帧，不直接打开摄像头。
+- `local-face-presence-detector.ts`：本地人脸存在检测接口与 Shape Detection API 适配器；不做身份识别或敏感属性推断。
+- `camera-awareness-manager.ts`：摄像头感知状态机，提供 `detectOnce`、`processBackgroundFrame`、`recordBackgroundError`、`getSnapshot`；仅在稳定 `absent -> present` 时尝试通过 `BubbleOrchestrator` 发出低优先级回来回应，后台帧可通过前景人脸 gate 跳过不必要 Vision 请求。
 - `screen-capture-frame.ts`（Unreleased）：纯 TypeScript 截图帧尺寸工具，默认以 1280 宽按当前显示器比例推导缩略图高度；例如 1707x1067 会使用约 1280x800，确保 Vision point 坐标与 `mapPointToScreen()` 的 X/Y 比例来自同一画面比例。
 - `screen-fingerprint.ts`（Unreleased）：纯 TypeScript 低分辨率截图 fingerprint 工具，提供 16x9 亮度摘要、平均 diff `0.15` 阈值、`p95 >= 0.12 && cellsAbove010 >= 10` 局部变化规则，以及 diff/summary helper。
 - `screen-pointer-debug.ts`（Unreleased）：纯 TypeScript point 截图诊断 helper，负责 debug 开关判断、文件名安全化和截图文件名生成；实际 PNG 仅在 `PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时由 `ScreenAnalyzer` 写入 Electron `userData/screen-pointer-debug/`，截图可能包含隐私内容，用完需手动清理。

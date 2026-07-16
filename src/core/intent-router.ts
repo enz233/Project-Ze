@@ -24,6 +24,7 @@ const REQUIRED_CAPABILITIES_BY_INTENT: Partial<Record<IntentDecision['intent'], 
   screen_summary: ['screen_capture', 'vision', 'llm'],
   screen_target_pointer: ['screen_capture', 'vision', 'move_pointer'],
   camera_check_once: ['camera_frame'],
+  camera_visual_query: ['camera_frame', 'vision', 'llm'],
   proactive_control: ['config_write'],
 };
 

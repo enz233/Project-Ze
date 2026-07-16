@@ -32,8 +32,8 @@ Desktop Companion → AI Companion → Embodied Agent → Physical Robot
 
 这一阶段的重点是把已有能力收束成更清晰的多模态链路：
 
-- **语言**：文本聊天、`.` 显式屏幕请求、Intent Router 规则优先意图识别。
-- **视觉**：屏幕截图总结、目标定位、坐标映射、屏幕变化 fingerprint 稳定性检查、摄像头 presence 感知。
+- **语言**：文本聊天、`.` 显式屏幕请求、`*` 显式摄像头请求、Intent Router 规则优先意图识别。
+- **视觉**：屏幕截图总结、自然语言屏幕关键词识别、目标定位、坐标映射、屏幕变化 fingerprint 稳定性检查、摄像头 presence 与视觉查询。
 - **声音**：麦克风按钮和长按快捷键语音输入，OpenAI-compatible 与 Qwen-ASR realtime 引擎，Qwen 主入口使用 PCM16 16kHz。
 - **上下文**：记忆、关系、情绪、前台窗口活动、主动回应预算和 Debug 快照。
 - **具身反馈**：气泡、TTS、状态动画、自动移动、八方向 point visual 指向。
@@ -50,11 +50,11 @@ Desktop Companion → AI Companion → Embodied Agent → Physical Robot
 | Memory System | 对话摘要 + 轻量生活习惯记忆 + 好感度/熟悉度 | ✔ |
 | TTS Voice | GPT-SoVITS / MiMo / 阿里云 / OpenAI，统一 TTS engine 接口 | ✔ |
 | Voice Input (ASR) | 麦克风按钮 + 长按快捷键；OpenAI-compatible 与 Qwen-ASR realtime；Qwen 使用 PCM16 16kHz | ✔ |
-| Screen Analysis | Vision API 截屏分析；显式 `.` 请求可总结页面或定位目标 | ✔ |
+| Screen Analysis | Vision API 截屏分析；显式 `.` 或“看看屏幕/你看看这个”等自然语言可总结页面，目标请求可定位并指向 | ✔ |
 | Screen Target Pointer | 定位屏幕目标、移动到目标旁，并用八方向 point 姿态指向 | ✔ |
 | Intent Router | 规则优先多模态意图入口，带屏幕/摄像头/移动/配置写入权限闸门 | ✔ |
-| Response Workflow Orchestrator | 将屏幕工具结果转为短期上下文，再统一交给聊天模型生成气泡回复 | ✔ |
-| Camera Awareness | 设置页轻量摄像头感知：单帧检测、低频检测、回来轻柔回应 | ✔ |
+| Response Workflow Orchestrator | 将屏幕/摄像头工具结果转为短期上下文，再统一交给聊天模型生成气泡回复 | ✔ |
+| Camera Awareness | 设置页轻量摄像头感知、`*` 单帧分析、自然语言人在/不在检查和摄像头视觉查询 | ✔ |
 | Contextual Proactive Reactions | 配置化的工作/休息切换与长专注轻柔回应 | ✔ |
 | Debug Window | F3 调试面板，含日志/关系/记忆/主动回应/Intent 快照 | ✔ |
 
@@ -95,6 +95,9 @@ Qwen-ASR 详细配置见 [Qwen-ASR 配置说明](docs/qwen-asr-configuration.md)
 | F11 | 设置 |
 | F12 | 开发者工具 |
 | `.` 开头消息 | 截屏分析；明确“指出/在哪/帮我找”等请求进入目标定位与指向流程 |
+| `*` 开头消息 | 摄像头单帧分析；可直接输入 `*` 或 `*看看我手里拿的是什么` |
+| “看看屏幕 / 你看看这个 / 这是什么意思” | 自然语言触发屏幕总结 workflow |
+| “看看我在不在 / 镜头里有什么” | 用户主动触发摄像头单帧检查或视觉查询 |
 | 麦克风按钮 | 点击开始/结束语音输入 |
 | `Ctrl+Shift+Space` | 长按说话，松开结束 |
 | F11 → 摄像头感知 | 启用轻量摄像头感知、立即检测一次、可选低频检测、本地实时预览 |
@@ -106,9 +109,13 @@ Qwen-ASR 详细配置见 [Qwen-ASR 配置说明](docs/qwen-asr-configuration.md)
 .帮我找下载按钮
 .指出搜索框
 帮我找登录按钮
+看看屏幕
+你看看这个
+*看看我手里拿的是什么
+看看我在不在
 ```
 
-摄像头感知默认关闭；当前第一版由设置页提供低分辨率单帧检测、可选低频检测和本地预览，不保存图片/视频，不做身份识别或敏感属性判断。
+摄像头感知默认关闭；设置页提供低分辨率单帧检测、可选后台低频检测和本地预览。`*` 与自然语言摄像头请求只在用户主动触发时拍摄单帧；后台低频检测由主进程 runner 调度，并带前景人脸 gate，仍不保存图片/视频，不做身份识别或敏感属性判断。
 
 ## Architecture
 
@@ -117,7 +124,7 @@ Renderer (Sprites + Animation + Bubble + Voice Capture)
     ↕ IPC
 Main Process
     ├─ IntentRouter → IntentExecutor              意图分类、权限闸门、薄分发
-    ├─ ResponseWorkflowOrchestrator               多模态工具结果 → 统一聊天回复
+    ├─ ResponseWorkflowOrchestrator               屏幕/摄像头工具结果 → 统一聊天回复
     ├─ ChatManager / AIMemory                     对话、角色回复、摘要、关系与习惯记忆
     │   └─ ChatHistoryStore                       聊天历史持久化边界
     ├─ ObserverManager                            观察编排
@@ -128,18 +135,18 @@ Main Process
     │   └─ VoiceAudioCache                        短期音频缓存
     ├─ ScreenAnalyzer                             截图、Vision 分析、坐标映射元信息
     │   └─ ScreenTargetPointer → MoveController   目标定位、稳定性检查、移动与 point visual
-    ├─ CameraAwarenessManager → VisionImageAnalyzer
+    ├─ CameraAwarenessBackgroundRunner → CameraAwarenessManager → VisionImageAnalyzer
     └─ JsonConfigStore<T>                         运行态 JSON 配置读写
 ```
 
 核心边界：
 
 - `IntentRouter` 只负责意图、权限和 Debug 快照，不直接执行截图、移动或写配置。
-- `ResponseWorkflowOrchestrator` 只处理已授权工具结果到聊天回复的编排，不提升权限。
+- `ResponseWorkflowOrchestrator` 只处理已授权屏幕/摄像头工具结果到聊天回复的编排，不提升权限。
 - `ScreenAnalyzer` 是唯一屏幕截图与 Vision 分析服务。
 - `ScreenTargetPointer` 负责目标定位、屏幕变化检查、移动和 point visual。
 - `ChatManager.respondFromWorkflow(...)` 统一生成最终 `<item>` 气泡回复，复用 TTS、记忆和普通聊天体验。
-- 原始屏幕 observation 只作为短期 workflow context，不默认进入长期记忆。
+- 原始屏幕/摄像头 observation 只作为短期 workflow context，不默认进入长期记忆。
 
 完整模块索引见 [PROJECT_INDEX.md](PROJECT_INDEX.md)。
 

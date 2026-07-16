@@ -25,6 +25,7 @@ export class CameraAwarenessManager {
     backgroundDetectionRunning: false,
   };
   private lastSeenAt: number | null = null;
+  private lastAbsentAt: number | null = null;
   private readonly now: () => number;
   private readonly bubbleOrchestrator?: ProactiveBubblePort;
 
@@ -50,6 +51,8 @@ export class CameraAwarenessManager {
         status: 'unavailable',
         backgroundDetectionRunning: false,
       };
+      this.lastSeenAt = null;
+      this.lastAbsentAt = null;
     }
     return config;
   }
@@ -94,22 +97,42 @@ export class CameraAwarenessManager {
     return { ...this.snapshot };
   }
 
+  recordBackgroundError(error: string): CameraAwarenessSnapshot {
+    const config = this.configManager.get();
+    this.snapshot = {
+      ...this.snapshot,
+      backgroundDetectionRunning: Boolean(config.enabled && config.backgroundDetectionEnabled),
+      lastError: error || 'capture_failed',
+    };
+    return this.getSnapshot();
+  }
+
   stop(): void {
     this.snapshot = {
       ...this.snapshot,
       status: 'unavailable',
       backgroundDetectionRunning: false,
     };
+    this.lastSeenAt = null;
+    this.lastAbsentAt = null;
   }
 
   private async detect(
     frame: CameraFrameInput,
     config: CameraAwarenessConfig
   ): Promise<CameraAwarenessDetectionResult> {
+    const foregroundBlocked = this.createForegroundFaceBlockedResult(frame, config);
+    if (foregroundBlocked) {
+      return foregroundBlocked;
+    }
+
     try {
       return await this.visionAnalyzer.detectCameraAwareness(frame, {
         lightAffectEnabled: config.lightAffectEnabled,
         minConfidence: config.minConfidence,
+        foregroundFaceGateEnabled: config.foregroundFaceGateEnabled,
+        foregroundFaceMinHeightRatio: config.foregroundFaceMinHeightRatio,
+        foregroundFaceMinAreaRatio: config.foregroundFaceMinAreaRatio,
       });
     } catch (_error) {
       return {
@@ -122,6 +145,28 @@ export class CameraAwarenessManager {
     }
   }
 
+  private createForegroundFaceBlockedResult(
+    frame: CameraFrameInput,
+    config: CameraAwarenessConfig
+  ): CameraAwarenessDetectionResult | null {
+    if (!config.foregroundFaceGateEnabled || frame.source !== 'background') {
+      return null;
+    }
+
+    const gate = frame.foregroundFaceGate;
+    if (!gate || gate.status !== 'blocked') {
+      return null;
+    }
+
+    return {
+      presence: 'absent',
+      confidence: 0.9,
+      affect: 'unclear',
+      reason: gate.reason === 'face_too_small' ? 'foreground_face_too_small' : 'no_person_visible',
+      checkedAt: this.now(),
+    };
+  }
+
   private applyDetection(result: CameraAwarenessDetectionResult, config: CameraAwarenessConfig): void {
     const previousStatus = this.snapshot.status;
     const now = this.now();
@@ -130,11 +175,17 @@ export class CameraAwarenessManager {
     if (result.presence === 'present' && result.confidence >= config.minConfidence) {
       nextStatus = 'present';
       this.lastSeenAt = now;
+      this.lastAbsentAt = null;
       if (previousStatus === 'absent' && config.returnedReactionEnabled) {
         this.emitReturned(result, now);
       }
     } else if (result.presence === 'absent') {
-      if (this.lastSeenAt !== null && now - this.lastSeenAt >= config.absentAfterMs) {
+      if (this.lastAbsentAt === null) {
+        this.lastAbsentAt = now;
+      }
+
+      const absentDuration = this.lastSeenAt !== null ? now - this.lastSeenAt : now - this.lastAbsentAt;
+      if (absentDuration >= config.absentAfterMs) {
         nextStatus = 'absent';
       } else if (previousStatus === 'unavailable' || previousStatus === 'uncertain') {
         nextStatus = 'uncertain';

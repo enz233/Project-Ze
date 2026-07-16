@@ -2085,6 +2085,10 @@
         return;
       }
       await window.companion.cameraAwareness.updateConfig(config);
+      const snapshot = await window.companion.cameraAwareness.getSnapshot();
+      if (snapshot && snapshot.lastDetection) {
+        document.getElementById('cameraAwarenessResult').textContent = formatCameraDetection(snapshot.lastDetection) + ', status=' + snapshot.status;
+      }
       showToast('摄像头感知设置已保存', 'success');
     });
 
@@ -2137,30 +2141,7 @@
       }
     });
 
-    let cameraBackgroundTimer = null;
-    async function runCameraBackgroundTick() {
-      const config = collectCameraAwarenessConfig();
-      if (!config.enabled || !config.backgroundDetectionEnabled) return;
-      try {
-        const frame = await captureCameraFrame('background');
-        const snapshot = await window.companion.cameraAwareness.processBackgroundFrame(frame);
-        if (snapshot && snapshot.lastDetection) {
-          document.getElementById('cameraAwarenessResult').textContent = formatCameraDetection(snapshot.lastDetection) + ', status=' + snapshot.status;
-        }
-      } catch (e) {
-        document.getElementById('cameraAwarenessResult').textContent = '后台检测失败：' + (e.message || e);
-      }
-    }
-
-    function restartCameraBackgroundTimer() {
-      if (cameraBackgroundTimer) clearInterval(cameraBackgroundTimer);
-      const config = collectCameraAwarenessConfig();
-      if (!config.enabled || !config.backgroundDetectionEnabled) return;
-      cameraBackgroundTimer = setInterval(runCameraBackgroundTick, config.detectionIntervalMs);
-    }
-    ['cameraAwarenessEnabled', 'cameraBackgroundEnabled', 'cameraDetectionIntervalMs'].forEach(function(id) {
-      document.getElementById(id).addEventListener('change', restartCameraBackgroundTimer);
-    });
+    // 后台低频检测由主进程 CameraAwarenessBackgroundRunner 负责；设置页只保存配置和刷新快照。
 
     // 保存 TTS 配置
     document.getElementById('saveTtsBtn').addEventListener('click', function() {
@@ -2232,7 +2213,7 @@
         }
       });
     }
-    loadCameraAwarenessConfig().then(restartCameraBackgroundTimer);
+    loadCameraAwarenessConfig();
     loadLogPath();
     loadChatInfo();
   </script>

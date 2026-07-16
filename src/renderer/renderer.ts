@@ -447,6 +447,113 @@
     });
   }
 
+
+
+  function waitForCameraVideo(video: HTMLVideoElement): Promise<void> {
+    return new Promise(function (resolve) {
+      if (video.readyState >= 2 && video.videoWidth > 0) {
+        resolve();
+        return;
+      }
+      var done = false;
+      var finish = function () {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      video.onloadedmetadata = finish;
+      setTimeout(finish, 800);
+    });
+  }
+
+  var cameraForegroundFaceDetector: any = null;
+
+  function normalizeCameraGateRatio(value: any, fallback: number, min: number, max: number): number {
+    var n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function normalizeCameraForegroundFaceGateConfig(config: any): any {
+    return {
+      enabled: !config || config.enabled !== false,
+      minHeightRatio: normalizeCameraGateRatio(config && config.minHeightRatio, 0.05, 0.02, 0.8),
+      minAreaRatio: normalizeCameraGateRatio(config && config.minAreaRatio, 0.0012, 0.001, 0.5),
+    };
+  }
+
+  function createCameraForegroundFaceGateResult(status: string, faceCount: number, largestFace: any, gateConfig: any, reason: string, error?: string): any {
+    return { status: status, faceCount: faceCount, largestFace: largestFace, minHeightRatio: gateConfig.minHeightRatio, minAreaRatio: gateConfig.minAreaRatio, reason: reason, error: error };
+  }
+
+  function faceToCameraGateBox(face: any, frameWidth: number, frameHeight: number): any | null {
+    var sourceBox = face && face.boundingBox;
+    if (!sourceBox) return null;
+    var x = Number(sourceBox.x);
+    var y = Number(sourceBox.y);
+    var width = Number(sourceBox.width);
+    var height = Number(sourceBox.height);
+    if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+    return { x: x, y: y, width: width, height: height, heightRatio: height / Math.max(1, frameHeight), areaRatio: (width * height) / Math.max(1, frameWidth * frameHeight) };
+  }
+
+  function getLargestCameraGateBox(boxes: any[]): any | undefined {
+    var largest: any | undefined;
+    for (var i = 0; i < boxes.length; i++) {
+      if (!largest || boxes[i].areaRatio > largest.areaRatio) largest = boxes[i];
+    }
+    return largest;
+  }
+
+  async function detectCameraForegroundFaceGate(canvas: HTMLCanvasElement, source: 'chat-command' | 'background' | 'intent-command', config: any): Promise<any | undefined> {
+    if (source !== 'background') return undefined;
+    var gateConfig = normalizeCameraForegroundFaceGateConfig(config);
+    if (!gateConfig.enabled) return createCameraForegroundFaceGateResult('unavailable', 0, undefined, gateConfig, 'disabled');
+    var FaceDetectorCtor = (window as any).FaceDetector || (globalThis as any).FaceDetector;
+    if (!FaceDetectorCtor) return createCameraForegroundFaceGateResult('unavailable', 0, undefined, gateConfig, 'api_unavailable');
+    try {
+      if (!cameraForegroundFaceDetector) cameraForegroundFaceDetector = new FaceDetectorCtor({ maxDetectedFaces: 4, fastMode: true });
+      var faces = await cameraForegroundFaceDetector.detect(canvas);
+      var boxes = (faces || []).map(function (face: any) { return faceToCameraGateBox(face, canvas.width, canvas.height); }).filter(Boolean);
+      var largest = getLargestCameraGateBox(boxes);
+      if (!largest) return createCameraForegroundFaceGateResult('blocked', 0, undefined, gateConfig, 'no_face_visible');
+      var passed = largest.heightRatio >= gateConfig.minHeightRatio && largest.areaRatio >= gateConfig.minAreaRatio;
+      return createCameraForegroundFaceGateResult(passed ? 'passed' : 'blocked', boxes.length, largest, gateConfig, passed ? 'large_face_visible' : 'face_too_small');
+    } catch (e: any) {
+      cameraForegroundFaceDetector = null;
+      return createCameraForegroundFaceGateResult('error', 0, undefined, gateConfig, 'detector_error', e && e.message ? e.message : String(e));
+    }
+  }
+
+  async function captureCameraFrame(source: 'chat-command' | 'background' | 'intent-command', foregroundFaceGateConfig?: any): Promise<any> {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('当前环境不支持摄像头访问');
+    var stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 30 } }, audio: false });
+    try {
+      var video = document.createElement('video');
+      video.muted = true;
+      video.srcObject = stream;
+      await video.play();
+      await waitForCameraVideo(video);
+      await new Promise(function (resolve) { setTimeout(resolve, 250); });
+      var canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = Math.max(1, Math.round((video.videoHeight || 180) * (320 / (video.videoWidth || 320))));
+      var ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('摄像头画面无法绘制');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var foregroundFaceGate = await detectCameraForegroundFaceGate(canvas, source, foregroundFaceGateConfig);
+      var frame: any = { imageBase64: canvas.toDataURL('image/jpeg', 0.6), mimeType: 'image/jpeg', width: canvas.width, height: canvas.height, capturedAt: Date.now(), source: source };
+      if (foregroundFaceGate) frame.foregroundFaceGate = foregroundFaceGate;
+      return frame;
+    } finally {
+      stream.getTracks().forEach(function (track) { track.stop(); });
+    }
+  }
+
+  async function captureCameraPromptFrame(): Promise<any> {
+    return captureCameraFrame('chat-command');
+  }
+
   function debugVoiceInput(message: string, data?: any): void {
     if (typeof data === 'undefined') {
       console.log('[VoiceInput]', message);
@@ -889,6 +996,38 @@
     // @ts-ignore
     window.companion.onChatStatus(function (payload: any) {
       updateChatStatus(payload);
+    });
+
+
+
+    // 主进程发来的摄像头单帧请求，用于聊天输入框里的 * 命令。
+    // @ts-ignore
+    window.companion.cameraAwareness.onPromptCaptureRequest(async function (payload: any) {
+      var requestId = payload && payload.requestId;
+      try {
+        updateChatStatus({ phase: 'camera', message: '正在打开摄像头...' });
+        var frame = await captureCameraPromptFrame();
+        // @ts-ignore
+        await window.companion.cameraAwareness.submitPromptFrame({ requestId: requestId, frame: frame });
+      } catch (e: any) {
+        // @ts-ignore
+        await window.companion.cameraAwareness.submitPromptFrame({ requestId: requestId, error: e && e.message ? e.message : String(e) });
+      }
+    });
+
+    // 主进程发来的后台低频检测或 intent-command 单帧请求。
+    // @ts-ignore
+    window.companion.cameraAwareness.onBackgroundCaptureRequest(async function (payload: any) {
+      var requestId = payload && payload.requestId;
+      try {
+        var source: 'background' | 'intent-command' = payload && payload.source === 'intent-command' ? 'intent-command' : 'background';
+        var frame = await captureCameraFrame(source, payload && payload.foregroundFaceGate);
+        // @ts-ignore
+        await window.companion.cameraAwareness.submitBackgroundFrame({ requestId: requestId, frame: frame });
+      } catch (e: any) {
+        // @ts-ignore
+        await window.companion.cameraAwareness.submitBackgroundFrame({ requestId: requestId, error: e && e.message ? e.message : String(e) });
+      }
     });
 
     // 主进程发来的语音输入状态

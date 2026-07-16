@@ -1,9 +1,20 @@
 import { IntentSource } from './intent-types';
+import { CameraAffect, CameraPresence } from './camera-awareness-types';
 import { ScreenTargetPointerResult } from './screen-target-pointer';
 
-export type ResponseWorkflowKind = 'screen_summary_response' | 'screen_target_pointer_response';
-export type WorkflowObservationKind = 'screen_summary' | 'screen_target_pointer';
-export type WorkflowAction = 'none' | 'point_target';
+export type ResponseWorkflowKind =
+  | 'screen_summary_response'
+  | 'screen_target_pointer_response'
+  | 'camera_check_once_response'
+  | 'camera_visual_query_response';
+
+export type WorkflowObservationKind =
+  | 'screen_summary'
+  | 'screen_target_pointer'
+  | 'camera_presence'
+  | 'camera_visual';
+
+export type WorkflowAction = 'none' | 'capture_screen' | 'capture_camera' | 'point_target';
 export type WorkflowActionStatus = 'completed' | 'skipped' | 'failed' | 'cancelled';
 export type WorkflowExecutionStatus = 'handled' | 'failed' | 'fallback';
 export type WorkflowSource = Extract<IntentSource, 'screen_dot' | 'text_chat' | 'voice_asr'>;
@@ -17,6 +28,8 @@ export interface WorkflowObservation {
   found?: boolean;
   confidence?: number;
   reason?: string;
+  presence?: CameraPresence;
+  affect?: CameraAffect;
   warnings?: string[];
 }
 
@@ -65,6 +78,16 @@ export interface ScreenSummaryTool {
 
 export interface ScreenTargetPointerTool {
   handle(message: string, options?: { suppressResultBubble?: boolean }): Promise<ScreenTargetPointerResult>;
+}
+
+export interface CameraWorkflowTools {
+  checkPresence(): Promise<{
+    presence: CameraPresence;
+    confidence: number;
+    affect?: CameraAffect;
+    reason: string;
+  }>;
+  analyzeVisualQuery(userPrompt: string): Promise<string>;
 }
 
 export interface WorkflowChatResponder {
