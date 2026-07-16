@@ -102,8 +102,100 @@ export class FunASRLocalEngine implements ASREngine {
     return true;
   }
 
-  async *stream(_input: ASRStreamInput): AsyncIterable<ASRTranscriptEvent> {
-    throw new Error('FunASRLocalEngine.stream is wired in Task 3');
+  async *stream(input: ASRStreamInput): AsyncIterable<ASRTranscriptEvent> {
+    let url: string;
+    try {
+      url = createFunASRLocalUrl(input.config);
+    } catch (error) {
+      yield {
+        type: 'error',
+        message: error instanceof Error ? error.message : 'FunASR Base URL 无效',
+        sessionId: input.sessionId,
+        recoverable: false,
+      };
+      return;
+    }
+
+    const pending: ASRTranscriptEvent[] = [];
+    let opened = false;
+    let closed = false;
+    const socket = new WebSocket(url);
+
+    socket.on('open', () => {
+      opened = true;
+      socket.send(JSON.stringify(createFunASRStartEvent(input.config)));
+    });
+    socket.on('message', (data) => {
+      try {
+        const normalized = normalizeFunASREvent(JSON.parse(data.toString()), input.sessionId);
+        if (normalized) pending.push(normalized);
+      } catch {
+        pending.push({
+          type: 'error',
+          message: 'Invalid FunASR event payload',
+          sessionId: input.sessionId,
+          recoverable: true,
+        });
+      }
+    });
+    socket.on('close', () => { closed = true; });
+    socket.on('error', (error) => {
+      pending.push({
+        type: 'error',
+        message: error.message || 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。',
+        sessionId: input.sessionId,
+        recoverable: false,
+      });
+      closed = true;
+    });
+
+    while (!opened && !closed && !input.signal?.aborted) {
+      await sleep(FUNASR_POLL_INTERVAL_MS);
+    }
+
+    if (!opened) {
+      while (pending.length > 0) yield pending.shift()!;
+      if (!input.signal?.aborted) {
+        yield {
+          type: 'error',
+          message: 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。',
+          sessionId: input.sessionId,
+          recoverable: false,
+        };
+      }
+      return;
+    }
+
+    for await (const chunk of input.chunks) {
+      if (input.signal?.aborted || closed) break;
+      socket.send(Buffer.from(chunk.base64, 'base64'));
+      while (pending.length > 0) yield pending.shift()!;
+    }
+
+    let terminalReceived = false;
+    if (!closed && !input.signal?.aborted) {
+      socket.send(JSON.stringify(createFunASREndEvent()));
+      for await (const event of drainFunASREvents(pending, () => closed || Boolean(input.signal?.aborted))) {
+        terminalReceived = terminalReceived || isTerminalEvent(event);
+        yield event;
+      }
+      if (!closed) socket.close();
+    }
+
+    while (pending.length > 0) {
+      const event = pending.shift()!;
+      terminalReceived = terminalReceived || isTerminalEvent(event);
+      yield event;
+    }
+
+    if (!terminalReceived && !input.signal?.aborted) {
+      yield {
+        type: 'error',
+        message: 'FunASR 未返回识别文本，请确认服务模式、音频格式和模型配置',
+        sessionId: input.sessionId,
+        recoverable: false,
+      };
+    }
   }
 }
 

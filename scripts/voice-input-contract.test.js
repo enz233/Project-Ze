@@ -99,6 +99,10 @@ function testAsrProviderPresets() {
   assert.strictEqual(funasrApplied.baseUrl, 'ws://127.0.0.1:10096');
   assert.strictEqual(funasrApplied.model, '');
   assert.strictEqual(funasrApplied.streamingMode, 'realtime');
+
+  const funasrEngine = createASREngine(funasrApplied);
+  assert.strictEqual(funasrEngine.provider, 'funasr-local-runtime');
+  assert.strictEqual(funasrEngine.supportsStreaming(funasrApplied), true);
 }
 
 function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
