@@ -10,6 +10,9 @@ import { TimeAwareness } from './time-awareness';
 import { ScreenAnalyzer } from './screen-analyzer';
 import { ScreenTargetPointer } from './screen-target-pointer';
 import { TTSManager } from './tts-manager';
+import { IntentRouter } from './intent-router';
+import { IntentExecutor } from './intent-executor';
+import { IntentRequest } from './intent-types';
 
 export class ChatManager {
   private aiService: AIService;
@@ -22,6 +25,8 @@ export class ChatManager {
   private screenAnalyzer: ScreenAnalyzer;
   private ttsManager: TTSManager | null = null;
   private screenTargetPointer: ScreenTargetPointer | null = null;
+  private intentRouter?: IntentRouter;
+  private intentExecutor?: IntentExecutor;
   private isProcessing = false;
   private lastUserInteraction: number = Date.now();
   private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'speaking' | 'busy' | 'error', message: string = ''): void {
@@ -108,6 +113,10 @@ export class ChatManager {
         this.memory.addMessage('user', userMessage);
         this.memory.addMessage('assistant', screenResult);
         this.memory.recordInteraction('screen-analysis', screenMessage, this.stateManager.getCurrentState());
+        return;
+      }
+
+      if (await this.tryHandleIntent(userMessage, 'text_chat')) {
         return;
       }
 
@@ -370,6 +379,24 @@ export class ChatManager {
   /** 设置屏幕目标指示器 */
   setScreenTargetPointer(pointer: ScreenTargetPointer): void {
     this.screenTargetPointer = pointer;
+  }
+
+  setIntentRouter(intentRouter: IntentRouter, intentExecutor: IntentExecutor): void {
+    this.intentRouter = intentRouter;
+    this.intentExecutor = intentExecutor;
+  }
+
+  private async tryHandleIntent(text: string, source: 'text_chat' | 'voice_asr'): Promise<boolean> {
+    if (!this.intentRouter || !this.intentExecutor) return false;
+    const request: IntentRequest = { source, text, userInitiated: true };
+    const routed = await this.intentRouter.route(request);
+    if (routed.decision.intent === 'normal_chat' || routed.decision.intent === 'unknown') return false;
+    const result = await this.intentExecutor.execute(routed);
+    if (result.status === 'handled' && result.message && routed.decision.intent !== 'screen_target_pointer') {
+      this.sendBubble(result.message);
+    }
+    this.intentRouter.recordExecution(result);
+    return result.status === 'handled';
   }
 
   /** 获取记忆模块（供 ObserverManager 使用） */

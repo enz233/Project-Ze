@@ -63,7 +63,8 @@ src/
 - `bubble-manager.ts`：气泡发送、状态门禁、主动气泡短间隔控制。
 - `bubble-orchestrator.ts`：主进程气泡编排边界，接收带来源/优先级的气泡请求，并把实际投递委托给 `BubbleManager`。
 - `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；当前稳定职责是截图、坐标映射元信息与 Vision 分析。`ScreenCaptureFrame.fingerprint` 与 `screen-capture-frame.ts` 按显示器比例推导缩略图尺寸属于 Unreleased 稳定性增强。
-- `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、移动调用和指向气泡；八方向 point 指向姿态、指向后恢复、fingerprint diff 屏幕变化取消属于 Unreleased 增强。
+- `screen-target-pointer.ts`：屏幕目标指示编排器，处理显式屏幕目标定位请求，负责 Vision 定位结果校验、截图坐标映射、移动调用和指向气泡；八方向 point 指向姿态、指向后恢复、fingerprint diff 屏幕变化取消属于 Unreleased 增强。
+- `intent-types.ts` / `intent-classifier.ts` / `intent-router.ts` / `intent-executor.ts`：Intent Router 第一版边界，统一文字聊天、ASR、显式屏幕入口、摄像头和主动上下文的结构化意图；规则优先、可选 LLM fallback 只能建议意图，本地权限策略决定屏幕/摄像头/移动/配置写入是否允许，Executor 仅薄分发到现有模块。
 - `emotion-system.ts` / `emotion-updater.ts`：情绪状态与更新。
 - `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
 - `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。
@@ -119,7 +120,8 @@ src/
 - **情感前缀**：根据状态给 AI 消息加情感上下文，切换后 4 秒保持上一个状态
 - **情境化主动回应**：本地规则先判断是否应该回应，AI 仅用于高价值场景短句改写，不用于决定是否打扰；阈值、分类、模板和 AI 改写 reason 已配置化
 - **TTS 架构**：`TTSManager` 保持唯一编排入口，读取配置并调用 `createTTSEngine(config)` 获取供应商引擎；供应商引擎实现 `TTSEngine.synthesize(text)` 并返回 base64 音频，Electron 播放、字幕、停止和 `playbackId` 完成确认仍只在 `TTSManager`、preload 和 renderer 链路中处理
-- **屏幕目标指示**：`.` 屏幕分析入口中命中明确“指出/在哪/帮我找”等关键词时，`ChatManager` 委托 `ScreenTargetPointer` 调用 Vision 结构化定位；置信度足够时通过 `MoveController` 把桌宠移动到目标旁边并给出指向气泡。八方向 `point-visual`、约 7 秒后只恢复普通视觉、Vision 前后 `ScreenCaptureFrame.fingerprint` diff 取消旧坐标属于 Unreleased 增强；普通聊天自然语言自动触发、wheel IPC、全局输入 hook 和持续截图监控暂缓，避免隐私、误触发和复杂度问题。
+- **屏幕目标指示**：`.` 屏幕分析入口中命中明确“指出/在哪/帮我找”等关键词时，`ChatManager` 委托 `ScreenTargetPointer` 调用 Vision 结构化定位；置信度足够时通过 `MoveController` 把桌宠移动到目标旁边并给出指向气泡。八方向 `point-visual`、约 7 秒后只恢复普通视觉、Vision 前后 `ScreenCaptureFrame.fingerprint` diff 取消旧坐标属于 Unreleased 增强；wheel IPC、全局输入 hook 和持续截图监控暂缓，避免隐私、误触发和复杂度问题。
+- **Intent Router**：普通文字聊天入口已接入最小路由 guard；用户明确请求“看看这个页面/分析屏幕/指出下载按钮”等自然语言时，可在正常 LLM 聊天前路由到 `screen_summary` 或 `screen_target_pointer` 并由 `IntentExecutor` 薄分发到 `ScreenAnalyzer` / `ScreenTargetPointer`。普通聊天仍需明确请求才允许屏幕截图或移动；摄像头一次性检测在对话入口仅返回跳过说明，不自动打开摄像头。ASR 文本目前仍复用 `user-message -> ChatManager.sendMessage` 路径，source 先按 `text_chat` 记录，后续若拆出 ASR caller 再切换为 `voice_asr`。
 
 ## IPC 通道一览
 
@@ -203,7 +205,7 @@ src/
 
 | 版本 | 日期 | 主要内容 |
 |------|------|---------|
-| Unreleased | - | 八方向 point visual、screen fingerprint 稳定性与诊断、Move 专用差分/单轴分段/teleportTo、ASR provider presets、renderer 动画守卫修复 |
+| Unreleased | - | Intent Router 最小聊天路由接入、八方向 point visual、screen fingerprint 稳定性与诊断、Move 专用差分/单轴分段/teleportTo、ASR provider presets、renderer 动画守卫修复 |
 | v0.3.1 | 2026-07-15 | Camera Awareness 第一版、设置页摄像头入口与实时预览、cameraAwareness IPC、Move clamp/测试入口、ScreenTargetPointer 初版 |
 | v0.3.0 | 2026-07-15 | 语音输入 ASR：麦克风按钮、长按快捷键、流式识别、ASR 配置、音频缓存接口 |
 | v0.1.0 | 2026-05-23 | 初始版本，7 状态系统 |
