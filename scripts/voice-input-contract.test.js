@@ -569,6 +569,63 @@ function testQwenAsrRealtimeHelpers() {
   );
 }
 
+function testFunASRLocalEngineHelpers() {
+  const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+  const {
+    createFunASRLocalUrl,
+    createFunASRStartEvent,
+    createFunASREndEvent,
+    normalizeFunASREvent,
+    FunASRLocalEngine,
+  } = load('core/asr-funasr-local.js');
+
+  const config = {
+    ...DEFAULT_ASR_CONFIG,
+    provider: 'funasr-local-runtime',
+    baseUrl: 'ws://127.0.0.1:10096',
+    language: 'zh',
+  };
+
+  assert.strictEqual(createFunASRLocalUrl(config), 'ws://127.0.0.1:10096/');
+  assert.throws(
+    () => createFunASRLocalUrl({ ...config, baseUrl: 'http://127.0.0.1:10096' }),
+    /FunASR Base URL 必须以 ws:\/\/ 或 wss:\/\/ 开头/
+  );
+
+  assert.deepStrictEqual(createFunASRStartEvent(config), {
+    mode: '2pass',
+    chunk_size: [5, 10, 5],
+    chunk_interval: 10,
+    wav_name: 'project-ze',
+    is_speaking: true,
+    hotwords: '',
+    itn: true,
+  });
+  assert.deepStrictEqual(createFunASREndEvent(), { is_speaking: false });
+
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ text: '你好', mode: 'online' }, 's1'),
+    { type: 'partial', text: '你好', sessionId: 's1' }
+  );
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ text: '你好世界', mode: '2pass-offline' }, 's1'),
+    { type: 'final', text: '你好世界', sessionId: 's1' }
+  );
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ is_final: true, text: '结束' }, 's1'),
+    { type: 'final', text: '结束', sessionId: 's1' }
+  );
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ error: 'bad audio' }, 's1'),
+    { type: 'error', message: 'bad audio', sessionId: 's1', recoverable: false }
+  );
+  assert.strictEqual(normalizeFunASREvent({ text: '' }, 's1'), null);
+
+  const engine = new FunASRLocalEngine();
+  assert.strictEqual(engine.provider, 'funasr-local-runtime');
+  assert.strictEqual(engine.supportsStreaming(config), true);
+}
+
 async function collectQwenEventsWithFakeSocket(FakeQwenWebSocket) {
   const qwenModulePath = path.join(__dirname, '..', 'dist', 'core', 'asr-qwen-realtime.js');
   const wsModulePath = require.resolve('ws');
@@ -895,6 +952,7 @@ async function run() {
   testRendererQwenMainVoiceUsesPCM();
   testAsrEngineFactoryAndParser();
   testQwenAsrRealtimeHelpers();
+  testFunASRLocalEngineHelpers();
   await testQwenRealtimeStreamWaitsForDelayedFinal();
   await testQwenRealtimeStreamReportsMissingTranscription();
   await testQwenRealtimeStreamReportsCloseWithoutTranscription();
