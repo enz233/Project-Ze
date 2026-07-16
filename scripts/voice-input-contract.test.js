@@ -315,6 +315,16 @@ function testJsonConfigStoreUpdateNormalizesMergedValue() {
   }
 }
 
+function testRendererQwenMainVoiceUsesPCM() {
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
+  assert.match(renderer, /function isQwenASRVoiceConfig\(config\)/);
+  assert.match(renderer, /function createQwenPCMVoiceRecorder\(stream, sessionId\)/);
+  assert.match(renderer, /if \(isQwenASRVoiceConfig\(config\)\)/);
+  assert.match(renderer, /mimeType: 'audio\/pcm;rate=16000'/);
+  assert.match(renderer, /语音 PCM 分片发送失败/);
+  assert.match(renderer, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
+}
+
 function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   const { ASR_PROVIDER_PRESETS } = load('core/asr-config.js');
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf-8');
@@ -844,6 +854,7 @@ async function run() {
   testAsrNormalizerDeepMergesCacheAndValidatesTypes();
   testJsonConfigStoreUpdateNormalizesMergedValue();
   testSettingsAsrPresetContractMatchesCoreDefinitions();
+  testRendererQwenMainVoiceUsesPCM();
   testAsrEngineFactoryAndParser();
   testQwenAsrRealtimeHelpers();
   await testQwenRealtimeStreamWaitsForDelayedFinal();
