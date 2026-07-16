@@ -3,6 +3,7 @@
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
 ## Unreleased
+- Response Workflow Orchestrator：屏幕总结和屏幕目标指向结果先转为短期 workflow context，再交给聊天模型生成统一 `<item>` 气泡回复；原始屏幕 observation 不默认进入长期记忆。
 - ASR Qwen-ASR 实时识别：新增专用 `qwen-asr-realtime` WebSocket 引擎，使用 Workspace ID 专属域名和握手 `Authorization` 请求头，不再通过 OpenAI-compatible `/audio/transcriptions` 路径调用 Qwen-ASR。
 - ASR 设置简化修正：普通模式保留供应商预设和 Base URL，仍默认隐藏实际引擎、Realtime/Transcription Path、流式模式和缓存等高级字段。
 - 屏幕目标指示视觉时长修复：point 差分活跃期间阻止 idle/blink/sleepy 等普通精灵直接覆盖当前 point pose，确保约 7 秒后才由 point 会话恢复普通视觉；新增 point visual guard 契约测试
