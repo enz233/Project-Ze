@@ -1320,6 +1320,10 @@
       if (asrRecognitionRunning || asrRecognitionStopping) return;
       const config = collectASRConfig();
       if (!validateASRRecognitionTestConfig(config)) return;
+      if (!window.companion || !window.companion.saveASRConfig || !window.companion.voiceInput) {
+        setASRMicStatus('当前环境不支持语音输入测试', true);
+        return;
+      }
       await saveASRConfigForRecognitionTest(config);
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setASRMicStatus('当前环境不支持麦克风访问', true);
@@ -1327,10 +1331,6 @@
       }
       if (typeof MediaRecorder === 'undefined') {
         setASRMicStatus('当前环境不支持录音测试', true);
-        return;
-      }
-      if (!window.companion || !window.companion.voiceInput) {
-        setASRMicStatus('当前环境不支持语音输入测试', true);
         return;
       }
 
