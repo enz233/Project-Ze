@@ -1,6 +1,14 @@
 # Operation Guide 最小可用融合设计
 
-日期：2026-07-16
+## Implementation Status (Paused 2026-07-16)
+
+This document describes the target design, not the current fully wired runtime state.
+
+Current committed state when paused:
+
+- Implemented: Operation Guide domain types, intent helpers, planner/fallback parsing, progress-evaluation parser, config normalization/persistence, manager state machine, and contract tests.
+- Not integrated: Intent Router / IntentExecutor guide intents, main process runtime wiring, preload API, IPC, settings page, renderer guide panel, final user-facing docs.
+- Resume point: Task 3 in `docs/superpowers/plans/2026-07-16-operation-guide-fusion.md`.
 
 ## 背景
 

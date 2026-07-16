@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Operation Guide 融合暂停标注：已提交 Project-Chen Operation Guide 的领域层、配置、planner/fallback、progress parser、manager 状态机和契约测试；融合暂停在计划 Task 2 后，尚未接入 Intent Router / IntentExecutor、main IPC、preload、settings、renderer guide panel 或最终用户文档。恢复时从 `docs/superpowers/plans/2026-07-16-operation-guide-fusion.md` 的 Task 3 继续。
+
 ## v0.3.2 (2026-07-16)
 - 语音输入触发修复：聊天输入框显示期间保持主窗口可交互，并让输入框区域参与 mouse enter/leave 穿透控制，避免麦克风按钮和页面级长按快捷键因窗口 click-through 看起来无响应。
 - 屏幕目标指示站位微调：保持八方向 point 差分选择逻辑不变，仅在最终 `moveTopLeft.x` 上增加 10px 水平校准，修正视觉上略偏左的问题；新增 screen pointer position 契约测试

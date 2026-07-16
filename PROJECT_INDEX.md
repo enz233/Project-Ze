@@ -71,6 +71,7 @@ src/
 - `intent-classifier.ts`：规则优先的意图分类器，覆盖普通聊天、屏幕总结、目标指示、摄像头一次性检测、语音/设置/主动回应帮助，并为 LLM fallback 提供结构化校验边界。
 - `intent-router.ts`：Intent Router 主入口，应用屏幕/摄像头/移动/配置写入等隐私权限策略，并维护最近 intent 决策快照。
 - `intent-executor.ts`：薄分发层，根据已授权 intent 调用现有 ChatManager、ScreenAnalyzer、ScreenTargetPointer、CameraAwarenessManager 或诊断 helper。
+- `operation-guide-*.ts`（Unreleased / paused after Task 2）：Project-Chen Operation Guide 最小融合的领域层、配置、planner/fallback、progress parser 和 manager 状态机已存在并有契约测试；尚未接入 Intent Router / IntentExecutor、main IPC、preload、settings 或 renderer guide panel，因此当前不是可用入口功能。恢复时从 `docs/superpowers/plans/2026-07-16-operation-guide-fusion.md` 的 Task 3 继续。
 - `emotion-system.ts` / `emotion-updater.ts`：情绪状态与更新。
 - `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
 - `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。

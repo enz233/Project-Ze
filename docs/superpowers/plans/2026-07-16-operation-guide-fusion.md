@@ -8,6 +8,24 @@
 
 **Tech Stack:** Electron 42, TypeScript 6, CommonJS, existing `JsonConfigStore<T>`, existing Intent Router, existing `ScreenTargetPointer`, Node contract tests under `scripts/` after `npm run build`.
 
+## Pause Status (2026-07-16)
+
+Operation Guide fusion is paused after Task 2.
+
+Implemented and committed:
+
+- Task 1: `operation-guide-types.ts`, `operation-guide-intent.ts`, `operation-guide-planner.ts`, `operation-guide-progress-evaluator.ts`, and `scripts/operation-guide-contract.test.js`.
+- Task 2: `operation-guide-config.ts`, `operation-guide-manager.ts`, config normalization, manager state machine, and async contract tests.
+
+Not integrated yet:
+
+- Task 3: Intent Router / IntentExecutor guide intents.
+- Task 4: main process runtime wiring, preload API, and IPC.
+- Task 5: settings page and renderer guide panel.
+- Task 6: final README / PROJECT_INDEX / VERSION / user docs sync.
+
+Resume from Task 3 when continuing this work. The existing Operation Guide code is currently domain/config/manager infrastructure only and is not wired to app entrypoints.
+
 ## Global Constraints
 
 - Work from current Project-Ze v0.3.2 as the stable base.
