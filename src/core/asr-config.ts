@@ -1,7 +1,7 @@
 import { JsonConfigStore } from './json-config-store';
 
-export type ASRProvider = 'openai-compatible';
-export type ASRProviderPreset = 'openai' | 'aliyun-bailian' | 'custom-openai-compatible';
+export type ASRProvider = 'openai-compatible' | 'qwen-asr-realtime';
+export type ASRProviderPreset = 'openai' | 'aliyun-bailian' | 'qwen-asr' | 'custom-openai-compatible';
 export type ASRStreamingMode = 'realtime' | 'chunked-fallback';
 
 export interface ASRCacheConfig {
@@ -29,6 +29,7 @@ export interface ASRConfig {
   providerPreset: ASRProviderPreset;
   provider: ASRProvider;
   baseUrl: string;
+  workspaceId: string;
   apiKey: string;
   model: string;
   realtimePath: string;
@@ -66,6 +67,18 @@ export const ASR_PROVIDER_PRESETS: Record<ASRProviderPreset, ASRProviderPresetDe
     language: 'zh',
     note: '阿里百炼预设复用 OpenAI-compatible ASR 引擎；请填写 DashScope API Key 和兼容 ASR 模型。若所选模型不支持当前路径，请改用自定义路径或后续添加专用 provider engine。',
   },
+  'qwen-asr': {
+    id: 'qwen-asr',
+    label: 'Qwen-ASR 实时识别',
+    provider: 'qwen-asr-realtime',
+    baseUrl: 'wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com',
+    model: '',
+    realtimePath: '/api-ws/v1/realtime',
+    transcriptionPath: '/audio/transcriptions',
+    streamingMode: 'realtime',
+    language: 'zh',
+    note: 'Qwen-ASR 实时语音识别使用专用 WebSocket 协议；请填写 Workspace ID、API Key 和模型，运行时不会请求 OpenAI /audio/transcriptions。',
+  },
   'custom-openai-compatible': {
     id: 'custom-openai-compatible',
     label: '自定义 OpenAI-compatible',
@@ -83,7 +96,7 @@ export const ASR_PROVIDER_PRESETS: Record<ASRProviderPreset, ASRProviderPresetDe
 const DEFAULT_ASR_PROVIDER_PRESET: ASRProviderPreset = 'openai';
 
 function isASRProvider(value: unknown): value is ASRProvider {
-  return value === 'openai-compatible';
+  return value === 'openai-compatible' || value === 'qwen-asr-realtime';
 }
 
 function isASRStreamingMode(value: unknown): value is ASRStreamingMode {
@@ -122,9 +135,9 @@ function matchesPresetManagedFields(config: ASRConfig, preset: ASRProviderPreset
 export function inferASRProviderPreset(config: ASRConfig): ASRProviderPreset {
   if (matchesPresetManagedFields(config, 'openai')) return 'openai';
   if (matchesPresetManagedFields(config, 'aliyun-bailian')) return 'aliyun-bailian';
+  if (config.provider === 'qwen-asr-realtime') return 'qwen-asr';
   return 'custom-openai-compatible';
 }
-
 function hasDefaultCache(cache: ASRCacheConfig): boolean {
   return cache.enabled === DEFAULT_ASR_CONFIG.cache.enabled
     && cache.retentionMinutes === DEFAULT_ASR_CONFIG.cache.retentionMinutes
@@ -135,6 +148,7 @@ function hasLegacyCustomizedAdvancedFields(raw: Record<string, unknown>, normali
   if (isASRProviderPreset(raw.providerPreset) && raw.providerPreset !== DEFAULT_ASR_PROVIDER_PRESET) return true;
   if (normalized.provider !== DEFAULT_ASR_CONFIG.provider) return true;
   if (normalized.baseUrl !== DEFAULT_ASR_CONFIG.baseUrl) return true;
+  if (normalized.workspaceId !== DEFAULT_ASR_CONFIG.workspaceId) return true;
   if (normalized.realtimePath !== DEFAULT_ASR_CONFIG.realtimePath) return true;
   if (normalized.transcriptionPath !== DEFAULT_ASR_CONFIG.transcriptionPath) return true;
   if (!hasDefaultCache(normalized.cache)) return true;
@@ -145,18 +159,16 @@ function applyNormalModeAdvancedDefaults(config: ASRConfig): ASRConfig {
   const providerPreset = isASRProviderPreset(config.providerPreset)
     ? config.providerPreset
     : inferASRProviderPreset(config);
-  const provider = isASRProvider(config.provider)
-    ? config.provider
-    : ASR_PROVIDER_PRESETS[providerPreset].provider;
+  const preset = ASR_PROVIDER_PRESETS[providerPreset];
   return {
     ...config,
     advancedSettingsEnabled: false,
     providerPreset,
-    provider,
-    baseUrl: config.baseUrl || ASR_PROVIDER_PRESETS[providerPreset].baseUrl || DEFAULT_ASR_CONFIG.baseUrl,
-    realtimePath: DEFAULT_ASR_CONFIG.realtimePath,
-    transcriptionPath: DEFAULT_ASR_CONFIG.transcriptionPath,
-    streamingMode: DEFAULT_ASR_CONFIG.streamingMode,
+    provider: preset.provider,
+    baseUrl: config.baseUrl || preset.baseUrl || DEFAULT_ASR_CONFIG.baseUrl,
+    realtimePath: preset.realtimePath,
+    transcriptionPath: preset.transcriptionPath,
+    streamingMode: providerPreset === 'qwen-asr' ? preset.streamingMode : DEFAULT_ASR_CONFIG.streamingMode,
     cache: { ...DEFAULT_ASR_CONFIG.cache },
   };
 }
@@ -175,6 +187,7 @@ export function normalizeASRConfigForLoad(config: Partial<ASRConfig>): ASRConfig
     advancedSettingsEnabled: DEFAULT_ASR_CONFIG.advancedSettingsEnabled,
     provider: isASRProvider(raw.provider) ? raw.provider : DEFAULT_ASR_CONFIG.provider,
     baseUrl: normalizeString(raw.baseUrl, DEFAULT_ASR_CONFIG.baseUrl),
+    workspaceId: normalizeString(raw.workspaceId, DEFAULT_ASR_CONFIG.workspaceId),
     apiKey: normalizeString(raw.apiKey, DEFAULT_ASR_CONFIG.apiKey),
     model: normalizeString(raw.model, DEFAULT_ASR_CONFIG.model),
     realtimePath: normalizeString(raw.realtimePath, DEFAULT_ASR_CONFIG.realtimePath),
@@ -227,6 +240,7 @@ export const DEFAULT_ASR_CONFIG: ASRConfig = {
   providerPreset: DEFAULT_ASR_PROVIDER_PRESET,
   provider: OPENAI_ASR_PRESET.provider,
   baseUrl: OPENAI_ASR_PRESET.baseUrl,
+  workspaceId: '',
   apiKey: '',
   model: OPENAI_ASR_PRESET.model,
   realtimePath: OPENAI_ASR_PRESET.realtimePath,

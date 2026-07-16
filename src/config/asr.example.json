@@ -4,6 +4,7 @@
   "providerPreset": "openai",
   "provider": "openai-compatible",
   "baseUrl": "https://api.openai.com/v1",
+  "workspaceId": "",
   "apiKey": "",
   "model": "gpt-4o-mini-transcribe",
   "realtimePath": "/realtime",

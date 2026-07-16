@@ -60,7 +60,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "src/assets/icon.icns",
@@ -69,15 +72,27 @@
     "dmg": {
       "title": "Quiet Companion",
       "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     }
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
+    "@types/ws": "^8.18.1",
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
     "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "ws": "^8.21.1"
   }
 }

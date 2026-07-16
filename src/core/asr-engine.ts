@@ -1,5 +1,6 @@
 import { ASRConfig } from './asr-config';
 import { OpenAICompatibleASREngine } from './asr-openai-compatible';
+import { QwenASRRealtimeEngine } from './asr-qwen-realtime';
 
 export interface VoiceAudioChunk {
   sessionId: string;
@@ -31,6 +32,9 @@ export interface ASREngine {
 export function createASREngine(config: ASRConfig): ASREngine {
   if (config.provider === 'openai-compatible') {
     return new OpenAICompatibleASREngine();
+  }
+  if (config.provider === 'qwen-asr-realtime') {
+    return new QwenASRRealtimeEngine();
   }
   throw new Error(`Unsupported ASR provider: ${config.provider}`);
 }

@@ -25,8 +25,8 @@
 
 ## 非目标
 
-- 不新增专用阿里百炼 / DashScope ASR engine。
-- 不验证或承诺任何第三方模型支持 OpenAI Realtime WebSocket。
+- 本设置简化本身不新增专用阿里百炼 / DashScope ASR engine；后续 Qwen-ASR 实时识别作为独立 provider engine 接入，不再复用 OpenAI `/audio/transcriptions`。
+- 不验证或承诺第三方模型支持 OpenAI Realtime WebSocket；Qwen-ASR 使用其专用 WebSocket 协议。
 - 不移除现有 ASR engine、provider preset、realtime path 或 cache 配置字段。
 - 不改变主聊天输入的录音按钮和 hold-to-talk 交互。
 - 不改变运行态配置文件位置：仍为 Electron `userData/config/asr.json`。

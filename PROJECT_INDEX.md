@@ -73,7 +73,7 @@ src/
 - `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。
 - `chat-history-store.ts`：聊天历史持久化边界，负责 `chat-history.json` 的读写、最近消息读取和摘要计数；`ai-memory.ts` 仍作为记忆 facade 负责摘要、关系、习惯和 prompt 组装。
 - `asr-config.ts`：ASR 运行态配置，使用 `JsonConfigStore<T>` 保存到 Electron `userData/config/asr.json`；`advancedSettingsEnabled` 控制设置页是否显示 path/streaming/cache 等高级字段；普通模式保留供应商预设和 Base URL，并默认使用 `chunked-fallback`；`providerPreset` 属于 Unreleased 供应商预设增强，`provider` 表示实际 ASR 引擎类型。
-- `asr-engine.ts` / `asr-openai-compatible.ts`：ASR 引擎接口与 OpenAI-compatible provider，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 供应商预设属于 Unreleased 增强，当前仍复用该引擎。
+- `asr-engine.ts` / `asr-openai-compatible.ts` / `asr-qwen-realtime.ts`：ASR 引擎接口与 provider 实现，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设复用 OpenAI-compatible 引擎，Qwen-ASR 实时识别使用专用 WebSocket 引擎和 `Authorization` 握手请求头。
 - `voice-input-manager.ts`：语音输入 session 编排，连接音频 chunk、ASR engine、音频缓存和 transcript/status IPC。
 - `voice-audio-cache.ts`：短期语音缓存边界，保存 runtime-only 音频 chunk 并返回 `audioRef`。
 - `camera-awareness-types.ts`：摄像头感知配置、帧输入、检测结果、状态快照与 IPC 常量类型；不代表独立事件总线。
@@ -181,7 +181,7 @@ src/
 
 ### ASR provider presets
 
-语音输入设置页的供应商预设属于 Unreleased 增强：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 三个预设只负责填充 Base URL、路径、模型和流式模式等配置；运行时仍按 `provider` 字段选择实际引擎。本轮阿里百炼预设的 `provider` 仍为 `openai-compatible`，不包含专用百炼 ASR 协议实现。
+语音输入设置页的供应商预设属于 Unreleased 增强：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设负责填充 Base URL、路径、模型和流式模式等配置；Qwen-ASR 实时识别预设使用专用 `qwen-asr-realtime` 引擎，通过 WebSocket 握手 `Authorization: Bearer <apiKey>` 调用 `wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime?model=<model>`，不再请求 OpenAI `/audio/transcriptions`。
 
 ## 常见修改场景
 

@@ -551,6 +551,7 @@
         <select id="asrProviderPreset">
           <option value="openai">OpenAI</option>
           <option value="aliyun-bailian">阿里百炼 / DashScope</option>
+          <option value="qwen-asr">Qwen-ASR 实时识别</option>
           <option value="custom-openai-compatible">自定义 OpenAI-compatible</option>
         </select>
         <div class="hint" id="asrProviderPresetNote">OpenAI 官方语音识别接口，使用当前 OpenAI-compatible ASR 引擎。</div>
@@ -559,6 +560,12 @@
       <div class="field">
         <label>Base URL（启用后必填）</label>
         <input type="text" id="asrBaseUrl" placeholder="https://api.openai.com/v1">
+      </div>
+
+      <div class="field">
+        <label>Workspace ID（Qwen-ASR 必填）</label>
+        <input type="text" id="asrWorkspaceId" placeholder="例如 ws-xxxxxxxx">
+        <div class="hint">Qwen-ASR 会使用 wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime。</div>
       </div>
 
       <div class="field">
@@ -854,6 +861,17 @@
         language: 'zh',
         note: '阿里百炼预设复用 OpenAI-compatible ASR 引擎。请填写你的 DashScope API Key 和兼容 ASR 模型；如果所选模型不支持当前 realtime 或 transcription path，请改用自定义路径，或后续添加专用 provider engine。',
       },
+      'qwen-asr': {
+        label: 'Qwen-ASR 实时识别',
+        provider: 'qwen-asr-realtime',
+        baseUrl: 'wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com',
+        model: '',
+        realtimePath: '/api-ws/v1/realtime',
+        transcriptionPath: '/audio/transcriptions',
+        streamingMode: 'realtime',
+        language: 'zh',
+        note: 'Qwen-ASR 实时语音识别使用专用 WebSocket 协议。请填写 Workspace ID、API Key 和模型；运行时不会请求 OpenAI /audio/transcriptions。',
+      },
       'custom-openai-compatible': {
         label: '自定义 OpenAI-compatible',
         provider: 'openai-compatible',
@@ -906,6 +924,9 @@
       var preset = getASRPresetDefinition(presetId);
       document.getElementById('asrProvider').value = preset.provider;
       document.getElementById('asrBaseUrl').value = preset.baseUrl;
+      if (presetId !== 'qwen-asr') {
+        document.getElementById('asrWorkspaceId').value = '';
+      }
       document.getElementById('asrModel').value = preset.model;
       document.getElementById('asrRealtimePath').value = preset.realtimePath;
       document.getElementById('asrTranscriptionPath').value = preset.transcriptionPath;
@@ -924,6 +945,7 @@
       updateASRPresetNote();
       const preset = getASRPresetDefinition(config.providerPreset || 'openai');
       document.getElementById('asrBaseUrl').value = config.baseUrl ?? preset.baseUrl;
+      document.getElementById('asrWorkspaceId').value = config.workspaceId ?? '';
       document.getElementById('asrApiKey').value = config.apiKey ?? '';
       document.getElementById('asrModel').value = config.model ?? preset.model;
       document.getElementById('asrRealtimePath').value = config.realtimePath ?? preset.realtimePath;
@@ -1214,6 +1236,7 @@
     function getMissingASREnabledFields(config) {
       const missing = [];
       if (!config.baseUrl) missing.push('Base URL');
+      if (config.provider === 'qwen-asr-realtime' && !config.workspaceId) missing.push('Workspace ID');
       if (!config.model) missing.push('模型');
       if (!config.apiKey) missing.push('API Key');
       return missing;
@@ -1285,6 +1308,7 @@
         providerPreset: providerPreset,
         provider: preset.provider,
         baseUrl: document.getElementById('asrBaseUrl').value.trim(),
+        workspaceId: document.getElementById('asrWorkspaceId').value.trim(),
         apiKey: document.getElementById('asrApiKey').value,
         model: document.getElementById('asrModel').value.trim(),
         realtimePath: advanced.realtimePath,
@@ -1846,9 +1870,9 @@
         model: config.model,
         hasApiKey: !!config.apiKey
       });
-      if (config.provider !== 'openai-compatible') {
+      if (config.provider !== 'openai-compatible' && config.provider !== 'qwen-asr-realtime') {
         debugASRSettings('save blocked: unsupported provider', { provider: config.provider });
-        showToast('语音输入当前仅支持 OpenAI-compatible 供应商', 'error');
+        showToast('语音输入当前仅支持 OpenAI-compatible 或 Qwen-ASR 实时识别供应商', 'error');
         return;
       }
       if (!Number.isFinite(config.cache.retentionMinutes) || config.cache.retentionMinutes <= 0) {
