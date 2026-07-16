@@ -26,7 +26,7 @@
 - Modify `src/core/asr-config.ts`: add `advancedSettingsEnabled: boolean`, normalize it, and set default normal-mode streaming to `chunked-fallback`.
 - Modify `src/config/asr.example.json`: add safe `advancedSettingsEnabled: false` and default `streamingMode: "chunked-fallback"`.
 - Modify `scripts/voice-input-contract.test.js`: add contract coverage for default advanced flag, settings DOM IDs, normal-mode defaults, and realtime error copy.
-- Modify `src/main/settings.html`: add the advanced toggle and wrapper, hide/show advanced fields, default hidden fields when advanced is off, save before recognition test, and map realtime open failures to clearer copy.
+- Modify `src/main/settings.html`: add the advanced toggle and wrapper, keep provider preset and Base URL visible in normal mode, hide/show only actual engine/path/streaming/cache advanced fields, default hidden fields when advanced is off, save before recognition test, and map realtime open failures to clearer copy.
 - Modify `PROJECT_INDEX.md`: document simplified ASR settings and advanced setting boundary.
 - Modify `VERSION.md`: add an Unreleased note for ASR settings simplification.
 
@@ -233,7 +233,7 @@ git commit -m "feat(voice): add asr advanced settings flag"
   - `getDefaultASRAdvancedFields(): object`
   - `isASRAdvancedSettingsEnabled(): boolean`
   - `toggleASRAdvancedSettings(): void`
-- Updates `collectASRConfig()` to use default advanced fields when the advanced toggle is off.
+- Updates `collectASRConfig()` to preserve visible provider preset and Base URL when the advanced toggle is off, while defaulting hidden path/streaming/cache fields.
 
 - [ ] **Step 1: Add failing settings contract assertions**
 

@@ -109,7 +109,7 @@ function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
     model: 'custom-transcribe',
     streamingMode: 'chunked-fallback',
   });
-  assert.strictEqual(mismatchedManagedPreset.providerPreset, 'custom-openai-compatible');
+  assert.strictEqual(mismatchedManagedPreset.providerPreset, 'aliyun-bailian');
 
   const validEmptyModelPreset = normalizeASRConfigForLoad({
     ...DEFAULT_ASR_CONFIG,
@@ -203,9 +203,9 @@ function testAsrAdvancedSettingsNormalization() {
   assert.strictEqual(explicitFalse.language, 'en');
   assert.strictEqual(explicitFalse.autoSendFinalTranscript, true);
   assert.strictEqual(explicitFalse.holdToTalkShortcut, 'Alt+Space');
-  assert.strictEqual(explicitFalse.providerPreset, 'openai');
+  assert.strictEqual(explicitFalse.providerPreset, 'custom-openai-compatible');
   assert.strictEqual(explicitFalse.provider, 'openai-compatible');
-  assert.strictEqual(explicitFalse.baseUrl, 'https://api.openai.com/v1');
+  assert.strictEqual(explicitFalse.baseUrl, 'https://example.test/v1');
   assert.strictEqual(explicitFalse.realtimePath, '/realtime');
   assert.strictEqual(explicitFalse.transcriptionPath, '/audio/transcriptions');
   assert.strictEqual(explicitFalse.streamingMode, 'chunked-fallback');
@@ -347,9 +347,13 @@ function testSettingsAsrPresetContractMatchesCoreDefinitions() {
     assert.ok(html.includes(`id="${id}"`), `settings.html missing ASR advanced setting #${id}`);
   }
   assert.match(html, /显示高级 ASR 设置/);
+  assert.match(html, /供应商预设[\s\S]*?<select id="asrProviderPreset">/);
+  assert.match(html, /Base URL（启用后必填）[\s\S]*?<input type="text" id="asrBaseUrl"/);
   assert.match(html, /function getDefaultASRAdvancedFields\(\)/);
   assert.match(html, /function toggleASRAdvancedSettings\(\)/);
   assert.match(html, /advancedSettingsEnabled: isASRAdvancedSettingsEnabled\(\)/);
+  assert.match(html, /providerPreset: providerPreset/);
+  assert.match(html, /baseUrl: document\.getElementById\('asrBaseUrl'\)\.value\.trim\(\)/);
   assert.match(html, /streamingMode: 'chunked-fallback'/);
   assert.match(html, /saveASRConfig\(config\)[\s\S]*?voiceInput\.start/);
   assert.match(html, /async function saveASRConfigForRecognitionTest\(config\)/);

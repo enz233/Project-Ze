@@ -542,13 +542,28 @@
 
       <div class="field">
         <label><input type="checkbox" id="asrEnabled"> 启用语音输入</label>
-        <div class="hint">右键输入框中显示麦克风按钮；快捷键默认为 Ctrl+Shift+Space 长按说话。普通模式只需要填写 API Key 和模型。</div>
+        <div class="hint">右键输入框中显示麦克风按钮；快捷键默认为 Ctrl+Shift+Space 长按说话。普通模式保留供应商预设、Base URL、API Key 和模型。</div>
         <div class="hint" id="asrValidationMessage" style="display: none; color: #c62828; margin-top: 6px;"></div>
       </div>
 
       <div class="field">
+        <label>供应商预设</label>
+        <select id="asrProviderPreset">
+          <option value="openai">OpenAI</option>
+          <option value="aliyun-bailian">阿里百炼 / DashScope</option>
+          <option value="custom-openai-compatible">自定义 OpenAI-compatible</option>
+        </select>
+        <div class="hint" id="asrProviderPresetNote">OpenAI 官方语音识别接口，使用当前 OpenAI-compatible ASR 引擎。</div>
+      </div>
+
+      <div class="field">
+        <label>Base URL（启用后必填）</label>
+        <input type="text" id="asrBaseUrl" placeholder="https://api.openai.com/v1">
+      </div>
+
+      <div class="field">
         <label><input type="checkbox" id="asrAdvancedSettingsEnabled"> 显示高级 ASR 设置</label>
-        <div class="hint">默认关闭。只有需要自定义供应商、Base URL、Realtime/Transcription Path、流式模式或缓存时再开启。</div>
+        <div class="hint">默认关闭。只有需要调整实际引擎、Realtime/Transcription Path、流式模式或缓存时再开启。</div>
       </div>
 
       <div class="field">
@@ -561,17 +576,7 @@
         <h2 style="margin-top: 20px;">高级 ASR 设置</h2>
         <hr class="divider">
         <div class="hint" style="margin-bottom: 10px; color: #666;">
-          仅在需要第三方 OpenAI-compatible endpoint、Realtime WebSocket 或自定义缓存策略时开启。普通语音识别测试默认使用 chunked-fallback。
-        </div>
-
-        <div class="field">
-          <label>供应商预设</label>
-          <select id="asrProviderPreset">
-            <option value="openai">OpenAI</option>
-            <option value="aliyun-bailian">阿里百炼 / DashScope</option>
-            <option value="custom-openai-compatible">自定义 OpenAI-compatible</option>
-          </select>
-          <div class="hint" id="asrProviderPresetNote">OpenAI 官方语音识别接口，使用当前 OpenAI-compatible ASR 引擎。</div>
+          仅在需要 Realtime WebSocket、自定义路径或自定义缓存策略时开启。普通语音识别测试默认使用 chunked-fallback。
         </div>
 
         <div class="field">
@@ -584,11 +589,6 @@
 
         <div class="btn-row">
           <button class="btn btn-secondary" id="applyASRPresetBtn">应用推荐配置</button>
-        </div>
-
-        <div class="field">
-          <label>Base URL（启用后必填）</label>
-          <input type="text" id="asrBaseUrl" placeholder="https://api.openai.com/v1">
         </div>
 
         <div class="field">
@@ -873,9 +873,6 @@
 
     function getDefaultASRAdvancedFields() {
       return {
-        providerPreset: 'openai',
-        provider: 'openai-compatible',
-        baseUrl: 'https://api.openai.com/v1',
         realtimePath: '/realtime',
         transcriptionPath: '/audio/transcriptions',
         streamingMode: 'chunked-fallback',
@@ -1269,9 +1266,6 @@
       var advancedEnabled = isASRAdvancedSettingsEnabled();
       var defaults = getDefaultASRAdvancedFields();
       var advanced = advancedEnabled ? {
-        providerPreset: document.getElementById('asrProviderPreset').value || 'openai',
-        provider: document.getElementById('asrProvider').value,
-        baseUrl: document.getElementById('asrBaseUrl').value.trim(),
         realtimePath: document.getElementById('asrRealtimePath').value.trim(),
         transcriptionPath: document.getElementById('asrTranscriptionPath').value.trim(),
         streamingMode: document.getElementById('asrStreamingMode').value,
@@ -1281,14 +1275,16 @@
           maxSessionBytes: Number(document.getElementById('asrCacheMaxBytes').value || 10485760),
         },
       } : defaults;
+      var providerPreset = document.getElementById('asrProviderPreset').value || 'openai';
+      var preset = getASRPresetDefinition(providerPreset);
 
       return {
         enabled: document.getElementById('asrEnabled').checked,
         advancedSettingsEnabled: isASRAdvancedSettingsEnabled(),
         holdToTalkShortcut: document.getElementById('asrHoldToTalkShortcut').value.trim() || 'Ctrl+Shift+Space',
-        providerPreset: advanced.providerPreset,
-        provider: advanced.provider,
-        baseUrl: advanced.baseUrl,
+        providerPreset: providerPreset,
+        provider: preset.provider,
+        baseUrl: document.getElementById('asrBaseUrl').value.trim(),
         apiKey: document.getElementById('asrApiKey').value,
         model: document.getElementById('asrModel').value.trim(),
         realtimePath: advanced.realtimePath,

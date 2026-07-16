@@ -68,7 +68,7 @@ src/
 - `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
 - `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。
 - `chat-history-store.ts`：聊天历史持久化边界，负责 `chat-history.json` 的读写、最近消息读取和摘要计数；`ai-memory.ts` 仍作为记忆 facade 负责摘要、关系、习惯和 prompt 组装。
-- `asr-config.ts`：ASR 运行态配置，使用 `JsonConfigStore<T>` 保存到 Electron `userData/config/asr.json`；`advancedSettingsEnabled` 控制设置页是否显示 provider/path/streaming/cache 高级字段；普通模式隐藏高级字段并默认使用 `chunked-fallback`；`providerPreset` 属于 Unreleased 供应商预设增强，`provider` 表示实际 ASR 引擎类型。
+- `asr-config.ts`：ASR 运行态配置，使用 `JsonConfigStore<T>` 保存到 Electron `userData/config/asr.json`；`advancedSettingsEnabled` 控制设置页是否显示 path/streaming/cache 等高级字段；普通模式保留供应商预设和 Base URL，并默认使用 `chunked-fallback`；`providerPreset` 属于 Unreleased 供应商预设增强，`provider` 表示实际 ASR 引擎类型。
 - `asr-engine.ts` / `asr-openai-compatible.ts`：ASR 引擎接口与 OpenAI-compatible provider，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 供应商预设属于 Unreleased 增强，当前仍复用该引擎。
 - `voice-input-manager.ts`：语音输入 session 编排，连接音频 chunk、ASR engine、音频缓存和 transcript/status IPC。
 - `voice-audio-cache.ts`：短期语音缓存边界，保存 runtime-only 音频 chunk 并返回 `audioRef`。
@@ -111,7 +111,7 @@ src/
 - **拖拽**：主进程用 `screen.getCursorScreenPoint()` 轮询鼠标位置
 - **AI 模块**：AIConfigManager → AIService → ChatManager
 - **设置窗口**：单例模式，F11 打开；“其他”页包含临时 Move 测试（Debug）区块，可输入坐标调用 `moveTo` / `teleportTo` 验证移动效果；“摄像头感知”页提供启用开关、立即检测一次、可选低频检测、debug preview 和本地实时预览，帧采集由设置页 renderer 在用户授权后完成。
-- **语音输入设置**：默认只显示启用、API Key、模型、语言、自动发送和测试区；“显示高级 ASR 设置”打开后才显示供应商预设、Base URL、Realtime/Transcription Path、流式模式和缓存参数。
+- **语音输入设置**：默认显示启用、供应商预设、Base URL、API Key、模型、语言、自动发送和测试区；“显示高级 ASR 设置”打开后才显示实际引擎、Realtime/Transcription Path、流式模式和缓存参数。
 - **调试窗口**：F3 打开，显示日志、关系数值、互动统计、常用应用和生活习惯提示词
 - **主动回应**：当前主动回应主路径：`ObserverManager → ContextCollector → ProactiveReactionSystem → MicroBehaviorManager → BubbleOrchestrator → BubbleManager.tryShowProactiveBubble`。基于轻量上下文快照、应用切换、工作/休息转换、长专注和直接互动生成轻柔回应；规则来自 `src/config/proactive-reactions.json` 与 `src/config/micro-behaviors.json`，Debug 面板显示最近决策/拦截原因/预算状态。`BubbleOrchestrator` 只负责主进程气泡请求的轻量编排；`BubbleManager` 继续负责状态门禁、冷却和 `show-bubble` IPC 投递。Camera Awareness 第一版仅在后台稳定 `absent -> present` 时尝试 `camera_awareness` 来源气泡，不是常驻视频分析或主动回应系统的一等输入。
 

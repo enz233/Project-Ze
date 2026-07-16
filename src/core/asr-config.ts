@@ -142,12 +142,18 @@ function hasLegacyCustomizedAdvancedFields(raw: Record<string, unknown>, normali
 }
 
 function applyNormalModeAdvancedDefaults(config: ASRConfig): ASRConfig {
+  const providerPreset = isASRProviderPreset(config.providerPreset)
+    ? config.providerPreset
+    : inferASRProviderPreset(config);
+  const provider = isASRProvider(config.provider)
+    ? config.provider
+    : ASR_PROVIDER_PRESETS[providerPreset].provider;
   return {
     ...config,
     advancedSettingsEnabled: false,
-    providerPreset: DEFAULT_ASR_PROVIDER_PRESET,
-    provider: DEFAULT_ASR_CONFIG.provider,
-    baseUrl: DEFAULT_ASR_CONFIG.baseUrl,
+    providerPreset,
+    provider,
+    baseUrl: config.baseUrl || ASR_PROVIDER_PRESETS[providerPreset].baseUrl || DEFAULT_ASR_CONFIG.baseUrl,
     realtimePath: DEFAULT_ASR_CONFIG.realtimePath,
     transcriptionPath: DEFAULT_ASR_CONFIG.transcriptionPath,
     streamingMode: DEFAULT_ASR_CONFIG.streamingMode,
@@ -187,7 +193,6 @@ export function normalizeASRConfigForLoad(config: Partial<ASRConfig>): ASRConfig
   };
 
   normalized.providerPreset = isASRProviderPreset(config.providerPreset)
-    && (config.providerPreset === 'custom-openai-compatible' || matchesPresetManagedFields(normalized, config.providerPreset))
     ? config.providerPreset
     : inferASRProviderPreset(normalized);
 

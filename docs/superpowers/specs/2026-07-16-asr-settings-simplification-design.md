@@ -15,8 +15,9 @@
 
 ## 目标
 
-- 默认让语音输入设置页只显示普通用户必须填写的字段。
-- 新增“显示高级 ASR 设置”开关，关闭时隐藏 provider/path/streaming/cache 等复杂字段。
+- 默认让语音输入设置页显示普通用户必须理解和常改的字段。
+- 普通模式保留供应商预设和 Base URL，避免用户为了切换 OpenAI / 阿里百炼 / 自定义兼容服务而被迫打开高级设置。
+- 新增“显示高级 ASR 设置”开关，关闭时仅隐藏实际引擎、path、streaming、cache 等复杂字段。
 - 普通模式默认使用更稳定的 `chunked-fallback`，避免测试识别默认进入 Realtime WebSocket。
 - 识别测试启动前保存当前有效表单配置，避免页面状态和主进程运行态配置不一致。
 - Realtime 失败时给出面向用户的可操作错误提示。
@@ -37,6 +38,8 @@
 语音输入页默认显示：
 
 - 启用语音输入
+- 供应商预设
+- Base URL
 - API Key
 - 模型
 - 语言
@@ -46,9 +49,7 @@
 
 普通模式隐藏：
 
-- 供应商预设
 - 实际引擎
-- Base URL
 - Realtime Path
 - Transcription Path
 - 流式模式
@@ -58,20 +59,20 @@
 
 勾选“显示高级 ASR 设置”后显示上述隐藏字段。高级模式用于：
 
-- 自定义 OpenAI-compatible endpoint。
-- 阿里百炼 / DashScope 或其他第三方兼容服务。
+- 自定义 OpenAI-compatible endpoint 的 provider 预设和 Base URL。
+- 阿里百炼 / DashScope 或其他第三方兼容服务的推荐路径。
 - 手动调整 `realtime` / `chunked-fallback`。
 - 调整 transcription/realtime path。
 - 调整短期音频缓存参数。
 
 ### 普通模式默认值
 
-高级设置关闭时，保存或测试前应将隐藏字段补成稳定默认值：
+高级设置关闭时，保存或测试前应保留用户可见的供应商预设和 Base URL，并仅将隐藏字段补成稳定默认值：
 
 ```txt
-providerPreset: openai
-provider: openai-compatible
-baseUrl: https://api.openai.com/v1
+providerPreset: 当前表单选择，默认 openai
+provider: 当前预设对应的实际引擎，默认 openai-compatible
+baseUrl: 当前表单填写值，默认 https://api.openai.com/v1
 realtimePath: /realtime
 transcriptionPath: /audio/transcriptions
 streamingMode: chunked-fallback
@@ -93,10 +94,10 @@ cache.maxSessionBytes: 10485760
 
 ### 保存设置
 
-1. `collectASRConfig()` 收集普通字段。
-2. 如果高级开关关闭，使用普通模式默认值覆盖隐藏字段。
-3. 如果高级开关打开，读取并保存高级字段。
-4. 保持现有校验：启用 ASR 时必须有 API Key 和模型；高级模式下如果 Base URL 为空也要提示。
+1. `collectASRConfig()` 收集普通模式可见字段。
+2. 如果高级开关关闭，保留用户可见的供应商预设和 Base URL，只用普通模式默认值覆盖隐藏的 path、streaming、cache 字段。
+3. 如果高级开关打开，读取并保存所有高级字段。
+4. 保持现有校验：启用 ASR 时必须有 Base URL、API Key 和模型。
 5. 调用 `window.companion.saveASRConfig(config)`，让主进程和其他窗口拿到最新运行态配置。
 
 ### 语音识别测试
@@ -111,9 +112,8 @@ cache.maxSessionBytes: 10485760
 ## 错误处理
 
 - 未启用：显示“语音输入未开启：请先勾选启用语音输入”。
-- 缺少 API Key / 模型：显示缺失字段列表。
-- 普通模式下隐藏 Base URL，因此不要求用户填写 Base URL。
-- 高级模式下 Base URL 为空：提示“高级 ASR 设置缺少 Base URL”。
+- 缺少 Base URL / API Key / 模型：显示缺失字段列表。
+- 普通模式下 Base URL 可见且仍为启用 ASR 的必填项。
 - Realtime WebSocket 未打开：将底层 `ASR realtime connection did not open` 映射为：
 
 ```txt
