@@ -76,7 +76,7 @@ src/
 - `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。
 - `chat-history-store.ts`：聊天历史持久化边界，负责 `chat-history.json` 的读写、最近消息读取和摘要计数；`ai-memory.ts` 仍作为记忆 facade 负责摘要、关系、习惯和 prompt 组装。
 - `asr-config.ts`：ASR 运行态配置，使用 `JsonConfigStore<T>` 保存到 Electron `userData/config/asr.json`；`advancedSettingsEnabled` 控制设置页是否显示 path/streaming/cache 等高级字段；普通模式保留供应商预设和 Base URL，并默认使用 `chunked-fallback`；`providerPreset` 属于 Unreleased 供应商预设增强，`provider` 表示实际 ASR 引擎类型。
-- `asr-engine.ts` / `asr-openai-compatible.ts` / `asr-qwen-realtime.ts`：ASR 引擎接口与 provider 实现，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设复用 OpenAI-compatible 引擎，Qwen-ASR 实时识别使用专用 WebSocket 引擎和 `Authorization` 握手请求头；配置方式见 `docs/qwen-asr-configuration.md`，当前 Qwen final/completed 事件会在 `session.finish` 后保留 15 秒等待窗口，设置页测试和主聊天语音入口都会向 Qwen 发送 PCM16 16kHz 音频。
+- `asr-engine.ts` / `asr-openai-compatible.ts` / `asr-qwen-realtime.ts` / `asr-funasr-local.ts`：ASR 引擎接口与 provider 实现，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设复用 OpenAI-compatible 引擎，Qwen-ASR 实时识别使用专用 WebSocket 引擎和 `Authorization` 握手请求头；FunASR 本地识别连接用户已启动的本机 runtime WebSocket 服务，默认 `ws://127.0.0.1:10096`，不要求 API Key/模型，也不自动安装、下载模型或启动服务；配置方式见 `docs/qwen-asr-configuration.md` 和 `docs/funasr-local-asr.md`，当前 Qwen/FunASR 实时路径都会发送 PCM16 16kHz 音频。
 - `voice-input-manager.ts`：语音输入 session 编排，连接音频 chunk、ASR engine、音频缓存和 transcript/status IPC。
 - `voice-audio-cache.ts`：短期语音缓存边界，保存 runtime-only 音频 chunk 并返回 `audioRef`。
 - `camera-awareness-types.ts`：摄像头感知配置、帧输入、检测结果、状态快照与 IPC 常量类型；不代表独立事件总线。
