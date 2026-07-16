@@ -593,6 +593,7 @@
     var startupStream: MediaStream | null = null;
     var startupSessionId: string | null = null;
     var startupIsQwen = false;
+    var startupUsesLocalRealtimePCM = false;
     try {
       // @ts-ignore
       var config = await window.companion.loadASRConfig();
@@ -613,6 +614,7 @@
       var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       startupStream = stream;
       var localRealtimePCMVoiceInput = isLocalRealtimePCMVoiceConfig(config);
+      startupUsesLocalRealtimePCM = localRealtimePCMVoiceInput;
       startupIsQwen = isQwenASRVoiceConfig(config);
       var mimeType = localRealtimePCMVoiceInput
         ? 'audio/pcm;rate=16000'
@@ -670,7 +672,7 @@
       setVoiceRecording(true);
       updateChatStatus({ phase: 'voice-recording', message: '正在录音，请说话…' });
     } catch (e) {
-      if (startupIsQwen) {
+      if (startupUsesLocalRealtimePCM) {
         if (startupStream) {
           startupStream.getTracks().forEach(function (track) { track.stop(); });
         }

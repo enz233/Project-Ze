@@ -390,6 +390,10 @@ function testRendererQwenMainVoiceUsesPCM() {
   assert.match(renderer, /mimeType: 'audio\/pcm;rate=16000'/);
   assert.match(renderer, /语音 PCM 分片发送失败/);
   assert.match(renderer, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
+  assert.match(renderer, /var startupUsesLocalRealtimePCM = false/);
+  assert.match(renderer, /startupUsesLocalRealtimePCM = localRealtimePCMVoiceInput/);
+  assert.match(renderer, /if \(startupUsesLocalRealtimePCM\) \{/);
+  assert.doesNotMatch(renderer, /catch \(e\) \{\s*if \(startupIsQwen\) \{/);
   assert.match(renderer, /startupStream\.getTracks\(\)\.forEach/);
   assert.match(renderer, /window\.companion\.voiceInput\.cancel\(startupSessionId\)/);
   assert.match(renderer, /voiceLastSessionId === startupSessionId/);
