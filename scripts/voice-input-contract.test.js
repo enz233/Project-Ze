@@ -87,7 +87,6 @@ function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
   } = load('core/asr-config.js');
 
   const customLegacy = normalizeASRConfigForLoad({
-    ...DEFAULT_ASR_CONFIG,
     providerPreset: undefined,
     baseUrl: 'https://example.test/v1',
     model: 'custom-transcribe',
@@ -104,6 +103,7 @@ function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
 
   const mismatchedManagedPreset = normalizeASRConfigForLoad({
     ...DEFAULT_ASR_CONFIG,
+    advancedSettingsEnabled: true,
     providerPreset: 'aliyun-bailian',
     baseUrl: 'https://example.test/v1',
     model: 'custom-transcribe',
@@ -113,6 +113,7 @@ function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
 
   const validEmptyModelPreset = normalizeASRConfigForLoad({
     ...DEFAULT_ASR_CONFIG,
+    advancedSettingsEnabled: true,
     providerPreset: 'aliyun-bailian',
     baseUrl: ASR_PROVIDER_PRESETS['aliyun-bailian'].baseUrl,
     model: '',
@@ -170,6 +171,71 @@ function testAsrNormalizerDeepMergesCacheAndValidatesTypes() {
 
   const invalidAdvancedFlag = normalizeASRConfigForLoad({ advancedSettingsEnabled: 'true' });
   assert.strictEqual(invalidAdvancedFlag.advancedSettingsEnabled, false);
+}
+
+function testAsrAdvancedSettingsNormalization() {
+  const { DEFAULT_ASR_CONFIG, normalizeASRConfigForLoad } = load('core/asr-config.js');
+
+  const explicitFalse = normalizeASRConfigForLoad({
+    enabled: true,
+    advancedSettingsEnabled: false,
+    providerPreset: 'custom-openai-compatible',
+    provider: 'openai-compatible',
+    baseUrl: 'https://example.test/v1',
+    apiKey: 'keep-key',
+    model: 'keep-model',
+    realtimePath: '/custom/realtime',
+    transcriptionPath: '/custom/transcriptions',
+    streamingMode: 'realtime',
+    language: 'en',
+    autoSendFinalTranscript: true,
+    holdToTalkShortcut: 'Alt+Space',
+    cache: {
+      enabled: false,
+      retentionMinutes: 5,
+      maxSessionBytes: 12345,
+    },
+  });
+  assert.strictEqual(explicitFalse.enabled, true);
+  assert.strictEqual(explicitFalse.advancedSettingsEnabled, false);
+  assert.strictEqual(explicitFalse.apiKey, 'keep-key');
+  assert.strictEqual(explicitFalse.model, 'keep-model');
+  assert.strictEqual(explicitFalse.language, 'en');
+  assert.strictEqual(explicitFalse.autoSendFinalTranscript, true);
+  assert.strictEqual(explicitFalse.holdToTalkShortcut, 'Alt+Space');
+  assert.strictEqual(explicitFalse.providerPreset, 'openai');
+  assert.strictEqual(explicitFalse.provider, 'openai-compatible');
+  assert.strictEqual(explicitFalse.baseUrl, 'https://api.openai.com/v1');
+  assert.strictEqual(explicitFalse.realtimePath, '/realtime');
+  assert.strictEqual(explicitFalse.transcriptionPath, '/audio/transcriptions');
+  assert.strictEqual(explicitFalse.streamingMode, 'chunked-fallback');
+  assert.deepStrictEqual(explicitFalse.cache, DEFAULT_ASR_CONFIG.cache);
+
+  const legacyCustomEndpoint = normalizeASRConfigForLoad({
+    enabled: true,
+    baseUrl: 'https://example.test/v1',
+    apiKey: 'legacy-key',
+    model: 'legacy-model',
+    streamingMode: 'realtime',
+  });
+  assert.strictEqual(legacyCustomEndpoint.advancedSettingsEnabled, true);
+  assert.strictEqual(legacyCustomEndpoint.providerPreset, 'custom-openai-compatible');
+  assert.strictEqual(legacyCustomEndpoint.baseUrl, 'https://example.test/v1');
+  assert.strictEqual(legacyCustomEndpoint.model, 'legacy-model');
+  assert.strictEqual(legacyCustomEndpoint.streamingMode, 'realtime');
+
+  const legacyOpenAiRealtimeOnly = normalizeASRConfigForLoad({
+    provider: 'openai-compatible',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini-transcribe',
+    realtimePath: '/realtime',
+    transcriptionPath: '/audio/transcriptions',
+    streamingMode: 'realtime',
+  });
+  assert.strictEqual(legacyOpenAiRealtimeOnly.advancedSettingsEnabled, false);
+  assert.strictEqual(legacyOpenAiRealtimeOnly.providerPreset, 'openai');
+  assert.strictEqual(legacyOpenAiRealtimeOnly.streamingMode, 'chunked-fallback');
+  assert.deepStrictEqual(legacyOpenAiRealtimeOnly.cache, DEFAULT_ASR_CONFIG.cache);
 }
 
 function testAsrPresetKeyIsPersistedInsteadOfDefinitionId() {
@@ -514,6 +580,7 @@ async function run() {
   testAsrConfigDefaults();
   testAsrProviderPresets();
   testAsrPresetBackwardCompatibilityAndInvalidFallback();
+  testAsrAdvancedSettingsNormalization();
   testAsrPresetKeyIsPersistedInsteadOfDefinitionId();
   testAsrNormalizerDeepMergesCacheAndValidatesTypes();
   testJsonConfigStoreUpdateNormalizesMergedValue();

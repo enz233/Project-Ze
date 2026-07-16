@@ -64,3 +64,17 @@ Pending before commit; final commit hash recorded by git after this report is st
   - `npm test` — passed (`tsc`, voice-input contract, screen fingerprint/capture/pointer/vision contract tests). npm emitted existing `electron_mirror` / `electron-mirror` config warnings.
   - `npm run build` — passed (`tsc`). npm emitted existing `electron_mirror` config warning.
 - Concerns: none for the requested fix; unrelated pre-existing modified files remain at `.superpowers/sdd/progress.md` and `.superpowers/sdd/task-4-report.md`.
+
+## Final review gap fix - 2026-07-16
+
+- Changed `/c/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/asr-settings-simplification/src/core/asr-config.ts` so explicit `advancedSettingsEnabled: false` coerces hidden advanced ASR fields to normal OpenAI defaults, explicit true preserves normalized advanced fields, and legacy configs infer advanced mode only for customized advanced fields beyond normal OpenAI defaults.
+- Updated `/c/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/asr-settings-simplification/scripts/voice-input-contract.test.js` with coverage for explicit false coercion, legacy custom endpoint preservation, and legacy OpenAI realtime-only migration to chunked fallback.
+
+Commands and results:
+
+1. `npm --prefix /c/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/asr-settings-simplification run build && node /c/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/asr-settings-simplification/scripts/voice-input-contract.test.js`
+   - Result: passed after fixes; TypeScript build succeeded and `voice-input-contract tests passed`.
+2. `npm --prefix /c/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/asr-settings-simplification test`
+   - Result: passed; build plus voice-input, screen-fingerprint, screen-capture-frame, screen-pointer-debug, and screen-vision-request contract tests passed. npm emitted existing `electron_mirror` / `electron-mirror` config warnings.
+3. `npm --prefix /c/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/asr-settings-simplification run build`
+   - Result: passed; TypeScript build succeeded. npm emitted existing `electron_mirror` warning.
