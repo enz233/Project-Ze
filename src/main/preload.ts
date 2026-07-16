@@ -109,6 +109,9 @@ contextBridge.exposeInMainWorld('companion', {
   saveASRConfig: (config: any): Promise<any> => {
     return ipcRenderer.invoke('save-asr-config', config);
   },
+  testASRConnection: (config: any): Promise<any> => {
+    return ipcRenderer.invoke('test-asr-connection', config);
+  },
   onASRConfigUpdated: (callback: (config: any) => void) => {
     ipcRenderer.on('asr-config-updated', (_event, config) => callback(config));
   },

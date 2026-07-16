@@ -349,6 +349,15 @@ function testJsonConfigStoreUpdateNormalizesMergedValue() {
   }
 }
 
+function testASRConnectionTestIPCContract() {
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'preload.ts'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.ts'), 'utf8');
+  assert.match(preload, /testASRConnection: \(config: any\): Promise<any> =>/);
+  assert.match(preload, /ipcRenderer\.invoke\('test-asr-connection', config\)/);
+  assert.match(main, /ipcMain\.handle\('test-asr-connection'/);
+  assert.match(main, /testFunASRLocalConnection/);
+}
+
 function testRendererQwenMainVoiceUsesPCM() {
   const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
   assert.match(renderer, /function isQwenASRVoiceConfig\(config:\s*any\):\s*boolean\s*\{/);
@@ -1313,6 +1322,7 @@ async function run() {
   testAsrPresetKeyIsPersistedInsteadOfDefinitionId();
   testAsrNormalizerDeepMergesCacheAndValidatesTypes();
   testJsonConfigStoreUpdateNormalizesMergedValue();
+  testASRConnectionTestIPCContract();
   testSettingsAsrPresetContractMatchesCoreDefinitions();
   testRendererQwenMainVoiceUsesPCM();
   testAsrEngineFactoryAndParser();

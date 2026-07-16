@@ -30,6 +30,7 @@ import { IntentRouter } from '../core/intent-router';
 import { IntentClassifier } from '../core/intent-classifier';
 import { IntentExecutor } from '../core/intent-executor';
 import { ResponseWorkflowOrchestrator } from '../core/response-workflow-orchestrator';
+import { testFunASRLocalConnection } from '../core/asr-funasr-local';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -543,6 +544,18 @@ function setupIPC(): void {
       window.webContents.send('asr-config-updated', updatedConfig);
     });
     return updatedConfig;
+  });
+
+  ipcMain.handle('test-asr-connection', async (_event, config: any) => {
+    const current = asrConfigManager.get();
+    const merged = { ...current, ...config };
+    if (merged.provider === 'funasr-local-runtime') {
+      return await testFunASRLocalConnection(merged);
+    }
+    return {
+      success: false,
+      message: '当前 ASR provider 暂不支持独立连接测试，请使用“测试语音识别 10 秒”。',
+    };
   });
 
   ipcMain.handle('voice-input-start', async (event, options: any) => {

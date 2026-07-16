@@ -133,6 +133,50 @@ async function* drainFunASREvents(
   }
 }
 
+export async function testFunASRLocalConnection(config: ASRConfig): Promise<{ success: boolean; message: string }> {
+  return await new Promise((resolve) => {
+    let settled = false;
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(createFunASRLocalUrl(config));
+    } catch (error) {
+      resolve({
+        success: false,
+        message: error instanceof Error ? error.message : 'FunASR Base URL 无效',
+      });
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      socket.close();
+      resolve({
+        success: false,
+        message: 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。',
+      });
+    }, 3_000);
+
+    socket.on('open', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      socket.close();
+      resolve({ success: true, message: 'FunASR 本地服务连接成功' });
+    });
+
+    socket.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve({
+        success: false,
+        message: error.message || 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。',
+      });
+    });
+  });
+}
+
 export class FunASRLocalEngine implements ASREngine {
   readonly provider = 'funasr-local-runtime';
 
