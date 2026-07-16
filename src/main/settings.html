@@ -1194,6 +1194,134 @@
       });
     }
 
+    function isQwenASRRecognitionConfig(config) {
+      return config && config.provider === 'qwen-asr-realtime';
+    }
+
+    function resampleFloat32ToTargetRate(samples, sourceRate, targetRate) {
+      if (!samples || sourceRate === targetRate) return samples || new Float32Array(0);
+      const ratio = sourceRate / targetRate;
+      const outputLength = Math.max(1, Math.round(samples.length / ratio));
+      const output = new Float32Array(outputLength);
+      for (let i = 0; i < outputLength; i++) {
+        const sourceIndex = Math.min(samples.length - 1, Math.round(i * ratio));
+        output[i] = samples[sourceIndex] || 0;
+      }
+      return output;
+    }
+
+    function encodePCM16Base64(samples) {
+      const buffer = new ArrayBuffer(samples.length * 2);
+      const view = new DataView(buffer);
+      for (let i = 0; i < samples.length; i++) {
+        const sample = Math.max(-1, Math.min(1, samples[i] || 0));
+        view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+      }
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const batchSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += batchSize) {
+        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + batchSize)));
+      }
+      return btoa(binary);
+    }
+
+    function createQwenPCMRecorder(stream, sessionId, startToken) {
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) throw new Error('当前环境不支持 PCM 音频采集');
+      const audioContext = new AudioContextCtor();
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      const targetRate = 16000;
+      let pendingSamples = [];
+      let lastFlushAt = Date.now();
+      let chunkStartedAt = Date.now();
+
+      function flushPCMChunk(force) {
+        if (startToken !== asrRecognitionStartToken) return;
+        if (!force && Date.now() - lastFlushAt < 250) return;
+        if (pendingSamples.length === 0) return;
+        const sourceRate = audioContext.sampleRate || targetRate;
+        const totalLength = pendingSamples.reduce(function(sum, part) { return sum + part.length; }, 0);
+        const combined = new Float32Array(totalLength);
+        let offset = 0;
+        pendingSamples.forEach(function(part) {
+          combined.set(part, offset);
+          offset += part.length;
+        });
+        pendingSamples = [];
+        lastFlushAt = Date.now();
+        const capturedAt = Date.now();
+        const durationMs = capturedAt - chunkStartedAt;
+        chunkStartedAt = capturedAt;
+        const pcm = resampleFloat32ToTargetRate(combined, sourceRate, targetRate);
+        const base64 = encodePCM16Base64(pcm);
+        const upload = window.companion.voiceInput.appendAudioChunk({
+          sessionId,
+          chunk: { mimeType: 'audio/pcm;rate=16000', base64, capturedAt, durationMs },
+        }).catch(function(error) {
+          setASRMicStatus('语音测试 PCM 分片发送失败：' + (error && error.message ? error.message : String(error)), true);
+        });
+        asrRecognitionUploads.push(upload);
+      }
+
+      processor.onaudioprocess = function(event) {
+        const input = event.inputBuffer.getChannelData(0);
+        pendingSamples.push(new Float32Array(input));
+        flushPCMChunk(false);
+      };
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      return {
+        state: 'recording',
+        onstop: null,
+        stop: function() {
+          if (this.state === 'inactive') return;
+          this.state = 'inactive';
+          flushPCMChunk(true);
+          processor.disconnect();
+          source.disconnect();
+          audioContext.close().catch(function() {});
+          if (typeof this.onstop === 'function') this.onstop();
+        },
+      };
+    }
+
+    async function startQwenPCMRecognitionTest(config, startToken, startupResources) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      startupResources.stream = stream;
+      if (startToken !== asrRecognitionStartToken) {
+        cleanupStaleASRRecognitionStartup(startupResources);
+        return;
+      }
+      asrRecognitionStream = stream;
+      await startASRMicMeter(stream);
+      const mimeType = 'audio/pcm;rate=16000';
+      const session = await window.companion.voiceInput.start({ source: 'settings-test', mimeType });
+      if (startToken !== asrRecognitionStartToken) {
+        if (session && session.sessionId) {
+          await window.companion.voiceInput.cancel(session.sessionId).catch(() => {});
+        }
+        cleanupStaleASRRecognitionStartup(startupResources);
+        return;
+      }
+      asrRecognitionSessionId = session.sessionId;
+      const recorder = createQwenPCMRecorder(stream, session.sessionId, startToken);
+      startupResources.recorder = recorder;
+      asrRecognitionRecorder = recorder;
+      asrRecognitionStartedAt = Date.now();
+      asrRecognitionProgressTimer = setInterval(function() {
+        const elapsed = Date.now() - asrRecognitionStartedAt;
+        const percent = Math.min(100, Math.round(elapsed / ASR_RECOGNITION_TEST_MS * 100));
+        setASRRecognitionProgress(percent, percent < 100 ? '请说话… ' + percent + '%' : '正在识别…');
+      }, 100);
+      setASRMicStatus('正在录音测试（PCM16 16kHz），请说话…', false);
+      asrRecognitionStopTimer = setTimeout(function() {
+        stopASRRecognitionTest(false);
+      }, ASR_RECOGNITION_TEST_MS);
+    }
+
     function setASRRecognitionProgress(percent, message) {
       const bounded = Math.max(0, Math.min(100, percent || 0));
       document.getElementById('asrRecognitionProgressBar').style.width = bounded + '%';
@@ -1382,6 +1510,11 @@
         testBtn.disabled = false;
         testBtn.textContent = '停止识别测试';
 
+        if (isQwenASRRecognitionConfig(config)) {
+          await startQwenPCMRecognitionTest(config, startToken, startupResources);
+          return;
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         startupResources.stream = stream;
         if (startToken !== asrRecognitionStartToken) {
@@ -1434,8 +1567,12 @@
           setASRRecognitionProgress(percent, percent < 100 ? '请说话… ' + percent + '%' : '正在识别…');
         }, 100);
 
-        recorder.start(750);
-        setASRMicStatus('正在录音测试，请说话…', false);
+        if (isQwenASRRecognitionConfig(config)) {
+          setASRMicStatus('正在录音测试（PCM16 16kHz），请说话…', false);
+        } else {
+          recorder.start(750);
+          setASRMicStatus('正在录音测试，请说话…', false);
+        }
         asrRecognitionStopTimer = setTimeout(function() {
           stopASRRecognitionTest(false);
         }, ASR_RECOGNITION_TEST_MS);

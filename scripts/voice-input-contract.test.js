@@ -384,6 +384,11 @@ function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   assert.match(html, /function hasQwenRealtimeBaseUrlMismatch\(config\)/);
   assert.match(html, /请选择“Qwen-ASR 实时识别”预设/);
   assert.match(html, /fetch failed 通常表示当前 OpenAI-compatible 引擎正在请求 wss WebSocket 地址/);
+  assert.match(html, /function isQwenASRRecognitionConfig\(config\)/);
+  assert.match(html, /function resampleFloat32ToTargetRate\(samples, sourceRate, targetRate\)/);
+  assert.match(html, /function encodePCM16Base64\(samples\)/);
+  assert.match(html, /mimeType: 'audio\/pcm;rate=16000'/);
+  assert.match(html, /startQwenPCMRecognitionTest\(config, startToken, startupResources\)/);
   assert.match(html, /asrProviderPreset'\)\.addEventListener\('change', function\(\) \{[\s\S]*?applySelectedASRPreset\(\);/);
   assert.match(html, /config\.model \?\? preset\.model/);
   assert.doesNotMatch(html, /config\.model \|\| 'gpt-4o-mini-transcribe'/);
