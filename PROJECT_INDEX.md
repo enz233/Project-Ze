@@ -99,6 +99,7 @@ src/
 ### 渲染进程 renderer.ts
 - **IIFE 模式**：不是模块，用 `(function(){...})()` 包裹
 - **精灵图路径**：`setSprite(name)` 自动根据名字前缀匹配子目录；`point-*` 会映射到 `src/assets/sprites/point/<direction>.png`，例如 `point-right_down` -> `point/right_down.png`
+- **point 指向守卫**：`point-visual` 活跃期间，renderer 会阻止 idle/blink/sleepy 等普通状态精灵覆盖当前 point pose，只允许新的 `point-*` 或 dragged fallback 更新；7 秒恢复由 `ScreenTargetPointer` 会话计时统一触发。
 - **updateVisual**：通过 `lastVisualState` 防重复，`isDragVisualActive` 防拖拽覆盖
 - **眨眼系统**：idle/curious/sleepy 各有不同频率，用 setTimeout 链
 - **拖拽**：左键触发，mousedown 立即显示 dragged，鼠标移动时更新方向差分

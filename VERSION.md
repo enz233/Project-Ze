@@ -3,6 +3,7 @@
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
 ## Unreleased
+- 屏幕目标指示视觉时长修复：point 差分活跃期间阻止 idle/blink/sleepy 等普通精灵直接覆盖当前 point pose，确保约 7 秒后才由 point 会话恢复普通视觉；新增 point visual guard 契约测试
 - 屏幕目标指示定位修复：普通屏幕分析继续使用 Vision `detail: low`，point 目标定位改用 `detail: high`，提升按钮、链接和文字入口的可见性，避免定位请求退化为“看不清楚”
 - 屏幕目标指示坐标映射修复：截图缩略图高度改为按显示器宽高比从 1280 宽推导，避免 1707x1067 等非 16:9 屏幕被固定拉伸到 1280x720 后造成 Vision point Y 轴映射偏移
 - 屏幕目标指示视觉：使用 `src/assets/sprites/point/` 八方向 point 差分，按目标相对方向选择姿态，并在约 7 秒后只恢复普通视觉、不移动回原位

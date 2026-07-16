@@ -21,6 +21,10 @@
 - Prefer reading docs and minimal source slices only.
 - End implementation with project docs update, `npm run build`, `npm test`, and git commit.
 
+## 2026-07-16 follow-up: point visual guard fix
+
+Runtime issue: point pose should remain visible for `7000ms`, but renderer-side idle/blink/sleepy sprite updates could call `setSprite()` directly and replace the image before the `ScreenTargetPointer` hold timer fired. The fix adds an explicit renderer sprite guard: while `isPointVisualActive` is true, only `point-*` sprites and dragged fallback sprites may update the image; ordinary state sprites are blocked until `point-visual` sends `active:false`. `scripts/point-visual-guard-contract.test.js` covers the `7000ms` duration constant and the block/allow matrix.
+
 ---
 
 ## File Structure

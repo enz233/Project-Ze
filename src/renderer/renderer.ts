@@ -988,6 +988,7 @@
   function setSprite(name: string, fallback?: string, force?: boolean): void {
     if (!SPRITE_DIR) return;
     if (isMoveVisualActive && !force) return;
+    if (isPointVisualActive && !force && name.indexOf('point-') !== 0 && name.indexOf('dragged_') !== 0) return;
     // 根据名字前缀确定子目录
     var folder = 'basic/misc';
     if (name.indexOf('idle') === 0) folder = 'basic/idle';
