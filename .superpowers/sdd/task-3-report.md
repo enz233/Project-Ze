@@ -41,7 +41,7 @@ tests:
 - `npm run build && node scripts/voice-input-contract.test.js` — PASS (`voice-input-contract tests passed`; npm still warns about existing `electron_mirror` config).
 
 commit:
-- 753ad45d566b78c39eaf2f9eeed3bc42a56f8381
+- 2c17d31f645e2832b2a622d1c097ce14b231916f
 
 concerns:
 - Existing uncommitted `.superpowers/sdd/task-2-report.md` remains untouched and excluded from this fix.
