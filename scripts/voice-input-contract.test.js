@@ -325,6 +325,7 @@ function testRendererQwenMainVoiceUsesPCM() {
   assert.match(renderer, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
   assert.match(renderer, /startupStream\.getTracks\(\)\.forEach/);
   assert.match(renderer, /window\.companion\.voiceInput\.cancel\(startupSessionId\)/);
+  assert.match(renderer, /voiceLastSessionId === startupSessionId/);
   assert.match(renderer, /voiceRecorder = null/);
   assert.match(renderer, /语音输入启动失败：/);
 }

@@ -681,6 +681,9 @@
         if (voiceSessionId === startupSessionId) {
           voiceSessionId = null;
         }
+        if (voiceLastSessionId === startupSessionId) {
+          voiceLastSessionId = null;
+        }
         voiceRecorder = null;
       }
       setVoiceRecording(false);
