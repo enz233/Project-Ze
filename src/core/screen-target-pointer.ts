@@ -49,6 +49,10 @@ export interface ScreenTargetPointerResult {
   cancelReason?: ScreenTargetPointerCancelReason;
 }
 
+export interface ScreenTargetPointerHandleOptions {
+  suppressResultBubble?: boolean;
+}
+
 interface ScreenTargetPointerOptions {
   mainWindow: BrowserWindow;
   screenAnalyzer: ScreenAnalyzer;
@@ -118,13 +122,18 @@ export class ScreenTargetPointer {
     return trimmed.startsWith('.') ? trimmed.slice(1).trim() : trimmed;
   }
 
-  async handle(message: string): Promise<ScreenTargetPointerResult> {
+  async handle(message: string, options: ScreenTargetPointerHandleOptions = {}): Promise<ScreenTargetPointerResult> {
     if (!this.isPointerRequest(message)) {
       return { handled: false, moved: false, message: '' };
     }
 
     const screenMessage = this.normalizePointerMessage(message);
     const id = this.startSession();
+    const showResultBubble = (text: string): void => {
+      if (!options.suppressResultBubble) {
+        this.showBubble(text);
+      }
+    };
     const beforeTitle = await this.windowActivityService.getActiveWindowTitle();
     debugScreenTargetPointer('[ScreenTargetPointer][debug] session start:', {
       sessionId: id,
@@ -170,7 +179,7 @@ export class ScreenTargetPointer {
       const result = located.result;
       if (!this.canMove(result)) {
         const failureMessage = this.failureMessage(screenMessage, result);
-        this.showBubble(failureMessage);
+        showResultBubble(failureMessage);
         this.finishSession();
         return { handled: true, moved: false, message: failureMessage, locateResult: result };
       }
@@ -241,14 +250,14 @@ export class ScreenTargetPointer {
         const messageText = '好啦好啦，我不挡你~';
         this.clearPointVisual();
         this.finishSession();
-        this.showBubble(messageText);
+        showResultBubble(messageText);
         return { handled: true, moved: false, message: messageText, locateResult: result, cancelReason: 'manual' };
       }
 
       this.state = 'pointing';
       this.sendPointVisual({ active: true, pose: pose.pose, reason: 'screen-target-pointer' });
       const successMessage = this.successMessage(result);
-      this.showBubble(successMessage);
+      showResultBubble(successMessage);
       this.startPointScreenMonitor(id, beforeTitle);
       this.schedulePointClear(id);
       return { handled: true, moved: true, message: successMessage, locateResult: result };
@@ -257,7 +266,7 @@ export class ScreenTargetPointer {
       console.error('[ScreenTargetPointer] 指示失败:', error?.message || error);
       this.clearPointVisual();
       this.finishSession();
-      this.showBubble(messageText);
+      showResultBubble(messageText);
       return { handled: true, moved: false, message: messageText };
     }
   }
