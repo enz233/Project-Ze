@@ -1,41 +1,47 @@
-# Task 3 Report: LLM Fallback Validation Contracts
+status: DONE
 
-## 状态
-完成。
+commits:
+- f234776b937963f9bda6109382ff2ec31b147c51 feat(voice): wire funasr local engine
 
-## 改动摘要
-- `scripts/intent-router-contract.test.js`
-  - 新增 LLM fallback 可将含糊当前页面请求安全分类为 `screen_summary` 的 contract。
-  - 新增 LLM fallback 建议 `screen_target_pointer` 但缺少 `target` 时降级为 `unknown` 且无敏感能力的 contract。
-  - 新增 LLM fallback 返回非法 JSON 时保留安全 draft、标记 `usedLlmFallback` 并记录失败原因的 contract。
-- `src/core/intent-classifier.ts`
-  - 在 `normalizeFallback` 中补充低置信度保护：非 `normal_chat` 的 LLM fallback 若低于 `lowConfidenceThreshold`，降级为 `unknown`，清空 capabilities，并保留 fallback 使用标记。
-  - 保留既有缺 `target` 的 `screen_target_pointer` 防护。
+files changed:
+- C:/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/funasr-local-asr/scripts/voice-input-contract.test.js
+- C:/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/funasr-local-asr/src/core/asr-engine.ts
+- C:/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/funasr-local-asr/src/core/asr-funasr-local.ts
 
-## 提交
-- `1892a08` - `test: cover intent llm fallback validation`
+tests run with results:
+- npm run build && node scripts/voice-input-contract.test.js
+  - RED: build passed; contract test failed as expected with `Unsupported ASR provider: funasr-local-runtime`.
+  - GREEN: build passed; contract test passed with `voice-input-contract tests passed`.
 
-## 运行的测试命令和结果
-1. `npm test`
-   - 结果：PASS。
-   - 备注：新增测试后现有实现已通过；随后仍按任务要求补充低置信度硬化。
-2. `npm test`
-   - 结果：PASS。
-   - 覆盖：`npm run build`、`voice-input-contract`、`screen-fingerprint-contract`、`screen-capture-frame-contract`、`intent-router-contract` 全部通过。
+self-review notes:
+- Followed the Task 3 brief and TDD sequence: added factory contract assertion first, verified the expected RED failure, then wired factory dispatch and replaced the FunASR stream skeleton.
+- FunASR stream now validates ws/wss Base URL via existing helper, opens a WebSocket, sends start/end events, sends PCM chunks decoded from base64 as binary buffers, normalizes server messages, drains terminal events, and yields configured errors for invalid payloads, connection failure, timeout/missing transcription, and invalid URL.
+- Did not modify settings UI, renderer routing, docs outside this required report, IPC, Qwen-ASR behavior, or OpenAI-compatible ASR behavior.
+- Commit includes exactly the three Task 3 code/test files requested.
 
-## 自审结果
-- 仅修改任务指定文件和报告文件。
-- LLM fallback 仍只产生结构化意图；本地 classifier/router 继续负责安全降级与权限策略。
-- 非法 JSON 路径通过 `classify()` catch 返回安全 draft，并带 `LLM fallback failed` 原因。
-- 缺 target 的 pointer fallback 与低置信度敏感 fallback 均不会携带敏感能力执行。
-- `normal_chat` 低置信度不被新增保护误降级，符合 brief 给定条件。
+concerns:
+- `npm run build` emits an existing npm warning: `Unknown project config "electron_mirror"`; build and tests still pass.
+- Working tree had a pre-existing uncommitted modification in `.superpowers/sdd/task-2-report.md`; it was not touched or committed by this task.
 
-## Concerns
-- `npm test` 输出 npm 配置警告：`electron_mirror` / `electron-mirror` 为未知配置；测试本身通过。
+---
 
-## Task 3 Fix Report
+## Task 3 review fix report — 2026-07-16
 
-Status: DONE after review fixes.
-Changes: invalid fallback intents now downgrade to unknown with no capabilities; all low-confidence fallback results downgrade to unknown with no capabilities; normal_chat fallback capabilities are sanitized to llm only when accepted; added invalid enum and low-confidence sensitive capability contract tests.
-Tests: npm test PASS; git diff --check PASS.
-Concerns: none.
+status: DONE
+
+changes:
+- Added bounded FunASR WebSocket open timeout and ensured sockets are closed on timeout or abort before open.
+- Ensured abort during/after streaming closes the socket and does not send the end event after cancellation.
+- Wrapped FunASR start/chunk/end sends so synchronous send failures become queued ASR error events instead of escaping the async generator.
+- Prevented duplicate pre-open fatal connection errors and extracted the repeated connection failure message into a constant.
+- Updated terminal detection so recoverable invalid payload errors do not stop draining before a later final event.
+- Added focused fake-socket contract coverage for open timeout, abort before open, abort after open, send failure, duplicate pre-open failure, and recoverable invalid payload behavior.
+
+tests:
+- `npm run build && node scripts/voice-input-contract.test.js` — PASS (`voice-input-contract tests passed`; npm still warns about existing `electron_mirror` config).
+
+commit:
+- 753ad45d566b78c39eaf2f9eeed3bc42a56f8381
+
+concerns:
+- Existing uncommitted `.superpowers/sdd/task-2-report.md` remains untouched and excluded from this fix.

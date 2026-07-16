@@ -3,7 +3,9 @@ import { ASRConfig } from './asr-config';
 import { ASREngine, ASRStreamInput, ASRTranscriptEvent } from './asr-engine';
 
 const FUNASR_POLL_INTERVAL_MS = 20;
+const FUNASR_OPEN_TIMEOUT_MS = 5_000;
 const FUNASR_FINAL_GRACE_MS = 5_000;
+const FUNASR_CONNECTION_FAILURE_MESSAGE = 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -75,7 +77,43 @@ export function normalizeFunASREvent(raw: unknown, sessionId: string): ASRTransc
 }
 
 function isTerminalEvent(event: ASRTranscriptEvent): boolean {
-  return event.type === 'final' || event.type === 'error';
+  return event.type === 'final' || (event.type === 'error' && !event.recoverable);
+}
+
+function closeSocket(socket: WebSocket): void {
+  if (socket.readyState === WebSocket.CLOSED) return;
+  try {
+    socket.close();
+  } catch {
+    if (typeof socket.terminate === 'function') {
+      socket.terminate();
+    }
+  }
+}
+
+function queueSend(
+  socket: WebSocket,
+  pending: ASRTranscriptEvent[],
+  payload: string | Buffer,
+  sessionId: string,
+): boolean {
+  try {
+    socket.send(payload);
+    return true;
+  } catch (error) {
+    pending.push({
+      type: 'error',
+      message: error instanceof Error && error.message ? error.message : FUNASR_CONNECTION_FAILURE_MESSAGE,
+      sessionId,
+      recoverable: false,
+    });
+    closeSocket(socket);
+    return false;
+  }
+}
+
+function hasPendingFatalError(pending: ASRTranscriptEvent[]): boolean {
+  return pending.some((event) => event.type === 'error' && !event.recoverable);
 }
 
 async function* drainFunASREvents(
@@ -122,8 +160,12 @@ export class FunASRLocalEngine implements ASREngine {
     const socket = new WebSocket(url);
 
     socket.on('open', () => {
+      if (closed || input.signal?.aborted) {
+        closeSocket(socket);
+        return;
+      }
       opened = true;
-      socket.send(JSON.stringify(createFunASRStartEvent(input.config)));
+      queueSend(socket, pending, JSON.stringify(createFunASRStartEvent(input.config)), input.sessionId);
     });
     socket.on('message', (data) => {
       try {
@@ -140,25 +182,34 @@ export class FunASRLocalEngine implements ASREngine {
     });
     socket.on('close', () => { closed = true; });
     socket.on('error', (error) => {
-      pending.push({
-        type: 'error',
-        message: error.message || 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。',
-        sessionId: input.sessionId,
-        recoverable: false,
-      });
+      if (!hasPendingFatalError(pending)) {
+        pending.push({
+          type: 'error',
+          message: error.message || FUNASR_CONNECTION_FAILURE_MESSAGE,
+          sessionId: input.sessionId,
+          recoverable: false,
+        });
+      }
       closed = true;
     });
 
-    while (!opened && !closed && !input.signal?.aborted) {
+    const openDeadline = Date.now() + FUNASR_OPEN_TIMEOUT_MS;
+    while (!opened && !closed && !input.signal?.aborted && Date.now() < openDeadline) {
       await sleep(FUNASR_POLL_INTERVAL_MS);
     }
 
     if (!opened) {
-      while (pending.length > 0) yield pending.shift()!;
-      if (!input.signal?.aborted) {
+      closeSocket(socket);
+      let yieldedFatalError = false;
+      while (pending.length > 0) {
+        const event = pending.shift()!;
+        yieldedFatalError = yieldedFatalError || isTerminalEvent(event);
+        yield event;
+      }
+      if (!input.signal?.aborted && !yieldedFatalError) {
         yield {
           type: 'error',
-          message: 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。',
+          message: FUNASR_CONNECTION_FAILURE_MESSAGE,
           sessionId: input.sessionId,
           recoverable: false,
         };
@@ -166,20 +217,28 @@ export class FunASRLocalEngine implements ASREngine {
       return;
     }
 
-    for await (const chunk of input.chunks) {
-      if (input.signal?.aborted || closed) break;
-      socket.send(Buffer.from(chunk.base64, 'base64'));
-      while (pending.length > 0) yield pending.shift()!;
-    }
-
     let terminalReceived = false;
-    if (!closed && !input.signal?.aborted) {
-      socket.send(JSON.stringify(createFunASREndEvent()));
-      for await (const event of drainFunASREvents(pending, () => closed || Boolean(input.signal?.aborted))) {
-        terminalReceived = terminalReceived || isTerminalEvent(event);
-        yield event;
+    try {
+      for await (const chunk of input.chunks) {
+        if (input.signal?.aborted || closed) break;
+        if (!queueSend(socket, pending, Buffer.from(chunk.base64, 'base64'), input.sessionId)) break;
+        while (pending.length > 0) {
+          const event = pending.shift()!;
+          terminalReceived = terminalReceived || isTerminalEvent(event);
+          yield event;
+        }
+        if (terminalReceived) break;
       }
-      if (!closed) socket.close();
+
+      if (!closed && !input.signal?.aborted && !terminalReceived) {
+        queueSend(socket, pending, JSON.stringify(createFunASREndEvent()), input.sessionId);
+        for await (const event of drainFunASREvents(pending, () => closed || Boolean(input.signal?.aborted))) {
+          terminalReceived = terminalReceived || isTerminalEvent(event);
+          yield event;
+        }
+      }
+    } finally {
+      closeSocket(socket);
     }
 
     while (pending.length > 0) {
