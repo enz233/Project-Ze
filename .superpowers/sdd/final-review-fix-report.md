@@ -23,3 +23,8 @@ Fixed final whole-branch review Important findings and the optional Minor debug 
 
 ## concerns
 - npm still emits existing unknown config warnings for `electron_mirror` / `electron-mirror`; tests pass.
+
+## Follow-up 2026-07-16 screen_target_pointer assistant message suppression
+- STATUS: Fixed remaining Important review finding in `src/core/chat-manager.ts`. Pointer intent assistant messages are now suppressed only when permission is `allowed` and execution status is `handled`; skipped/failed/denied/needs_confirmation safety messages are shown and still recorded in assistant history.
+- Tests: `npm test` passed (build + voice-input, screen-fingerprint, screen-capture-frame, intent-router contracts). `git diff --check` passed with no output.
+- concerns: npm emitted existing unknown `electron_mirror` / `electron-mirror` config warnings during test.

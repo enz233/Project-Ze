@@ -396,7 +396,11 @@ export class ChatManager {
     this.intentRouter.recordExecution(result);
 
     const assistantMessage = this.getIntentAssistantMessage(routed, result);
-    if (assistantMessage && routed.decision.intent !== 'screen_target_pointer') {
+    const shouldSuppressAssistantMessage =
+      routed.decision.intent === 'screen_target_pointer' &&
+      routed.permission.status === 'allowed' &&
+      result.status === 'handled';
+    if (assistantMessage && !shouldSuppressAssistantMessage) {
       this.sendBubble(assistantMessage);
     }
 
