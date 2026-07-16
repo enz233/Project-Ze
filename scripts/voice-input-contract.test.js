@@ -358,6 +358,21 @@ function testASRConnectionTestIPCContract() {
   assert.match(main, /testFunASRLocalConnection/);
 }
 
+function testSettingsFunASRLocalProviderContract() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf8');
+  assert.match(html, /<option value="funasr-local">FunASR 本地识别<\/option>/);
+  assert.match(html, /'funasr-local': \{/);
+  assert.match(html, /provider: 'funasr-local-runtime'/);
+  assert.match(html, /baseUrl: 'ws:\/\/127\.0\.0\.1:10096'/);
+  assert.match(html, /Project-Ze 第一版只负责连接该服务/);
+  assert.match(html, /不会自动安装 FunASR、下载模型或启动 Docker\/Python 进程/);
+  assert.match(html, /远程 FunASR 地址是高级用法/);
+  assert.match(html, /function isFunASRConfig\(config\)/);
+  assert.match(html, /FunASR Base URL 必须以 ws:\/\/ 或 wss:\/\/ 开头/);
+  assert.match(html, /id="asrConnectionTestBtn"/);
+  assert.match(html, /window\.companion\.testASRConnection\(config\)/);
+}
+
 function testRendererQwenMainVoiceUsesPCM() {
   const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
   assert.match(renderer, /function isQwenASRVoiceConfig\(config:\s*any\):\s*boolean\s*\{/);
@@ -1323,6 +1338,7 @@ async function run() {
   testAsrNormalizerDeepMergesCacheAndValidatesTypes();
   testJsonConfigStoreUpdateNormalizesMergedValue();
   testASRConnectionTestIPCContract();
+  testSettingsFunASRLocalProviderContract();
   testSettingsAsrPresetContractMatchesCoreDefinitions();
   testRendererQwenMainVoiceUsesPCM();
   testAsrEngineFactoryAndParser();
