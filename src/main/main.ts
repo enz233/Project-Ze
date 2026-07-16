@@ -26,6 +26,8 @@ import { CameraAwarenessConfigManager } from '../core/camera-awareness-config';
 import { CameraAwarenessManager } from '../core/camera-awareness-manager';
 import { CAMERA_AWARENESS_IPC, CameraFrameInput } from '../core/camera-awareness-types';
 import { VisionImageAnalyzer } from '../core/vision-image-analyzer';
+import { IntentRouter } from '../core/intent-router';
+import { IntentClassifier } from '../core/intent-classifier';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -54,6 +56,7 @@ let screenTargetPointer: ScreenTargetPointer;
 let cameraAwarenessConfigManager: CameraAwarenessConfigManager;
 let visionImageAnalyzer: VisionImageAnalyzer;
 let cameraAwarenessManager: CameraAwarenessManager;
+let intentRouter: IntentRouter;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -144,6 +147,10 @@ function createWindow(): void {
     visionImageAnalyzer,
     { bubbleOrchestrator }
   );
+  intentRouter = new IntentRouter({
+    classifier: new IntentClassifier(),
+    cameraEnabled: () => Boolean(cameraAwarenessManager?.getConfig()?.enabled),
+  });
   chatManager = new ChatManager(mainWindow, aiConfigManager, aiService, stateManager, timeAwareness, screenAnalyzer);
   appearanceConfig = new AppearanceConfigManager();
   ttsConfigManager = new TTSConfigManager();
@@ -441,6 +448,10 @@ function setupIPC(): void {
       backgroundDetectionRunning: false,
       lastError: 'camera_awareness_uninitialized',
     };
+  });
+
+  ipcMain.handle('intent-router:get-debug-snapshot', async () => {
+    return intentRouter?.getDebugSnapshot() ?? { recent: [] };
   });
 
   // TTS 语音
