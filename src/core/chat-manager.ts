@@ -22,9 +22,10 @@ export class ChatManager {
   private screenAnalyzer: ScreenAnalyzer;
   private ttsManager: TTSManager | null = null;
   private screenTargetPointer: ScreenTargetPointer | null = null;
+  private cameraPromptAnalyzer: ((prompt: string) => Promise<string>) | null = null;
   private isProcessing = false;
   private lastUserInteraction: number = Date.now();
-  private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'speaking' | 'busy' | 'error', message: string = ''): void {
+  private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'camera' | 'speaking' | 'busy' | 'error', message: string = ''): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('chat-status', { phase, message });
     }
@@ -65,7 +66,7 @@ export class ChatManager {
 
   /** 发送用户消息并获取 AI 回复 */
   async sendMessage(userMessage: string): Promise<void> {
-    if (userMessage.startsWith('.')) {
+    if (userMessage.startsWith('.') || userMessage.startsWith('*')) {
       this.screenTargetPointer?.cancel('new-request');
     }
 
@@ -108,6 +109,22 @@ export class ChatManager {
         this.memory.addMessage('user', userMessage);
         this.memory.addMessage('assistant', screenResult);
         this.memory.recordInteraction('screen-analysis', screenMessage, this.stateManager.getCurrentState());
+        return;
+      }
+
+      // 检查是否为摄像头单帧分析请求（"*" 开头）
+      if (userMessage.startsWith('*')) {
+        const cameraPrompt = userMessage.slice(1).trim();
+        this.sendChatStatus('camera', '正在看摄像头...');
+        this.sendBubble('正在看一下...');
+
+        const cameraResult = this.cameraPromptAnalyzer
+          ? await this.cameraPromptAnalyzer(cameraPrompt)
+          : '摄像头分析还没有准备好。';
+        this.sendBubble(cameraResult);
+        this.memory.addMessage('user', userMessage);
+        this.memory.addMessage('assistant', cameraResult);
+        this.memory.recordInteraction('camera-analysis', cameraPrompt || 'greeting', this.stateManager.getCurrentState());
         return;
       }
 
@@ -370,6 +387,11 @@ export class ChatManager {
   /** 设置屏幕目标指示器 */
   setScreenTargetPointer(pointer: ScreenTargetPointer): void {
     this.screenTargetPointer = pointer;
+  }
+
+  /** 设置摄像头提示词分析器，供 * 命令使用。 */
+  setCameraPromptAnalyzer(analyzer: (prompt: string) => Promise<string>): void {
+    this.cameraPromptAnalyzer = analyzer;
   }
 
   /** 获取记忆模块（供 ObserverManager 使用） */

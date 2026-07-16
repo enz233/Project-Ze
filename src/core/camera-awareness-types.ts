@@ -35,7 +35,7 @@ export interface CameraFrameInput {
   width: number;
   height: number;
   capturedAt: number;
-  source: 'settings-test' | 'background';
+  source: 'settings-test' | 'background' | 'chat-command';
 }
 
 export interface CameraAwarenessDetectOptions {
@@ -74,4 +74,7 @@ export const CAMERA_AWARENESS_IPC = {
   detectOnce: 'camera-awareness:detect-once',
   processBackgroundFrame: 'camera-awareness:process-background-frame',
   getSnapshot: 'camera-awareness:get-snapshot',
+  analyzePrompt: 'camera-awareness:analyze-prompt',
+  backgroundCaptureRequest: 'camera-awareness:background-capture-request',
+  submitBackgroundFrame: 'camera-awareness:submit-background-frame',
 } as const;

@@ -23,8 +23,9 @@ import { WindowActivityService } from '../core/window-activity-service';
 import { MoveController, MoveToRequest } from '../core/move-controller';
 import { ScreenTargetPointer } from '../core/screen-target-pointer';
 import { CameraAwarenessConfigManager } from '../core/camera-awareness-config';
+import { CameraAwarenessBackgroundRunner } from '../core/camera-awareness-background-runner';
 import { CameraAwarenessManager } from '../core/camera-awareness-manager';
-import { CAMERA_AWARENESS_IPC, CameraFrameInput } from '../core/camera-awareness-types';
+import { CAMERA_AWARENESS_IPC, CameraAwarenessSnapshot, CameraFrameInput } from '../core/camera-awareness-types';
 import { VisionImageAnalyzer } from '../core/vision-image-analyzer';
 
 let mainWindow: BrowserWindow | null = null;
@@ -54,6 +55,19 @@ let screenTargetPointer: ScreenTargetPointer;
 let cameraAwarenessConfigManager: CameraAwarenessConfigManager;
 let visionImageAnalyzer: VisionImageAnalyzer;
 let cameraAwarenessManager: CameraAwarenessManager;
+let cameraAwarenessBackgroundRunner: CameraAwarenessBackgroundRunner;
+let cameraAnalysisRequestSeq = 0;
+const pendingCameraAnalysisRequests = new Map<string, {
+  prompt: string;
+  resolve: (message: string) => void;
+  timeout: ReturnType<typeof setTimeout>;
+}>();
+let cameraBackgroundFrameRequestSeq = 0;
+const pendingCameraBackgroundFrameRequests = new Map<string, {
+  resolve: (frame: CameraFrameInput) => void;
+  reject: (error: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
+}>();
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -144,7 +158,23 @@ function createWindow(): void {
     visionImageAnalyzer,
     { bubbleOrchestrator }
   );
+  cameraAwarenessBackgroundRunner = new CameraAwarenessBackgroundRunner({
+    getConfig: () => cameraAwarenessManager?.getConfig(),
+    captureFrame: () => requestCameraBackgroundFrame(),
+    processFrame: async (frame) => {
+      const snapshot = await cameraAwarenessManager.processBackgroundFrame(frame);
+      logCameraAwarenessDebug(snapshot, frame);
+      return snapshot;
+    },
+    onError: (error) => {
+      const snapshot = cameraAwarenessManager?.recordBackgroundError(error.message || String(error));
+      logCameraAwarenessCaptureError(error, snapshot);
+      getLogger().log('observer', `[CameraAwareness] background capture failed: ${error.message || String(error)}`);
+    },
+  });
+  cameraAwarenessBackgroundRunner.sync();
   chatManager = new ChatManager(mainWindow, aiConfigManager, aiService, stateManager, timeAwareness, screenAnalyzer);
+  chatManager.setCameraPromptAnalyzer((prompt) => requestCameraPromptAnalysis(prompt));
   appearanceConfig = new AppearanceConfigManager();
   ttsConfigManager = new TTSConfigManager();
   ttsManager = new TTSManager(mainWindow, ttsConfigManager);
@@ -402,7 +432,9 @@ function setupIPC(): void {
   });
 
   ipcMain.handle(CAMERA_AWARENESS_IPC.updateConfig, (_event, partial: any) => {
-    return cameraAwarenessManager?.updateConfig(partial);
+    const updated = cameraAwarenessManager?.updateConfig(partial);
+    cameraAwarenessBackgroundRunner?.sync();
+    return updated;
   });
 
   ipcMain.handle(CAMERA_AWARENESS_IPC.detectOnce, async (_event, frame: CameraFrameInput) => {
@@ -432,6 +464,30 @@ function setupIPC(): void {
     return await cameraAwarenessManager.processBackgroundFrame(frame);
   });
 
+  ipcMain.handle(CAMERA_AWARENESS_IPC.submitBackgroundFrame, async (_event, payload: { requestId?: string; frame?: CameraFrameInput; error?: string }) => {
+    const requestId = String(payload?.requestId || '');
+    const pending = pendingCameraBackgroundFrameRequests.get(requestId);
+    if (!pending) {
+      return { ok: false, reason: 'background capture request expired' };
+    }
+
+    clearTimeout(pending.timeout);
+    pendingCameraBackgroundFrameRequests.delete(requestId);
+
+    if (payload?.error) {
+      pending.reject(new Error(payload.error));
+      return { ok: true };
+    }
+
+    if (!payload?.frame) {
+      pending.reject(new Error('camera did not return a frame'));
+      return { ok: true };
+    }
+
+    pending.resolve(payload.frame);
+    return { ok: true };
+  });
+
   ipcMain.handle(CAMERA_AWARENESS_IPC.getSnapshot, () => {
     return cameraAwarenessManager?.getSnapshot() ?? {
       status: 'unavailable',
@@ -441,6 +497,31 @@ function setupIPC(): void {
       backgroundDetectionRunning: false,
       lastError: 'camera_awareness_uninitialized',
     };
+  });
+
+  ipcMain.handle(CAMERA_AWARENESS_IPC.analyzePrompt, async (_event, payload: { requestId?: string; frame?: CameraFrameInput; error?: string }) => {
+    const requestId = String(payload?.requestId || '');
+    const pending = pendingCameraAnalysisRequests.get(requestId);
+    if (!pending) {
+      return { ok: false, reason: 'camera analysis request expired' };
+    }
+
+    clearTimeout(pending.timeout);
+    pendingCameraAnalysisRequests.delete(requestId);
+
+    if (payload?.error) {
+      pending.resolve('摄像头没有打开。');
+      return { ok: true };
+    }
+
+    if (!payload?.frame || !visionImageAnalyzer) {
+      pending.resolve('摄像头没有返回可用画面。');
+      return { ok: true };
+    }
+
+    const result = await visionImageAnalyzer.analyzeCameraPrompt(payload.frame, pending.prompt);
+    pending.resolve(result);
+    return { ok: true };
   });
 
   // TTS 语音
@@ -562,15 +643,86 @@ function getMainWindowPosition(): { x: number; y: number } {
   return { x, y };
 }
 
+function requestCameraPromptAnalysis(prompt: string): Promise<string> {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return Promise.resolve('摄像头窗口还没有准备好。');
+  }
+
+  const requestId = `camera-analysis-${Date.now()}-${++cameraAnalysisRequestSeq}`;
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      pendingCameraAnalysisRequests.delete(requestId);
+      resolve('摄像头没有及时回应。');
+    }, 15000);
+
+    pendingCameraAnalysisRequests.set(requestId, { prompt, resolve, timeout });
+    mainWindow?.webContents.send('camera-analysis:capture-request', { requestId });
+  });
+}
+
+function requestCameraBackgroundFrame(): Promise<CameraFrameInput> {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return Promise.reject(new Error('camera window is not ready'));
+  }
+
+  const requestId = `camera-background-${Date.now()}-${++cameraBackgroundFrameRequestSeq}`;
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pendingCameraBackgroundFrameRequests.delete(requestId);
+      reject(new Error('background camera capture timed out'));
+    }, 15000);
+
+    pendingCameraBackgroundFrameRequests.set(requestId, { resolve, reject, timeout });
+    mainWindow?.webContents.send(CAMERA_AWARENESS_IPC.backgroundCaptureRequest, { requestId });
+  });
+}
+
+function logCameraAwarenessDebug(snapshot: CameraAwarenessSnapshot, frame?: CameraFrameInput): void {
+  const detection = snapshot.lastDetection;
+  console.log(
+    '[CameraAwareness]',
+    'person:', formatCameraPerson(detection?.presence),
+    '| presence:', detection?.presence ?? 'none',
+    '| confidence:', formatCameraConfidence(detection?.confidence),
+    '| state:', snapshot.status,
+    '| reason:', detection?.reason ?? 'none',
+    '| source:', frame?.source ?? 'unknown'
+  );
+}
+
+function logCameraAwarenessCaptureError(error: Error, snapshot?: CameraAwarenessSnapshot): void {
+  console.log(
+    '[CameraAwareness]',
+    'capture failed',
+    '| state:', snapshot?.status ?? 'unknown',
+    '| error:', error.message || String(error)
+  );
+}
+
+function formatCameraPerson(presence?: string): string {
+  if (presence === 'present') return 'yes';
+  if (presence === 'absent') return 'no';
+  if (presence === 'uncertain') return 'uncertain';
+  return 'unknown';
+}
+
+function formatCameraConfidence(confidence?: number): string {
+  const value = Number(confidence);
+  if (!Number.isFinite(value)) return 'n/a';
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
 setupIPC();
 app.whenReady().then(createWindow);
 
 // 关闭时总结记忆
 app.on('before-quit', async () => {
+  cameraAwarenessBackgroundRunner?.stop();
   await chatManager?.summarizeOnShutdown();
 });
 
 app.on('window-all-closed', () => {
+  cameraAwarenessBackgroundRunner?.stop();
   transitionEngine?.stop();
   app.quit();
 });

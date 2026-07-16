@@ -1383,6 +1383,7 @@
         return;
       }
       await window.companion.cameraAwareness.updateConfig(config);
+      await refreshCameraAwarenessSnapshot();
       showToast('摄像头感知设置已保存', 'success');
     });
 
@@ -1431,30 +1432,18 @@
       }
     });
 
-    let cameraBackgroundTimer = null;
-    async function runCameraBackgroundTick() {
-      const config = collectCameraAwarenessConfig();
-      if (!config.enabled || !config.backgroundDetectionEnabled) return;
+    async function refreshCameraAwarenessSnapshot() {
       try {
-        const frame = await captureCameraFrame('background');
-        const snapshot = await window.companion.cameraAwareness.processBackgroundFrame(frame);
+        const snapshot = await window.companion.cameraAwareness.getSnapshot();
         if (snapshot && snapshot.lastDetection) {
           document.getElementById('cameraAwarenessResult').textContent = formatCameraDetection(snapshot.lastDetection) + ', status=' + snapshot.status;
+        } else if (snapshot && snapshot.lastError) {
+          document.getElementById('cameraAwarenessResult').textContent = '后台状态：' + snapshot.status + ', lastError=' + snapshot.lastError;
         }
       } catch (e) {
-        document.getElementById('cameraAwarenessResult').textContent = '后台检测失败：' + (e.message || e);
+        document.getElementById('cameraAwarenessResult').textContent = '读取后台状态失败：' + (e.message || e);
       }
     }
-
-    function restartCameraBackgroundTimer() {
-      if (cameraBackgroundTimer) clearInterval(cameraBackgroundTimer);
-      const config = collectCameraAwarenessConfig();
-      if (!config.enabled || !config.backgroundDetectionEnabled) return;
-      cameraBackgroundTimer = setInterval(runCameraBackgroundTick, config.detectionIntervalMs);
-    }
-    ['cameraAwarenessEnabled', 'cameraBackgroundEnabled', 'cameraDetectionIntervalMs'].forEach(function(id) {
-      document.getElementById(id).addEventListener('change', restartCameraBackgroundTimer);
-    });
 
     // 保存 TTS 配置
     document.getElementById('saveTtsBtn').addEventListener('click', function() {
@@ -1499,7 +1488,7 @@
     loadAppearance();
     loadTTSConfig();
     loadASRConfig();
-    loadCameraAwarenessConfig().then(restartCameraBackgroundTimer);
+    loadCameraAwarenessConfig().then(refreshCameraAwarenessSnapshot);
     loadLogPath();
     loadChatInfo();
   </script>

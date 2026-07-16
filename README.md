@@ -36,6 +36,7 @@ Desktop Companion → AI Companion → Embodied Agent → Physical Robot
 | Memory System | 对话摘要 + 轻量生活习惯记忆 | ✔ |
 | TTS Voice | GPT-SoVITS / MiMo / 阿里云 / OpenAI | ✔ |
 | Screen Analysis | Vision API 截屏分析 | ✔ |
+| Camera Awareness | 可选后台低频摄像头感知，离开后回来时轻柔回应 | ✔ |
 | Voice Input (ASR) | 麦克风按钮 + 长按快捷键，支持 OpenAI / 阿里百炼 / 自定义 OpenAI-compatible 预设 | ✔ |
 | Relationship | 好感度 + 熟悉度系统 | ✔ |
 | Activity Monitor | 窗口标题感知 | ✔ |
@@ -68,6 +69,7 @@ F11 → 设置 → 填写 API Key → 测试连接
 | F11 | 设置 |
 | F12 | 开发者工具 |
 | `.` 开头消息 | 截屏分析 |
+| `*` 开头消息 | 摄像头单帧分析；无额外提示词时输出一句问候 |
 | 麦克风按钮 | 点击开始/结束语音输入 |
 | `Ctrl+Shift+Space` | 长按说话，松开结束 |
 
@@ -88,6 +90,7 @@ Main Process
     │       → BubbleOrchestrator → BubbleManager
     ├─ TTSManager → createTTSEngine(config)  语音播放、字幕、停止与供应商合成
     ├─ ScreenAnalyzer                        显式屏幕分析服务
+    ├─ CameraAwarenessBackgroundRunner       后台低频摄像头感知调度
     └─ JsonConfigStore<T>                    运行态 JSON 配置读写
 ```
 

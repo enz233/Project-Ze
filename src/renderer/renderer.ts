@@ -421,6 +421,64 @@
     });
   }
 
+  function waitForCameraVideo(video: HTMLVideoElement): Promise<void> {
+    return new Promise(function (resolve) {
+      if (video.readyState >= 2 && video.videoWidth > 0) {
+        resolve();
+        return;
+      }
+      var done = false;
+      var finish = function () {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      video.onloadedmetadata = finish;
+      setTimeout(finish, 800);
+    });
+  }
+
+  async function captureCameraFrame(source: 'chat-command' | 'background'): Promise<any> {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('当前环境不支持摄像头访问');
+    }
+
+    var stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 30 } },
+      audio: false,
+    });
+
+    try {
+      var video = document.createElement('video');
+      video.muted = true;
+      video.srcObject = stream;
+      await video.play();
+      await waitForCameraVideo(video);
+      await new Promise(function (resolve) { setTimeout(resolve, 250); });
+
+      var canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = Math.max(1, Math.round((video.videoHeight || 180) * (320 / (video.videoWidth || 320))));
+      var ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('摄像头画面无法绘制');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return {
+        imageBase64: canvas.toDataURL('image/jpeg', 0.6),
+        mimeType: 'image/jpeg',
+        width: canvas.width,
+        height: canvas.height,
+        capturedAt: Date.now(),
+        source: source,
+      };
+    } finally {
+      stream.getTracks().forEach(function (track) { track.stop(); });
+    }
+  }
+
+  async function captureCameraPromptFrame(): Promise<any> {
+    return captureCameraFrame('chat-command');
+  }
+
   function debugVoiceInput(message: string, data?: any): void {
     if (typeof data === 'undefined') {
       console.log('[VoiceInput]', message);
@@ -623,6 +681,7 @@
     if (!text) {
       if (phase === 'thinking') text = '思考中...';
       else if (phase === 'screen') text = '正在看屏幕...';
+      else if (phase === 'camera') text = '正在看摄像头...';
       else if (phase === 'speaking') text = '播放回复中...';
       else if (phase === 'busy') text = '还在处理上一句';
       else if (phase === 'error' || phase === 'voice-error') text = '出错了';
@@ -722,6 +781,41 @@
     // @ts-ignore
     window.companion.onChatStatus(function (payload: any) {
       updateChatStatus(payload);
+    });
+
+    // 主进程发来的摄像头单帧请求，用于聊天输入框里的 * 命令。
+    // @ts-ignore
+    window.companion.cameraAwareness.onPromptCaptureRequest(async function (payload: any) {
+      var requestId = payload && payload.requestId;
+      try {
+        updateChatStatus({ phase: 'camera', message: '正在打开摄像头...' });
+        var frame = await captureCameraPromptFrame();
+        // @ts-ignore
+        await window.companion.cameraAwareness.submitPromptFrame({ requestId: requestId, frame: frame });
+      } catch (e: any) {
+        // @ts-ignore
+        await window.companion.cameraAwareness.submitPromptFrame({
+          requestId: requestId,
+          error: e && e.message ? e.message : String(e),
+        });
+      }
+    });
+
+    // 主进程发来的后台低频检测单帧请求。
+    // @ts-ignore
+    window.companion.cameraAwareness.onBackgroundCaptureRequest(async function (payload: any) {
+      var requestId = payload && payload.requestId;
+      try {
+        var frame = await captureCameraFrame('background');
+        // @ts-ignore
+        await window.companion.cameraAwareness.submitBackgroundFrame({ requestId: requestId, frame: frame });
+      } catch (e: any) {
+        // @ts-ignore
+        await window.companion.cameraAwareness.submitBackgroundFrame({
+          requestId: requestId,
+          error: e && e.message ? e.message : String(e),
+        });
+      }
     });
 
     // 主进程发来的语音输入状态

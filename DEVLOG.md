@@ -1,5 +1,20 @@
 # Quiet Companion 开发日志
 
+## 2026-07-16 Camera background awareness runtime
+
+- Moved camera background low-frequency detection out of the settings page timer and into a runtime background runner.
+- The main process now syncs background detection start/stop when camera awareness config changes.
+- The renderer still owns camera access and one-frame capture; the core manager still owns presence state transitions.
+- Returned reactions only fire on stable `absent -> present` transitions and still go through proactive bubble cooldown gates.
+- Added terminal debug output after each background camera detection, showing frame presence, confidence, stable state, reason, and source.
+
+## 2026-07-16 Camera prompt command
+
+- Added a chat command path that mirrors the existing `.` screen-analysis trigger: messages starting with `*` request one camera frame.
+- The renderer owns camera permission and single-frame capture, then returns a 320px JPEG frame to the main process.
+- The main process keeps AI analysis in `VisionImageAnalyzer`; `ChatManager` only recognizes the `*` command and shows the returned bubble.
+- `*` with no extra text asks Ze for a short greeting. Text after `*` is used as the camera-frame prompt.
+
 ## v0.2.1 (2026-05-30)
 
 ### 今日完成

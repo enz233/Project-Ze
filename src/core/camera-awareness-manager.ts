@@ -94,6 +94,16 @@ export class CameraAwarenessManager {
     return { ...this.snapshot };
   }
 
+  recordBackgroundError(error: string): CameraAwarenessSnapshot {
+    const config = this.configManager.get();
+    this.snapshot = {
+      ...this.snapshot,
+      backgroundDetectionRunning: Boolean(config.enabled && config.backgroundDetectionEnabled),
+      lastError: error || 'capture_failed',
+    };
+    return this.getSnapshot();
+  }
+
   stop(): void {
     this.snapshot = {
       ...this.snapshot,
