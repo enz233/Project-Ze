@@ -137,11 +137,13 @@ interface PointPoseConfig {
 换算仍为：
 
 ```ts
-moveTopLeft.x = targetScreenPoint.x - pointerOffset.x;
+moveTopLeft.x = targetScreenPoint.x - pointerOffset.x + 10;
 moveTopLeft.y = targetScreenPoint.y - pointerOffset.y;
 ```
 
-如果实现时发现素材实际指尖位置与估算差异明显，只调整 offset 表，不改变 Screen Target Pointer 主流程。
+其中 `+10` 是当前 point 素材的轻量水平校准，用于修正视觉上略偏左的问题；方向选择逻辑仍只由目标点相对桌宠窗口中心的向量决定，不受该最终移动偏移影响。
+
+如果实现时发现素材实际指尖位置与估算差异明显，只调整 offset 表或轻量校准值，不改变 Screen Target Pointer 主流程。
 
 ## Renderer 表现
 

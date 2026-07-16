@@ -63,7 +63,8 @@ src/
 - `bubble-manager.ts`：气泡发送、状态门禁、主动气泡短间隔控制。
 - `bubble-orchestrator.ts`：主进程气泡编排边界，接收带来源/优先级的气泡请求，并把实际投递委托给 `BubbleManager`。
 - `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；当前稳定职责是截图、坐标映射元信息与 Vision 分析。普通屏幕分析继续使用低细节 Vision 图像，point 目标定位使用 `screen-vision-request.ts` 指定高细节图像以保留 UI 文字/坐标识别能力；`ScreenCaptureFrame.fingerprint`、`screen-capture-frame.ts` 按显示器比例推导缩略图尺寸，以及 `PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时将 point 前后实际 PNG 截图保存到 Electron `userData/screen-pointer-debug/` 属于 Unreleased 稳定性/诊断增强。
-- `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、移动调用和指向气泡；八方向 point 指向姿态、指向后恢复、fingerprint diff 屏幕变化取消属于 Unreleased 增强。
+- `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、移动调用和指向气泡；八方向 point 指向姿态、指向后恢复、最终移动 x 方向 +10px 轻量校准、fingerprint diff 屏幕变化取消属于 Unreleased 增强。
+- `screen-pointer-position.ts`（Unreleased）：屏幕目标指示最终站位 helper，按 `screenPoint - pointerOffset` 计算窗口左上角，并保留当前 point 素材的 `+10px` 水平校准；不参与八方向 pose 选择。
 - `response-workflow-types.ts` / `response-workflow-orchestrator.ts`（Unreleased）：已授权工具结果到统一聊天模型输出的工作流边界；第一版接入屏幕总结和屏幕目标指向，把 `ScreenAnalyzer` / `ScreenTargetPointer` 的结构化结果转为短期 `WorkflowResponseContext`，再调用 `ChatManager.respondFromWorkflow(...)` 生成 `<item>` 气泡回复。原始屏幕 observation 不默认进入长期记忆。
 - `intent-*.ts`（Unreleased）：多模态入口意图分类、权限闸门、debug 快照和薄执行分发；屏幕相关 allowed intent 会进入 Response Workflow，而不是由屏幕模块直接生成最终用户回复。
 - `intent-types.ts`：多模态意图入口的稳定类型边界，定义输入来源、intent、能力需求、权限结果、执行结果和 Debug 记录。

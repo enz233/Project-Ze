@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 import { BubbleOrchestrator } from './bubble-orchestrator';
 import { MoveController } from './move-controller';
 import { ScreenAnalyzer, ScreenCaptureFrame, ScreenTargetLocateResult } from './screen-analyzer';
+import { calculatePointMoveTopLeft } from './screen-pointer-position';
 import {
   SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
   compareScreenFingerprints,
@@ -195,10 +196,7 @@ export class ScreenTargetPointer {
 
       const screenPoint = this.screenAnalyzer.mapPointToScreen(located.frame, result.point!);
       const pose = this.choosePose(screenPoint);
-      const moveTopLeft = {
-        x: screenPoint.x - pose.pointerOffset.x,
-        y: screenPoint.y - pose.pointerOffset.y,
-      };
+      const moveTopLeft = calculatePointMoveTopLeft(screenPoint, pose.pointerOffset);
       debugScreenTargetPointer('[ScreenTargetPointer][debug] move target:', {
         sessionId: id,
         screenPoint,
