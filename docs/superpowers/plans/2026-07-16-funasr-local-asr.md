@@ -67,7 +67,7 @@
 
 - [ ] **Step 1: Add failing contract test for FunASR config**
 
-In `scripts/voice-input-contract.test.js`, inside `testAsrProviderPresetsAndApply()`, add these assertions after the existing Qwen assertions:
+In `scripts/voice-input-contract.test.js`, inside `testAsrProviderPresets()`, add these assertions after the existing Qwen assertions:
 
 ```js
   assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].label, 'FunASR 本地识别');
@@ -79,7 +79,7 @@ In `scripts/voice-input-contract.test.js`, inside `testAsrProviderPresetsAndAppl
   assert.match(ASR_PROVIDER_PRESETS['funasr-local'].note, /不会自动安装 FunASR/);
 ```
 
-Still in `testAsrProviderPresetsAndApply()`, after the OpenAI engine assertion, add:
+Still in `testAsrProviderPresets()`, after the OpenAI engine assertion, add:
 
 ```js
   const funasrApplied = applyASRProviderPreset(config, 'funasr-local');
@@ -90,7 +90,7 @@ Still in `testAsrProviderPresetsAndApply()`, after the OpenAI engine assertion, 
   assert.strictEqual(funasrApplied.streamingMode, 'realtime');
 ```
 
-Inside `testAsrProviderPresetInferenceAndNormalMode()`, add this block near the Qwen normalization checks:
+Inside `testAsrAdvancedSettingsNormalization()`, add this block near the Qwen normalization checks:
 
 ```js
   const funasrNormal = normalizeASRConfigForLoad({
@@ -448,7 +448,7 @@ git commit -m "feat(voice): add funasr local engine helpers"
 
 - [ ] **Step 1: Add failing factory contract test**
 
-In `scripts/voice-input-contract.test.js`, inside `testAsrProviderPresetsAndApply()`, after the existing OpenAI engine assertion and after `funasrApplied` from Task 1, add:
+In `scripts/voice-input-contract.test.js`, inside `testAsrProviderPresets()`, after the existing OpenAI engine assertion and after `funasrApplied` from Task 1, add:
 
 ```js
   const funasrEngine = createASREngine(funasrApplied);
