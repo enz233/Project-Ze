@@ -5,10 +5,21 @@ export type CameraAffect = 'positive' | 'neutral' | 'low_energy' | 'unclear';
 export type CameraAwarenessReason =
   | 'person_visible'
   | 'no_person_visible'
+  | 'foreground_face_too_small'
   | 'too_dark'
   | 'camera_blocked'
   | 'image_unclear'
   | 'api_error';
+
+export type CameraForegroundFaceGateStatus = 'passed' | 'blocked' | 'unavailable' | 'error';
+
+export type CameraForegroundFaceGateReason =
+  | 'large_face_visible'
+  | 'face_too_small'
+  | 'no_face_visible'
+  | 'api_unavailable'
+  | 'detector_error'
+  | 'disabled';
 
 export type CameraAwarenessErrorCode =
   | 'camera_permission_denied'
@@ -25,8 +36,30 @@ export interface CameraAwarenessConfig {
   detectionIntervalMs: number;
   absentAfterMs: number;
   minConfidence: number;
+  foregroundFaceGateEnabled: boolean;
+  foregroundFaceMinHeightRatio: number;
+  foregroundFaceMinAreaRatio: number;
   returnedReactionEnabled: boolean;
   debugPreviewEnabled: boolean;
+}
+
+export interface CameraForegroundFaceGateBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  heightRatio: number;
+  areaRatio: number;
+}
+
+export interface CameraForegroundFaceGateSnapshot {
+  status: CameraForegroundFaceGateStatus;
+  faceCount: number;
+  largestFace?: CameraForegroundFaceGateBox;
+  minHeightRatio: number;
+  minAreaRatio: number;
+  reason: CameraForegroundFaceGateReason;
+  error?: string;
 }
 
 export interface CameraFrameInput {
@@ -35,12 +68,16 @@ export interface CameraFrameInput {
   width: number;
   height: number;
   capturedAt: number;
-  source: 'settings-test' | 'background';
+  source: 'settings-test' | 'background' | 'chat-command' | 'intent-command';
+  foregroundFaceGate?: CameraForegroundFaceGateSnapshot;
 }
 
 export interface CameraAwarenessDetectOptions {
   lightAffectEnabled: boolean;
   minConfidence: number;
+  foregroundFaceGateEnabled: boolean;
+  foregroundFaceMinHeightRatio: number;
+  foregroundFaceMinAreaRatio: number;
 }
 
 export interface CameraAwarenessDetectionResult {
@@ -74,4 +111,7 @@ export const CAMERA_AWARENESS_IPC = {
   detectOnce: 'camera-awareness:detect-once',
   processBackgroundFrame: 'camera-awareness:process-background-frame',
   getSnapshot: 'camera-awareness:get-snapshot',
+  analyzePrompt: 'camera-awareness:analyze-prompt',
+  backgroundCaptureRequest: 'camera-awareness:background-capture-request',
+  submitBackgroundFrame: 'camera-awareness:submit-background-frame',
 } as const;

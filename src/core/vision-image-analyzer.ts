@@ -13,6 +13,7 @@ const AFFECT_VALUES: CameraAffect[] = ['positive', 'neutral', 'low_energy', 'unc
 const REASON_VALUES: CameraAwarenessReason[] = [
   'person_visible',
   'no_person_visible',
+  'foreground_face_too_small',
   'too_dark',
   'camera_blocked',
   'image_unclear',
@@ -25,6 +26,112 @@ interface VisionChatCompletionResponse {
 
 export class VisionImageAnalyzer {
   constructor(private configManager: AIConfigManager) {}
+
+  async analyzeCameraPrompt(frame: CameraFrameInput, userPrompt: string): Promise<string> {
+    const config = this.configManager.get();
+    if (!config.visionApiKey || !config.visionBaseURL || !config.visionModel) {
+      return '摄像头分析还没有配置 Vision API。';
+    }
+
+    const prompt = buildCameraPromptAnalysisPrompt(userPrompt);
+
+    try {
+      const response = await fetch(`${config.visionBaseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.visionApiKey}`,
+        },
+        body: JSON.stringify({
+          model: config.visionModel,
+          messages: [
+            {
+              role: 'system',
+              content: [
+                'You are Ze, a quiet desktop companion.',
+                'Analyze one low-resolution camera frame only for gentle companionship.',
+                'Do not identify people, infer sensitive attributes, or describe private details.',
+                'Reply in short natural Chinese, no Markdown.',
+              ].join('\n'),
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: toDataUri(frame), detail: 'low' } },
+              ],
+            },
+          ],
+          max_tokens: 180,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[VisionImageAnalyzer] Camera prompt request failed (${response.status}): ${errorText}`);
+        return '摄像头分析失败了。';
+      }
+
+      const data = (await response.json()) as VisionChatCompletionResponse;
+      return cleanCameraPromptReply(data.choices?.[0]?.message?.content ?? '');
+    } catch (error: any) {
+      console.error('[VisionImageAnalyzer] Camera prompt analysis failed:', error.message);
+      return '摄像头分析失败了。';
+    }
+  }
+
+  async analyzeCameraVisualQuery(frame: CameraFrameInput, userPrompt: string): Promise<string> {
+    const config = this.configManager.get();
+    if (!config.visionApiKey || !config.visionBaseURL || !config.visionModel) {
+      return '摄像头分析还没有配置 Vision API。';
+    }
+
+    const prompt = buildCameraVisualQueryPrompt(userPrompt);
+
+    try {
+      const response = await fetch(`${config.visionBaseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.visionApiKey}`,
+        },
+        body: JSON.stringify({
+          model: config.visionModel,
+          messages: [
+            {
+              role: 'system',
+              content: [
+                'You are a camera vision observer for Project-Ze.',
+                'Answer only what can be reasonably observed from one low-resolution camera frame.',
+                'Follow the user question, but avoid identity recognition and sensitive attribute inference.',
+                'Reply in concise natural Chinese, no Markdown.',
+              ].join('\n'),
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: toDataUri(frame), detail: 'low' } },
+              ],
+            },
+          ],
+          max_tokens: 220,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[VisionImageAnalyzer] Camera visual query failed (${response.status}): ${errorText}`);
+        return '摄像头分析失败了。';
+      }
+
+      const data = (await response.json()) as VisionChatCompletionResponse;
+      return cleanCameraPromptReply(data.choices?.[0]?.message?.content ?? '');
+    } catch (error: any) {
+      console.error('[VisionImageAnalyzer] Camera visual query failed:', error.message);
+      return '摄像头分析失败了。';
+    }
+  }
 
   async detectCameraAwareness(
     frame: CameraFrameInput,
@@ -52,7 +159,7 @@ export class VisionImageAnalyzer {
             {
               role: 'user',
               content: [
-                { type: 'text', text: buildCameraAwarenessPrompt(options.lightAffectEnabled) },
+                { type: 'text', text: buildCameraAwarenessPrompt(options.lightAffectEnabled, options) },
                 { type: 'image_url', image_url: { url: toDataUri(frame), detail: 'low' } },
               ],
             },
@@ -83,24 +190,76 @@ export function toDataUri(frame: CameraFrameInput): string {
   return `data:${frame.mimeType};base64,${frame.imageBase64}`;
 }
 
-export function buildCameraAwarenessPrompt(lightAffectEnabled: boolean): string {
+export function buildCameraAwarenessPrompt(
+  lightAffectEnabled: boolean,
+  options?: Partial<CameraAwarenessDetectOptions>
+): string {
   const affectInstruction = lightAffectEnabled
     ? '- 如果用户可见，affect 可为 positive / neutral / low_energy / unclear。affect 是非常粗略的陪伴线索，不是情绪诊断。'
     : '- 不要判断状态线索；affect 固定为 unclear。';
+  const foregroundInstruction = options?.foregroundFaceGateEnabled === false
+    ? ''
+    : [
+        '- Foreground face rule: judge only the nearest/largest foreground user, not smaller people behind them.',
+        `- A visible face around ${formatRatioPercent(options?.foregroundFaceMinHeightRatio ?? 0.05)} of frame height and ${formatRatioPercent(options?.foregroundFaceMinAreaRatio ?? 0.0012)} of frame area can count as foreground; allow slightly smaller if it is clearly the nearest foreground subject.`,
+        '- If only background/small people are visible, return absent with reason "foreground_face_too_small" or "no_person_visible".',
+      ].join('\n');
 
   return `你会收到一张低分辨率摄像头单帧。请只做 Project-Ze 桌宠的轻量陪伴判断。
 
 只输出 JSON：
-{"presence":"present|absent|uncertain","confidence":0到1,"affect":"positive|neutral|low_energy|unclear","reason":"person_visible|no_person_visible|too_dark|camera_blocked|image_unclear"}
+{"presence":"present|absent|uncertain","confidence":0到1,"affect":"positive|neutral|low_energy|unclear","reason":"person_visible|no_person_visible|foreground_face_too_small|too_dark|camera_blocked|image_unclear"}
 
 规则：
 - presence 只判断画面中是否有真实用户可见。
 - 如果看不清、太暗、遮挡、无法判断，返回 uncertain。
+${foregroundInstruction}
 ${affectInstruction}
 - 不识别身份。
 - 不判断年龄、性别、种族等敏感属性。
 - 不描述外貌和环境。
 - 不输出 JSON 以外的内容。`;
+}
+
+export function buildCameraPromptAnalysisPrompt(userPrompt: string): string {
+  const prompt = userPrompt.trim();
+  if (!prompt) {
+    return [
+      '用户只输入了英文星号 *，没有额外要求。',
+      '请根据画面给一句很短、温柔、自然的问候。',
+      '如果画面里没有清晰的人，也不要说明检测过程，只说一句安静陪伴感的话。',
+      '不要说“我看到你”，不要描述外貌、身份、年龄、性别或环境隐私。',
+    ].join('\n');
+  }
+
+  return [
+    `用户在英文星号 * 后的请求是：${prompt}`,
+    '请只围绕这张摄像头单帧做轻量回应。',
+    '可以回答用户的请求，但要简短、温柔、克制。',
+    '不要识别身份，不要推断年龄、性别、种族等敏感属性，不要输出隐私细节。',
+    '如果请求不适合根据摄像头画面回答，就给一句简短的陪伴式回应。',
+  ].join('\n');
+}
+
+export function buildCameraVisualQueryPrompt(userPrompt: string): string {
+  const prompt = userPrompt.trim() || '请根据这张摄像头画面做一个简短观察。';
+  return [
+    `用户通过自然语言主动请求摄像头视觉帮助：${prompt}`,
+    '请根据这张低分辨率摄像头单帧回答用户问题。',
+    '优先回答用户真正关心的可见内容，例如衣着颜色、手里物品、画面中可见物、姿态或环境状态。',
+    '如果画面不清楚，请说明不确定，不要编造。',
+    '不要确认具体身份，不要推断年龄、性别、种族、健康诊断等敏感属性；如果用户问到这些，改为说明可观察到的非敏感线索。',
+    '回答要短、自然、像 Ze 在旁边轻声说话。',
+  ].join('\n');
+}
+
+export function cleanCameraPromptReply(raw: string): string {
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:text|markdown)?\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  return (cleaned || '我在这里。').slice(0, 80);
 }
 
 export function parseCameraAwarenessResponse(
@@ -165,4 +324,10 @@ function normalizeConfidence(value: unknown): number {
 
 function normalizeEnum<T extends string>(value: unknown, allowed: T[], fallback: T): T {
   return typeof value === 'string' && allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+function formatRatioPercent(value: number): string {
+  const percent = Math.max(0, value) * 100;
+  const precision = percent < 1 ? 2 : 1;
+  return `${Number(percent.toFixed(precision))}%`;
 }

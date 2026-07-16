@@ -13,8 +13,8 @@ import { TTSManager } from './tts-manager';
 import { IntentRouter } from './intent-router';
 import { IntentExecutor } from './intent-executor';
 import { IntentExecutionResult, IntentRequest, IntentRoutedDecision } from './intent-types';
-import { WorkflowChatResponseResult, WorkflowResponseContext } from './response-workflow-types';
 import { ResponseWorkflowOrchestrator } from './response-workflow-orchestrator';
+import { WorkflowChatResponseResult, WorkflowResponseContext } from './response-workflow-types';
 
 export class ChatManager {
   private aiService: AIService;
@@ -27,12 +27,13 @@ export class ChatManager {
   private screenAnalyzer: ScreenAnalyzer;
   private ttsManager: TTSManager | null = null;
   private screenTargetPointer: ScreenTargetPointer | null = null;
+  private cameraPromptAnalyzer: ((prompt: string) => Promise<string>) | null = null;
   private intentRouter?: IntentRouter;
   private intentExecutor?: IntentExecutor;
   private responseWorkflowOrchestrator?: ResponseWorkflowOrchestrator;
   private isProcessing = false;
   private lastUserInteraction: number = Date.now();
-  private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'speaking' | 'busy' | 'error', message: string = ''): void {
+  private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'camera' | 'speaking' | 'busy' | 'error', message: string = ''): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('chat-status', { phase, message });
     }
@@ -73,7 +74,7 @@ export class ChatManager {
 
   /** 发送用户消息并获取 AI 回复 */
   async sendMessage(userMessage: string): Promise<void> {
-    if (userMessage.startsWith('.')) {
+    if (userMessage.startsWith('.') || userMessage.startsWith('*')) {
       this.screenTargetPointer?.cancel('new-request');
     }
 
@@ -116,23 +117,8 @@ export class ChatManager {
           }
           if (workflowResult.fallbackMessage) {
             this.sendBubble(workflowResult.fallbackMessage);
-          }
-          if (workflow === 'screen_target_pointer_response' && this.screenTargetPointer) {
-            const pointerResult = await this.screenTargetPointer.handle(screenMessage);
-            const assistantMessage = pointerResult.message || '屏幕指示请求已取消';
-            this.memory.addMessage('user', userMessage);
-            this.memory.addMessage('assistant', assistantMessage);
-            this.memory.recordInteraction('screen-target-pointer', screenMessage, this.stateManager.getCurrentState());
             return;
           }
-
-          this.sendBubble('正在看屏幕...');
-          const screenResult = await this.screenAnalyzer.analyze(screenMessage);
-          this.sendBubble(screenResult);
-          this.memory.addMessage('user', userMessage);
-          this.memory.addMessage('assistant', screenResult);
-          this.memory.recordInteraction('screen-analysis', screenMessage, this.stateManager.getCurrentState());
-          return;
         }
 
         if (this.screenTargetPointer?.isPointerRequest(screenMessage)) {
@@ -150,6 +136,22 @@ export class ChatManager {
         this.memory.addMessage('user', userMessage);
         this.memory.addMessage('assistant', screenResult);
         this.memory.recordInteraction('screen-analysis', screenMessage, this.stateManager.getCurrentState());
+        return;
+      }
+
+      // 检查是否为摄像头单帧分析请求（"*" 开头）
+      if (userMessage.startsWith('*')) {
+        const cameraPrompt = userMessage.slice(1).trim();
+        this.sendChatStatus('camera', '正在看摄像头...');
+        this.sendBubble('正在看一下...');
+
+        const cameraResult = this.cameraPromptAnalyzer
+          ? await this.cameraPromptAnalyzer(cameraPrompt)
+          : '摄像头分析还没有准备好。';
+        this.sendBubble(cameraResult);
+        this.memory.addMessage('user', userMessage);
+        this.memory.addMessage('assistant', cameraResult);
+        this.memory.recordInteraction('camera-analysis', cameraPrompt || 'greeting', this.stateManager.getCurrentState());
         return;
       }
 
@@ -212,9 +214,41 @@ export class ChatManager {
         // 流式回调（目前不处理中间结果）
       });
 
-      await this.deliverAssistantResponse(fullResponse, 'chat', userMessage);
-      this.memory.changeAffection(0.3);
-      this.memory.changeFamiliarity(0.1);
+      // 解析响应并拆分长文本
+      const parsedItems = this.parseResponse(fullResponse);
+      const rawTexts = parsedItems.length > 0 ? parsedItems : [fullResponse || ''];
+      const texts: string[] = [];
+      for (const t of rawTexts) {
+        // 超过 30 字自动拆分
+        if (t.length > 30) {
+          const parts = this.splitText(t, 30);
+          texts.push(...parts);
+        } else {
+          texts.push(t);
+        }
+      }
+
+      // 保存 AI 回复到历史
+      this.memory.addMessage('assistant', fullResponse);
+
+      // 关系追踪：聊天增加好感和熟悉
+      this.memory.recordInteraction('chat', userMessage, this.stateManager.getCurrentState());
+      this.memory.changeAffection(0.3);     // 普通聊天 +0.3
+      this.memory.changeFamiliarity(0.1);   // 聊天后更熟悉 +0.1
+
+      // TTS 模式：批量合成，按顺序播放
+      // 非 TTS 模式：直接显示气泡
+      const ttsEnabled = this.ttsManager?.isEnabled() ?? false;
+      if (ttsEnabled && this.ttsManager) {
+        const ttsTexts = texts.map(t => t.slice(0, 200));
+        this.sendChatStatus('speaking', '播放回复中...');
+        const played = await this.ttsManager.speakAll(ttsTexts);
+        if (!played) {
+          await this.showTextSequence(texts);
+        }
+      } else {
+        await this.showTextSequence(texts);
+      }
 
       // 检查是否需要生成摘要（后台异步，不阻塞）
       if (this.memory.shouldSummarize()) {
@@ -228,35 +262,6 @@ export class ChatManager {
     } finally {
       this.isProcessing = false;
       this.sendChatStatus('idle');
-    }
-  }
-
-  private async deliverAssistantResponse(fullResponse: string, interactionType: string, interactionText: string): Promise<void> {
-    const parsedItems = this.parseResponse(fullResponse);
-    const rawTexts = parsedItems.length > 0 ? parsedItems : [fullResponse || ''];
-    const texts: string[] = [];
-    for (const t of rawTexts) {
-      if (t.length > 30) {
-        const parts = this.splitText(t, 30);
-        texts.push(...parts);
-      } else {
-        texts.push(t);
-      }
-    }
-
-    this.memory.addMessage('assistant', fullResponse);
-    this.memory.recordInteraction(interactionType, interactionText, this.stateManager.getCurrentState());
-
-    const ttsEnabled = this.ttsManager?.isEnabled() ?? false;
-    if (ttsEnabled && this.ttsManager) {
-      const ttsTexts = texts.map(t => t.slice(0, 200));
-      this.sendChatStatus('speaking', '播放回复中...');
-      const played = await this.ttsManager.speakAll(ttsTexts);
-      if (!played) {
-        await this.showTextSequence(texts);
-      }
-    } else {
-      await this.showTextSequence(texts);
     }
   }
 
@@ -415,6 +420,11 @@ export class ChatManager {
     this.screenTargetPointer = pointer;
   }
 
+  /** 设置摄像头提示词分析器，供 * 命令使用。 */
+  setCameraPromptAnalyzer(analyzer: (prompt: string) => Promise<string>): void {
+    this.cameraPromptAnalyzer = analyzer;
+  }
+
   setIntentRouter(intentRouter: IntentRouter, intentExecutor: IntentExecutor): void {
     this.intentRouter = intentRouter;
     this.intentExecutor = intentExecutor;
@@ -445,7 +455,11 @@ export class ChatManager {
     if (context.privacy.allowVisibleReplyInHistory) {
       this.memory.addMessage('user', context.userText);
     }
-    await this.deliverAssistantResponse(fullResponse, `workflow-${context.workflow.replace(/_/g, '-')}`, context.userText);
+    await this.deliverAssistantResponse(
+      fullResponse,
+      `workflow-${context.workflow.replace(/_/g, '-')}`,
+      context.userText
+    );
 
     if (this.memory.shouldSummarize()) {
       this.summarizeAsync();
@@ -465,6 +479,8 @@ export class ChatManager {
         observation.target ? `目标=${observation.target}` : '',
         typeof observation.found === 'boolean' ? `found=${observation.found}` : '',
         typeof observation.confidence === 'number' ? `confidence=${observation.confidence.toFixed(2)}` : '',
+        observation.presence ? `presence=${observation.presence}` : '',
+        observation.affect ? `affect=${observation.affect}` : '',
         observation.reason ? `原因=${observation.reason}` : '',
         observation.summary ? `摘要=${observation.summary.slice(0, 500)}` : '',
         observation.warnings?.length ? `警告=${observation.warnings.join(',')}` : '',
@@ -477,9 +493,10 @@ export class ChatManager {
 
     return [
       `当前状态：${currentState}`,
-      '这是一个屏幕工作流回复。下面的工具结果只用于本轮回复，不要声称执行未发生的动作。',
-      '如果动作已 completed，可以自然说明已经指给用户看。',
+      '这是一个已授权工具工作流回复。工具结果只用于本轮回复，不要声称执行未发生的动作。',
+      '如果动作 completed，可以自然说明已经完成观察或指向。',
       '如果动作 skipped、failed 或 cancelled，简短说明原因，并建议用户重新描述或重试。',
+      '摄像头结果来自单帧观察；不要识别具体身份，不要推断年龄、性别、种族、健康状态等敏感属性。',
       '不要输出内部 JSON，不要主动暴露置信度数字，除非用户明确询问。',
       ...observationLines,
       ...actionLines,
@@ -489,8 +506,37 @@ export class ChatManager {
   private buildWorkflowUserPrompt(context: WorkflowResponseContext): string {
     return [
       `用户原始请求：${context.userText}`,
-      '请基于上面的屏幕工作流结果回复用户。',
+      '请基于上面的工作流结果回复用户。',
     ].join('\n');
+  }
+
+  private async deliverAssistantResponse(fullResponse: string, interactionType: string, interactionText: string): Promise<void> {
+    const parsedItems = this.parseResponse(fullResponse);
+    const rawTexts = parsedItems.length > 0 ? parsedItems : [fullResponse || ''];
+    const texts: string[] = [];
+    for (const t of rawTexts) {
+      if (t.length > 30) {
+        const parts = this.splitText(t, 30);
+        texts.push(...parts);
+      } else {
+        texts.push(t);
+      }
+    }
+
+    this.memory.addMessage('assistant', fullResponse);
+    this.memory.recordInteraction(interactionType, interactionText, this.stateManager.getCurrentState());
+
+    const ttsEnabled = this.ttsManager?.isEnabled() ?? false;
+    if (ttsEnabled && this.ttsManager) {
+      const ttsTexts = texts.map(t => t.slice(0, 200));
+      this.sendChatStatus('speaking', '播放回复中...');
+      const played = await this.ttsManager.speakAll(ttsTexts);
+      if (!played) {
+        await this.showTextSequence(texts);
+      }
+    } else {
+      await this.showTextSequence(texts);
+    }
   }
 
   private async tryHandleIntent(text: string, source: 'text_chat' | 'voice_asr'): Promise<boolean> {
@@ -502,27 +548,33 @@ export class ChatManager {
     const result = await this.intentExecutor.execute(routed);
     this.intentRouter.recordExecution(result);
 
-    const assistantMessage = this.getIntentAssistantMessage(routed, result);
-    const isHandledAllowedScreenWorkflowIntent =
+    if (this.isWorkflowFinalResponse(result)) {
+      return true;
+    }
+
+    const assistantMessage = await this.getIntentAssistantMessage(routed, result);
+    const shouldSuppressAssistantMessage =
       (routed.decision.intent === 'screen_target_pointer' || routed.decision.intent === 'screen_summary') &&
       routed.permission.status === 'allowed' &&
       result.status === 'handled';
-    if (assistantMessage && !isHandledAllowedScreenWorkflowIntent) {
+    if (assistantMessage && !shouldSuppressAssistantMessage) {
       this.sendBubble(assistantMessage);
     }
 
-    if (!isHandledAllowedScreenWorkflowIntent) {
-      this.memory.addMessage('user', text);
-      if (assistantMessage) {
-        this.memory.addMessage('assistant', assistantMessage);
-      }
-      this.memory.recordInteraction(this.getInteractionTypeForIntent(routed.decision.intent), text, this.stateManager.getCurrentState());
+    this.memory.addMessage('user', text);
+    if (assistantMessage) {
+      this.memory.addMessage('assistant', assistantMessage);
     }
+    this.memory.recordInteraction(this.getInteractionTypeForIntent(routed.decision.intent), text, this.stateManager.getCurrentState());
 
     return true;
   }
 
-  private getIntentAssistantMessage(routed: IntentRoutedDecision, result: IntentExecutionResult): string {
+  private isWorkflowFinalResponse(result: IntentExecutionResult): boolean {
+    return result.status === 'handled' && result.debug?.workflowFinalResponse === true;
+  }
+
+  private async getIntentAssistantMessage(routed: IntentRoutedDecision, result: IntentExecutionResult): Promise<string> {
     if (result.message) return result.message;
     if (result.error) return `Intent failed: ${result.error}`;
     if (routed.permission.status === 'denied' || routed.permission.status === 'needs_confirmation') {

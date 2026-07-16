@@ -8,6 +8,8 @@ The first implementation handles:
 
 - `screen_summary_response`
 - `screen_target_pointer_response`
+- `camera_check_once_response`
+- `camera_visual_query_response`
 
 It does not classify intent and does not grant permissions. `IntentRouter` still owns classification and privacy gates.
 
@@ -16,7 +18,7 @@ It does not classify intent and does not grant permissions. `IntentRouter` still
 ```txt
 IntentRouter / . screen entry
   -> ResponseWorkflowOrchestrator
-  -> ScreenAnalyzer or ScreenTargetPointer
+  -> ScreenAnalyzer / ScreenTargetPointer / CameraAwarenessManager / VisionImageAnalyzer
   -> WorkflowResponseContext
   -> ChatManager.respondFromWorkflow(...)
   -> normal <item> chat bubbles / TTS fallback
@@ -24,11 +26,13 @@ IntentRouter / . screen entry
 
 ## Privacy rule
 
-Raw screen observations are short-lived workflow context. They are not saved to long-term memory by default. The final user-visible model reply may be saved to chat history.
+Raw screen and camera observations are short-lived workflow context. Raw images are not included in `WorkflowResponseContext` and are not saved to long-term memory by default. The final user-visible model reply may be saved to chat history.
 
 ## Module boundaries
 
 - `ScreenAnalyzer` owns screenshot and Vision analysis.
 - `ScreenTargetPointer` owns target locating, stability checks, movement, and point visual.
+- `CameraAwarenessManager` owns one-shot presence checks and background state.
+- `VisionImageAnalyzer` owns camera visual query parsing.
 - `ChatManager` owns model wording, `<item>` parsing, TTS fallback, and chat history.
 - `BubbleOrchestrator` owns bubble delivery only.

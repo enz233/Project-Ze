@@ -2,7 +2,6 @@ import { BrowserWindow } from 'electron';
 import { BubbleOrchestrator } from './bubble-orchestrator';
 import { MoveController } from './move-controller';
 import { ScreenAnalyzer, ScreenCaptureFrame, ScreenTargetLocateResult } from './screen-analyzer';
-import { calculatePointMoveTopLeft } from './screen-pointer-position';
 import {
   SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
   compareScreenFingerprints,
@@ -130,11 +129,6 @@ export class ScreenTargetPointer {
 
     const screenMessage = this.normalizePointerMessage(message);
     const id = this.startSession();
-    const showResultBubble = (text: string): void => {
-      if (!options.suppressResultBubble) {
-        this.showBubble(text);
-      }
-    };
     const beforeTitle = await this.windowActivityService.getActiveWindowTitle();
     debugScreenTargetPointer('[ScreenTargetPointer][debug] session start:', {
       sessionId: id,
@@ -174,13 +168,13 @@ export class ScreenTargetPointer {
       const afterLocateTitle = await this.windowActivityService.getActiveWindowTitle();
       if (this.hasScreenChanged(beforeTitle, afterLocateTitle)) {
         debugScreenTargetPointer('[ScreenTargetPointer][debug] screen changed after locate:', { sessionId: id, beforeTitlePresent: !!beforeTitle, afterTitlePresent: !!afterLocateTitle });
-        return this.cancelWithMessage('screen-changed', options.suppressResultBubble);
+        return this.cancelWithMessage('screen-changed', options);
       }
 
       const result = located.result;
       if (!this.canMove(result)) {
         const failureMessage = this.failureMessage(screenMessage, result);
-        showResultBubble(failureMessage);
+        this.showResultBubble(failureMessage, options);
         this.finishSession();
         return { handled: true, moved: false, message: failureMessage, locateResult: result };
       }
@@ -191,12 +185,15 @@ export class ScreenTargetPointer {
       }
       if (fingerprintChanged) {
         debugScreenTargetPointer('[ScreenTargetPointer][debug] screen changed before move:', { sessionId: id });
-        return this.screenChangedResult(result, options.suppressResultBubble);
+        return this.screenChangedResult(result, options);
       }
 
       const screenPoint = this.screenAnalyzer.mapPointToScreen(located.frame, result.point!);
       const pose = this.choosePose(screenPoint);
-      const moveTopLeft = calculatePointMoveTopLeft(screenPoint, pose.pointerOffset);
+      const moveTopLeft = {
+        x: screenPoint.x - pose.pointerOffset.x,
+        y: screenPoint.y - pose.pointerOffset.y,
+      };
       debugScreenTargetPointer('[ScreenTargetPointer][debug] move target:', {
         sessionId: id,
         screenPoint,
@@ -234,7 +231,7 @@ export class ScreenTargetPointer {
           screenChangedDuringMove,
           moveCancelled: moveResult.cancelled,
         });
-        return this.screenChangedResult(result, options.suppressResultBubble);
+        return this.screenChangedResult(result, options);
       }
 
       debugScreenTargetPointer('[ScreenTargetPointer][debug] move finished:', {
@@ -248,14 +245,14 @@ export class ScreenTargetPointer {
         const messageText = '好啦好啦，我不挡你~';
         this.clearPointVisual();
         this.finishSession();
-        showResultBubble(messageText);
+        this.showResultBubble(messageText, options);
         return { handled: true, moved: false, message: messageText, locateResult: result, cancelReason: 'manual' };
       }
 
       this.state = 'pointing';
       this.sendPointVisual({ active: true, pose: pose.pose, reason: 'screen-target-pointer' });
       const successMessage = this.successMessage(result);
-      showResultBubble(successMessage);
+      this.showResultBubble(successMessage, options);
       this.startPointScreenMonitor(id, beforeTitle);
       this.schedulePointClear(id);
       return { handled: true, moved: true, message: successMessage, locateResult: result };
@@ -264,7 +261,7 @@ export class ScreenTargetPointer {
       console.error('[ScreenTargetPointer] 指示失败:', error?.message || error);
       this.clearPointVisual();
       this.finishSession();
-      showResultBubble(messageText);
+      this.showResultBubble(messageText, options);
       return { handled: true, moved: false, message: messageText };
     }
   }
@@ -446,27 +443,25 @@ export class ScreenTargetPointer {
       .slice(0, 20) || '目标';
   }
 
-  private cancelWithMessage(reason: ScreenTargetPointerCancelReason, suppressResultBubble = false): ScreenTargetPointerResult {
-    if (suppressResultBubble && reason === 'screen-changed') {
+  private cancelWithMessage(reason: ScreenTargetPointerCancelReason, options: ScreenTargetPointerHandleOptions): ScreenTargetPointerResult {
+    if (options.suppressResultBubble) {
       this.sessionId++;
       this.state = 'cancelled';
       this.moveController.cancel('manual');
       this.clearPointVisual();
       this.clearHoldTimer();
       this.clearMoveMonitor();
-    } else {
-      this.cancel(reason);
+      return { handled: true, moved: false, message: this.screenChangedMessage(), cancelReason: reason };
     }
+    this.cancel(reason);
     return { handled: true, moved: false, message: this.screenChangedMessage(), cancelReason: reason };
   }
 
-  private screenChangedResult(result?: ScreenTargetLocateResult, suppressResultBubble = false): ScreenTargetPointerResult {
+  private screenChangedResult(result: ScreenTargetLocateResult | undefined, options: ScreenTargetPointerHandleOptions): ScreenTargetPointerResult {
     const messageText = this.screenChangedMessage();
     this.clearPointVisual();
     this.finishSession();
-    if (!suppressResultBubble) {
-      this.showBubble(messageText);
-    }
+    this.showResultBubble(messageText, options);
     return { handled: true, moved: false, message: messageText, locateResult: result, cancelReason: 'screen-changed' };
   }
 
@@ -480,6 +475,11 @@ export class ScreenTargetPointer {
 
   private showBubble(text: string): void {
     this.bubbleOrchestrator.show({ text, source: 'system', priority: 'high' });
+  }
+
+  private showResultBubble(text: string, options: ScreenTargetPointerHandleOptions): void {
+    if (options.suppressResultBubble) return;
+    this.showBubble(text);
   }
 
   private sendPointVisual(event: PointVisualEvent): void {

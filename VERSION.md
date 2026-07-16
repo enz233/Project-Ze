@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- 摄像头关键词 workflow：新增 `*` 摄像头单帧命令、自然语言摄像头人在/不在检查、摄像头视觉查询，并将摄像头 observation 接入 Response Workflow 统一生成 Ze 风格回复。
+- 屏幕识别关键词增强：自然语言“看看屏幕 / 你看看这个 / 这是什么意思 / 上面写了什么 / 截图分析”等可进入屏幕总结 workflow。
+- 摄像头后台低频检测收束到主进程 runner，并新增后台前景人脸 gate 与终端 debug 输出；默认仍关闭，不保存图片，不做身份识别。
 - Qwen-ASR 结束态误报修复：当服务端已返回非空 partial 文本、但结束时只返回 `session.finished` 或空 completed 时，将最后一段 partial 提升为 final，避免输入框已有正确文字后又显示红色“未返回识别文本”误报。
 - Operation Guide 融合暂停标注：已提交 Project-Chen Operation Guide 的领域层、配置、planner/fallback、progress parser、manager 状态机和契约测试；融合暂停在计划 Task 2 后，尚未接入 Intent Router / IntentExecutor、main IPC、preload、settings、renderer guide panel 或最终用户文档。恢复时从 `docs/superpowers/plans/2026-07-16-operation-guide-fusion.md` 的 Task 3 继续。
 - ASR FunASR 本地识别：新增 `funasr-local-runtime` provider，默认连接 `ws://127.0.0.1:10096` 的用户自启动 FunASR runtime WebSocket 服务；设置页明确说明 Project-Ze 不自动安装 FunASR、下载模型或启动 Docker/Python 进程，FunASR 不要求 API Key/模型，并复用 PCM16 16kHz 语音输入路径。

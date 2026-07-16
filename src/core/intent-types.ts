@@ -11,6 +11,7 @@ export type IntentKind =
   | 'screen_summary'
   | 'screen_target_pointer'
   | 'camera_check_once'
+  | 'camera_visual_query'
   | 'voice_input_help'
   | 'settings_debug_help'
   | 'proactive_explain'

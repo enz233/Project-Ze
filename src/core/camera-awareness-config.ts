@@ -3,6 +3,11 @@ import * as path from 'path';
 import { app } from 'electron';
 import { CameraAwarenessConfig } from './camera-awareness-types';
 
+const LEGACY_FOREGROUND_FACE_MIN_HEIGHT_RATIO = 0.14;
+const LEGACY_FOREGROUND_FACE_MIN_AREA_RATIO = 0.012;
+const PREVIOUS_FOREGROUND_FACE_MIN_HEIGHT_RATIO = 0.07;
+const PREVIOUS_FOREGROUND_FACE_MIN_AREA_RATIO = 0.0025;
+
 export const DEFAULT_CAMERA_AWARENESS_CONFIG: CameraAwarenessConfig = {
   enabled: false,
   backgroundDetectionEnabled: false,
@@ -10,6 +15,9 @@ export const DEFAULT_CAMERA_AWARENESS_CONFIG: CameraAwarenessConfig = {
   detectionIntervalMs: 60 * 1000,
   absentAfterMs: 120 * 1000,
   minConfidence: 0.65,
+  foregroundFaceGateEnabled: true,
+  foregroundFaceMinHeightRatio: 0.05,
+  foregroundFaceMinAreaRatio: 0.0012,
   returnedReactionEnabled: true,
   debugPreviewEnabled: false,
 };
@@ -52,12 +60,32 @@ export class CameraAwarenessConfigManager {
     try {
       if (fs.existsSync(this.configPath)) {
         const raw = fs.readFileSync(this.configPath, 'utf-8');
-        return { ...DEFAULT_CAMERA_AWARENESS_CONFIG, ...this.normalize(JSON.parse(raw)) };
+        return { ...DEFAULT_CAMERA_AWARENESS_CONFIG, ...this.normalize(this.migrate(JSON.parse(raw))) };
       }
     } catch (error) {
       console.error('[CameraAwarenessConfig] 加载配置失败:', error);
     }
     return { ...DEFAULT_CAMERA_AWARENESS_CONFIG };
+  }
+
+  private migrate(partial: Partial<CameraAwarenessConfig>): Partial<CameraAwarenessConfig> {
+    const migrated = { ...partial };
+
+    // 旧默认阈值会把示例画面中最大的前景人脸拦掉；保留用户自定义值，只迁移旧默认值。
+    if (
+      migrated.foregroundFaceMinHeightRatio === LEGACY_FOREGROUND_FACE_MIN_HEIGHT_RATIO ||
+      migrated.foregroundFaceMinHeightRatio === PREVIOUS_FOREGROUND_FACE_MIN_HEIGHT_RATIO
+    ) {
+      delete migrated.foregroundFaceMinHeightRatio;
+    }
+    if (
+      migrated.foregroundFaceMinAreaRatio === LEGACY_FOREGROUND_FACE_MIN_AREA_RATIO ||
+      migrated.foregroundFaceMinAreaRatio === PREVIOUS_FOREGROUND_FACE_MIN_AREA_RATIO
+    ) {
+      delete migrated.foregroundFaceMinAreaRatio;
+    }
+
+    return migrated;
   }
 
   private normalize(partial: Partial<CameraAwarenessConfig>): Partial<CameraAwarenessConfig> {
@@ -71,6 +99,12 @@ export class CameraAwarenessConfigManager {
     }
     if (typeof normalized.minConfidence === 'number') {
       normalized.minConfidence = Math.max(0, Math.min(1, normalized.minConfidence));
+    }
+    if (typeof normalized.foregroundFaceMinHeightRatio === 'number') {
+      normalized.foregroundFaceMinHeightRatio = Math.max(0.02, Math.min(0.8, normalized.foregroundFaceMinHeightRatio));
+    }
+    if (typeof normalized.foregroundFaceMinAreaRatio === 'number') {
+      normalized.foregroundFaceMinAreaRatio = Math.max(0.001, Math.min(0.5, normalized.foregroundFaceMinAreaRatio));
     }
 
     return normalized;

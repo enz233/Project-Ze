@@ -121,6 +121,14 @@ contextBridge.exposeInMainWorld('companion', {
     detectOnce: (frame: any): Promise<any> => ipcRenderer.invoke('camera-awareness:detect-once', frame),
     processBackgroundFrame: (frame: any): Promise<any> => ipcRenderer.invoke('camera-awareness:process-background-frame', frame),
     getSnapshot: (): Promise<any> => ipcRenderer.invoke('camera-awareness:get-snapshot'),
+    onPromptCaptureRequest: (callback: (payload: any) => void) => {
+      ipcRenderer.on('camera-analysis:capture-request', (_event, payload) => callback(payload));
+    },
+    submitPromptFrame: (payload: any): Promise<any> => ipcRenderer.invoke('camera-awareness:analyze-prompt', payload),
+    onBackgroundCaptureRequest: (callback: (payload: any) => void) => {
+      ipcRenderer.on('camera-awareness:background-capture-request', (_event, payload) => callback(payload));
+    },
+    submitBackgroundFrame: (payload: any): Promise<any> => ipcRenderer.invoke('camera-awareness:submit-background-frame', payload),
   },
   intentRouter: {
     getDebugSnapshot: (): Promise<any> => ipcRenderer.invoke('intent-router:get-debug-snapshot'),

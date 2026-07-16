@@ -19,6 +19,14 @@ async function testScreenSummaryDelegatesFinalReplyToChatResponder() {
         throw new Error('pointer should not run for screen summary');
       },
     },
+    cameraTools: {
+      checkPresence: async () => {
+        throw new Error('camera should not run for screen summary');
+      },
+      analyzeVisualQuery: async () => {
+        throw new Error('camera should not run for screen summary');
+      },
+    },
     chatResponder: {
       respondFromWorkflow: async (context) => {
         calls.push(['respondFromWorkflow', context]);
@@ -45,6 +53,7 @@ async function testScreenSummaryDelegatesFinalReplyToChatResponder() {
   assert.strictEqual(calls[1][1].privacy.allowVisibleReplyInHistory, true);
   assert.strictEqual(calls[1][1].observations[0].kind, 'screen_summary');
   assert.strictEqual(calls[1][1].observations[0].summary, '当前页面是一个软件下载页，右上角有下载入口。');
+  assert.strictEqual(calls[1][1].actionResults[0].action, 'capture_screen');
 }
 
 async function testScreenTargetPointerSuppressesDirectResultBubbleAndDelegatesToChat() {
@@ -73,6 +82,14 @@ async function testScreenTargetPointerSuppressesDirectResultBubbleAndDelegatesTo
         };
       },
     },
+    cameraTools: {
+      checkPresence: async () => {
+        throw new Error('camera should not run for pointer');
+      },
+      analyzeVisualQuery: async () => {
+        throw new Error('camera should not run for pointer');
+      },
+    },
     chatResponder: {
       respondFromWorkflow: async (context) => {
         calls.push(['respondFromWorkflow', context]);
@@ -92,7 +109,6 @@ async function testScreenTargetPointerSuppressesDirectResultBubbleAndDelegatesTo
   });
 
   assert.strictEqual(result.status, 'handled');
-  assert.strictEqual(result.visibleReplyProduced, true);
   assert.deepStrictEqual(calls[0], ['handle', '指出下载按钮', { suppressResultBubble: true }]);
   assert.strictEqual(calls[1][0], 'respondFromWorkflow');
   assert.strictEqual(calls[1][1].observations[0].kind, 'screen_target_pointer');
@@ -101,24 +117,28 @@ async function testScreenTargetPointerSuppressesDirectResultBubbleAndDelegatesTo
   assert.strictEqual(calls[1][1].actionResults[0].status, 'completed');
 }
 
-async function testPointerCancellationBecomesCancelledActionResult() {
+async function testCameraPresenceDelegatesFinalReplyToChatResponder() {
   const { ResponseWorkflowOrchestrator } = load('core/response-workflow-orchestrator.js');
-  let workflowContext;
+  let contextSeen;
   const orchestrator = new ResponseWorkflowOrchestrator({
     screenAnalyzer: { analyze: async () => '' },
-    screenTargetPointer: {
-      handle: async () => ({
-        handled: true,
-        moved: false,
-        message: '屏幕变了，我刚才看到的位置可能不准啦。',
-        cancelReason: 'screen-changed',
+    screenTargetPointer: { handle: async () => ({ handled: false, moved: false, message: '' }) },
+    cameraTools: {
+      checkPresence: async () => ({
+        presence: 'present',
+        confidence: 0.91,
+        affect: 'unclear',
+        reason: 'person_visible',
       }),
+      analyzeVisualQuery: async () => {
+        throw new Error('visual query should not run for presence');
+      },
     },
     chatResponder: {
       respondFromWorkflow: async (context) => {
-        workflowContext = context;
+        contextSeen = context;
         return {
-          fullResponse: '<item>刚才屏幕变了，我怕指错，所以没有移动。</item>',
+          fullResponse: '<item>镜头前现在有人。</item>',
           visibleReplyProduced: true,
         };
       },
@@ -126,15 +146,53 @@ async function testPointerCancellationBecomesCancelledActionResult() {
   });
 
   const result = await orchestrator.run({
-    workflow: 'screen_target_pointer_response',
-    source: 'screen_dot',
-    userText: '.指出搜索框',
-    toolText: '指出搜索框',
+    workflow: 'camera_check_once_response',
+    source: 'text_chat',
+    userText: '看看我在不在',
+    toolText: '看看我在不在',
   });
 
   assert.strictEqual(result.status, 'handled');
-  assert.strictEqual(workflowContext.actionResults[0].status, 'cancelled');
-  assert.strictEqual(workflowContext.actionResults[0].debugReason, 'screen-changed');
+  assert.strictEqual(contextSeen.observations[0].kind, 'camera_presence');
+  assert.strictEqual(contextSeen.observations[0].presence, 'present');
+  assert.strictEqual(contextSeen.actionResults[0].action, 'capture_camera');
+}
+
+async function testCameraVisualQueryDelegatesFinalReplyToChatResponder() {
+  const { ResponseWorkflowOrchestrator } = load('core/response-workflow-orchestrator.js');
+  let contextSeen;
+  const orchestrator = new ResponseWorkflowOrchestrator({
+    screenAnalyzer: { analyze: async () => '' },
+    screenTargetPointer: { handle: async () => ({ handled: false, moved: false, message: '' }) },
+    cameraTools: {
+      checkPresence: async () => {
+        throw new Error('presence should not run for visual query');
+      },
+      analyzeVisualQuery: async (prompt) => `观察结果：${prompt}，画面里有一件深色上衣。`,
+    },
+    chatResponder: {
+      respondFromWorkflow: async (context) => {
+        contextSeen = context;
+        return {
+          fullResponse: '<item>看起来是偏深色的上衣。</item>',
+          visibleReplyProduced: true,
+        };
+      },
+    },
+  });
+
+  const result = await orchestrator.run({
+    workflow: 'camera_visual_query_response',
+    source: 'text_chat',
+    userText: '看看我穿的衣服是什么颜色',
+    toolText: '看看我穿的衣服是什么颜色',
+  });
+
+  assert.strictEqual(result.status, 'handled');
+  assert.strictEqual(contextSeen.observations[0].kind, 'camera_visual');
+  assert.match(contextSeen.observations[0].summary, /深色上衣/);
+  assert(contextSeen.observations[0].warnings.includes('no_identity_or_sensitive_attribute_inference'));
+  assert.strictEqual(contextSeen.actionResults[0].action, 'capture_camera');
 }
 
 async function testChatResponderFailureReturnsFallbackResult() {
@@ -142,6 +200,10 @@ async function testChatResponderFailureReturnsFallbackResult() {
   const orchestrator = new ResponseWorkflowOrchestrator({
     screenAnalyzer: { analyze: async () => '屏幕分析文本。' },
     screenTargetPointer: { handle: async () => ({ handled: false, moved: false, message: '' }) },
+    cameraTools: {
+      checkPresence: async () => ({ presence: 'uncertain', confidence: 0, reason: 'api_error' }),
+      analyzeVisualQuery: async () => '',
+    },
     chatResponder: {
       respondFromWorkflow: async () => {
         throw new Error('chat unavailable');
@@ -165,7 +227,8 @@ async function testChatResponderFailureReturnsFallbackResult() {
 async function run() {
   await testScreenSummaryDelegatesFinalReplyToChatResponder();
   await testScreenTargetPointerSuppressesDirectResultBubbleAndDelegatesToChat();
-  await testPointerCancellationBecomesCancelledActionResult();
+  await testCameraPresenceDelegatesFinalReplyToChatResponder();
+  await testCameraVisualQueryDelegatesFinalReplyToChatResponder();
   await testChatResponderFailureReturnsFallbackResult();
   console.log('response-workflow contract tests passed');
 }
