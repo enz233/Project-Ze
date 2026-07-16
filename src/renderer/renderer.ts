@@ -586,6 +586,9 @@
   async function startVoiceInput(source: 'button' | 'shortcut' = 'button'): Promise<void> {
     debugVoiceInput('start requested', { source: source, enabledCached: voiceInputEnabled, recording: voiceRecording });
     if (voiceRecording) return;
+    var startupStream: MediaStream | null = null;
+    var startupSessionId: string | null = null;
+    var startupIsQwen = false;
     try {
       // @ts-ignore
       var config = await window.companion.loadASRConfig();
@@ -604,12 +607,15 @@
       voiceAutoSend = !!config.autoSendFinalTranscript;
       voiceHoldToTalkShortcut = config.holdToTalkShortcut || 'Ctrl+Shift+Space';
       var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      startupStream = stream;
       var qwenVoiceInput = isQwenASRVoiceConfig(config);
+      startupIsQwen = qwenVoiceInput;
       var mimeType = qwenVoiceInput
         ? 'audio/pcm;rate=16000'
         : (MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm');
       // @ts-ignore
       var session = await window.companion.voiceInput.start({ source: source, mimeType: mimeType });
+      startupSessionId = session.sessionId;
       voiceSessionId = session.sessionId;
       voiceLastSessionId = session.sessionId;
       voiceChunkSequence = 0;
@@ -660,8 +666,26 @@
       setVoiceRecording(true);
       updateChatStatus({ phase: 'voice-recording', message: '正在录音，请说话…' });
     } catch (e) {
+      if (startupIsQwen) {
+        if (startupStream) {
+          startupStream.getTracks().forEach(function (track) { track.stop(); });
+        }
+        if (startupSessionId) {
+          try {
+            // @ts-ignore
+            await window.companion.voiceInput.cancel(startupSessionId);
+          } catch (cancelError) {
+            console.error('[VoiceInput] cancel failed startup session', cancelError);
+          }
+        }
+        if (voiceSessionId === startupSessionId) {
+          voiceSessionId = null;
+        }
+        voiceRecorder = null;
+      }
       setVoiceRecording(false);
-      updateChatStatus({ phase: 'voice-error', message: '语音输入启动失败' });
+      var message = startupIsQwen && e && (e as any).message ? '语音输入启动失败：' + (e as any).message : '语音输入启动失败';
+      updateChatStatus({ phase: 'voice-error', message: message });
       console.error('[VoiceInput] start failed', e);
     }
   }
