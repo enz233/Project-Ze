@@ -1243,10 +1243,25 @@
       return missing;
     }
 
+    function hasQwenRealtimeBaseUrlMismatch(config) {
+      return config.provider !== 'qwen-asr-realtime'
+        && /^wss:\/\/[^/]*\.maas\.aliyuncs\.com/i.test(config.baseUrl || '');
+    }
+
+    function getQwenRealtimeBaseUrlMismatchMessage() {
+      return '当前 Base URL 是 Qwen-ASR WebSocket 地址，但供应商预设仍是 OpenAI-compatible。请选择“Qwen-ASR 实时识别”预设；fetch failed 通常表示当前 OpenAI-compatible 引擎正在请求 wss WebSocket 地址。';
+    }
+
     function validateASRRecognitionTestConfig(config) {
       if (!config.enabled) {
         setASRValidationMessage('语音输入未开启：请先勾选启用语音输入并保存配置');
         showToast('请先启用语音输入并保存配置', 'error');
+        return false;
+      }
+      if (hasQwenRealtimeBaseUrlMismatch(config)) {
+        const mismatchMessage = getQwenRealtimeBaseUrlMismatchMessage();
+        setASRValidationMessage(mismatchMessage);
+        showToast(mismatchMessage, 'error');
         return false;
       }
       const missing = getMissingASREnabledFields(config);
@@ -1884,6 +1899,17 @@
       if (!Number.isFinite(config.cache.maxSessionBytes) || config.cache.maxSessionBytes <= 0) {
         debugASRSettings('save blocked: invalid max bytes', { maxSessionBytes: config.cache.maxSessionBytes });
         showToast('单次录音最大字节必须是大于 0 的数字', 'error');
+        return;
+      }
+      if (hasQwenRealtimeBaseUrlMismatch(config)) {
+        var mismatchMessage = getQwenRealtimeBaseUrlMismatchMessage();
+        debugASRSettings('save blocked: qwen websocket base url used with openai-compatible provider', {
+          providerPreset: config.providerPreset,
+          provider: config.provider,
+          baseUrl: config.baseUrl
+        });
+        setASRValidationMessage(mismatchMessage);
+        showToast(mismatchMessage, 'error');
         return;
       }
       if (config.enabled) {
