@@ -56,6 +56,14 @@ function testAsrProviderPresets() {
   assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].streamingMode, 'realtime');
   assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].model, '');
 
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].label, 'FunASR 本地识别');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].provider, 'funasr-local-runtime');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].baseUrl, 'ws://127.0.0.1:10096');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].streamingMode, 'realtime');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].language, 'zh');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].model, '');
+  assert.match(ASR_PROVIDER_PRESETS['funasr-local'].note, /不会自动安装 FunASR/);
+
   assert.strictEqual(ASR_PROVIDER_PRESETS['custom-openai-compatible'].provider, 'openai-compatible');
   assert.strictEqual(ASR_PROVIDER_PRESETS['custom-openai-compatible'].baseUrl, '');
 
@@ -84,6 +92,13 @@ function testAsrProviderPresets() {
 
   const engine = createASREngine(applied);
   assert.strictEqual(engine.provider, 'openai-compatible');
+
+  const funasrApplied = applyASRProviderPreset(config, 'funasr-local');
+  assert.strictEqual(funasrApplied.providerPreset, 'funasr-local');
+  assert.strictEqual(funasrApplied.provider, 'funasr-local-runtime');
+  assert.strictEqual(funasrApplied.baseUrl, 'ws://127.0.0.1:10096');
+  assert.strictEqual(funasrApplied.model, '');
+  assert.strictEqual(funasrApplied.streamingMode, 'realtime');
 }
 
 function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
@@ -244,6 +259,21 @@ function testAsrAdvancedSettingsNormalization() {
   assert.strictEqual(legacyOpenAiRealtimeOnly.providerPreset, 'openai');
   assert.strictEqual(legacyOpenAiRealtimeOnly.streamingMode, 'chunked-fallback');
   assert.deepStrictEqual(legacyOpenAiRealtimeOnly.cache, DEFAULT_ASR_CONFIG.cache);
+
+  const funasrNormal = normalizeASRConfigForLoad({
+    enabled: true,
+    advancedSettingsEnabled: false,
+    providerPreset: 'funasr-local',
+    provider: 'funasr-local-runtime',
+    baseUrl: 'ws://127.0.0.1:10096',
+    apiKey: '',
+    model: '',
+    streamingMode: 'realtime',
+  });
+  assert.strictEqual(funasrNormal.providerPreset, 'funasr-local');
+  assert.strictEqual(funasrNormal.provider, 'funasr-local-runtime');
+  assert.strictEqual(funasrNormal.streamingMode, 'realtime');
+  assert.strictEqual(funasrNormal.baseUrl, 'ws://127.0.0.1:10096');
 }
 
 function testAsrPresetKeyIsPersistedInsteadOfDefinitionId() {
@@ -333,7 +363,10 @@ function testRendererQwenMainVoiceUsesPCM() {
 function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   const { ASR_PROVIDER_PRESETS } = load('core/asr-config.js');
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf-8');
-  for (const [id, preset] of Object.entries(ASR_PROVIDER_PRESETS)) {
+  const settingsPresetIds = Object.keys(ASR_PROVIDER_PRESETS)
+    .filter((id) => id !== 'funasr-local');
+  for (const id of settingsPresetIds) {
+    const preset = ASR_PROVIDER_PRESETS[id];
     assert.ok(html.includes(`<option value="${id}"`), `settings.html missing ASR preset option ${id}`);
     assert.ok(html.includes(`'${id}': {`), `settings.html missing ASR preset object ${id}`);
     for (const [field, value] of Object.entries({
