@@ -386,7 +386,7 @@ function testRendererQwenMainVoiceUsesPCM() {
   const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
   assert.match(renderer, /function isQwenASRVoiceConfig\(config:\s*any\):\s*boolean\s*\{/);
   assert.match(renderer, /function createQwenPCMVoiceRecorder\(stream:\s*MediaStream,\s*sessionId:\s*string\):[\s\S]*?\{/);
-  assert.match(renderer, /if \(isQwenASRVoiceConfig\(config\)\)/);
+  assert.match(renderer, /if \(isLocalRealtimePCMVoiceConfig\(config\)\)/);
   assert.match(renderer, /mimeType: 'audio\/pcm;rate=16000'/);
   assert.match(renderer, /语音 PCM 分片发送失败/);
   assert.match(renderer, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
@@ -395,6 +395,16 @@ function testRendererQwenMainVoiceUsesPCM() {
   assert.match(renderer, /voiceLastSessionId === startupSessionId/);
   assert.match(renderer, /voiceRecorder = null/);
   assert.match(renderer, /语音输入启动失败：/);
+}
+
+function testRendererFunASRMainVoiceUsesPCM() {
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
+  assert.match(renderer, /function isLocalRealtimePCMVoiceConfig\(config: any\): boolean/);
+  assert.match(renderer, /isQwenASRVoiceConfig\(config\) \|\| config\.provider === 'funasr-local-runtime'/);
+  assert.match(renderer, /var localRealtimePCMVoiceInput = isLocalRealtimePCMVoiceConfig\(config\)/);
+  assert.match(renderer, /if \(isLocalRealtimePCMVoiceConfig\(config\)\)/);
+  assert.match(renderer, /mimeType: 'audio\/pcm;rate=16000'/);
+  assert.match(renderer, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
 }
 
 function testSettingsAsrPresetContractMatchesCoreDefinitions() {
@@ -1351,6 +1361,7 @@ async function run() {
   testSettingsFunASRRecognitionTestUsesPCM();
   testSettingsAsrPresetContractMatchesCoreDefinitions();
   testRendererQwenMainVoiceUsesPCM();
+  testRendererFunASRMainVoiceUsesPCM();
   testAsrEngineFactoryAndParser();
   testQwenAsrRealtimeHelpers();
   testFunASRLocalEngineHelpers();

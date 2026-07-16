@@ -491,6 +491,10 @@
     return config && config.provider === 'qwen-asr-realtime';
   }
 
+  function isLocalRealtimePCMVoiceConfig(config: any): boolean {
+    return isQwenASRVoiceConfig(config) || config.provider === 'funasr-local-runtime';
+  }
+
   function resampleVoiceFloat32ToTargetRate(samples: Float32Array, sourceRate: number, targetRate: number): Float32Array {
     if (!samples || sourceRate === targetRate) return samples || new Float32Array(0);
     var ratio = sourceRate / targetRate;
@@ -608,9 +612,9 @@
       voiceHoldToTalkShortcut = config.holdToTalkShortcut || 'Ctrl+Shift+Space';
       var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       startupStream = stream;
-      var qwenVoiceInput = isQwenASRVoiceConfig(config);
-      startupIsQwen = qwenVoiceInput;
-      var mimeType = qwenVoiceInput
+      var localRealtimePCMVoiceInput = isLocalRealtimePCMVoiceConfig(config);
+      startupIsQwen = isQwenASRVoiceConfig(config);
+      var mimeType = localRealtimePCMVoiceInput
         ? 'audio/pcm;rate=16000'
         : (MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm');
       // @ts-ignore
@@ -623,7 +627,7 @@
       voicePartialBase = chatInputEl.value;
       voiceChunkStartedAt = Date.now();
 
-      if (isQwenASRVoiceConfig(config)) {
+      if (isLocalRealtimePCMVoiceConfig(config)) {
         voiceRecorder = createQwenPCMVoiceRecorder(stream, session.sessionId) as any;
         var qwenRecorder = voiceRecorder as any;
         qwenRecorder.onstop = function () {
