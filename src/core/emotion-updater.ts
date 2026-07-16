@@ -94,9 +94,9 @@ export class EmotionUpdater {
   onDragging(durationSeconds: number): void {
     // dragged 保持最高
     this.emotion.set('dragged', 100);
-    // 长时间拖拽增加 tried
+    // 长时间拖拽增加 tried，但保持较慢积累，避免拖拽后过快疲惫
     if (durationSeconds > 5) {
-      this.emotion.increase('tried', 0.5);
+      this.emotion.increase('tried', 0.25);
     }
   }
 
