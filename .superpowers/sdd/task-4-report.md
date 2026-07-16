@@ -43,3 +43,9 @@ Completed.
 ## Concerns
 - npm emits existing warnings about unknown `electron_mirror` / `electron-mirror` config; tests pass and this appears unrelated to Task 4.
 - `git status` also showed `.superpowers/sdd/progress.md` modified before the report commit step. I did not intentionally modify it for Task 4 and will exclude it from the Task 4 commit unless required by the caller.
+
+## Review Correction
+- Fixed review finding in `C:/Users/25623/Desktop/AItest/AI_pet/code/.claude/worktrees/response-workflow-orchestrator/src/core/chat-manager.ts`: handled allowed workflow screen intents (`screen_summary` / `screen_target_pointer`) no longer perform the post-executor `memory.addMessage('user', text)` or `memory.recordInteraction(...)` in `tryHandleIntent`, because `respondFromWorkflow(...)` already records the visible user request, assistant reply, and workflow interaction.
+- Non-workflow, denied, skipped, failed, and fallback/error intent outcomes still use the existing post-executor history and interaction recording path.
+- Prior report metadata was stale: line 19 still said the Task 4 commit was pending even though `03bd657 feat: route screen responses through workflow` already existed before this correction.
+- Correction commit: this amended `fix: avoid duplicate screen workflow history` commit.

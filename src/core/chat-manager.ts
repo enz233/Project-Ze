@@ -493,19 +493,21 @@ export class ChatManager {
     this.intentRouter.recordExecution(result);
 
     const assistantMessage = this.getIntentAssistantMessage(routed, result);
-    const shouldSuppressAssistantMessage =
+    const isHandledAllowedScreenWorkflowIntent =
       (routed.decision.intent === 'screen_target_pointer' || routed.decision.intent === 'screen_summary') &&
       routed.permission.status === 'allowed' &&
       result.status === 'handled';
-    if (assistantMessage && !shouldSuppressAssistantMessage) {
+    if (assistantMessage && !isHandledAllowedScreenWorkflowIntent) {
       this.sendBubble(assistantMessage);
     }
 
-    this.memory.addMessage('user', text);
-    if (assistantMessage) {
-      this.memory.addMessage('assistant', assistantMessage);
+    if (!isHandledAllowedScreenWorkflowIntent) {
+      this.memory.addMessage('user', text);
+      if (assistantMessage) {
+        this.memory.addMessage('assistant', assistantMessage);
+      }
+      this.memory.recordInteraction(this.getInteractionTypeForIntent(routed.decision.intent), text, this.stateManager.getCurrentState());
     }
-    this.memory.recordInteraction(this.getInteractionTypeForIntent(routed.decision.intent), text, this.stateManager.getCurrentState());
 
     return true;
   }
