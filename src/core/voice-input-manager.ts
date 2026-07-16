@@ -91,6 +91,7 @@ export class VoiceInputManager {
       if (event.type === 'partial') this.lastPartial = event.text;
       if (event.type === 'final') finalText = event.text || this.lastPartial;
       if (event.type === 'error') {
+        if (event.recoverable) continue;
         this.setError(event.message);
         return;
       }

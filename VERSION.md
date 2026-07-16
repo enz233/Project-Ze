@@ -6,6 +6,7 @@
 
 - Qwen-ASR 结束态误报修复：当服务端已返回非空 partial 文本、但结束时只返回 `session.finished` 或空 completed 时，将最后一段 partial 提升为 final，避免输入框已有正确文字后又显示红色“未返回识别文本”误报。
 - Operation Guide 融合暂停标注：已提交 Project-Chen Operation Guide 的领域层、配置、planner/fallback、progress parser、manager 状态机和契约测试；融合暂停在计划 Task 2 后，尚未接入 Intent Router / IntentExecutor、main IPC、preload、settings、renderer guide panel 或最终用户文档。恢复时从 `docs/superpowers/plans/2026-07-16-operation-guide-fusion.md` 的 Task 3 继续。
+- ASR FunASR 本地识别：新增 `funasr-local-runtime` provider，默认连接 `ws://127.0.0.1:10096` 的用户自启动 FunASR runtime WebSocket 服务；设置页明确说明 Project-Ze 不自动安装 FunASR、下载模型或启动 Docker/Python 进程，FunASR 不要求 API Key/模型，并复用 PCM16 16kHz 语音输入路径。
 
 ## v0.3.2 (2026-07-16)
 - 语音输入触发修复：聊天输入框显示期间保持主窗口可交互，并让输入框区域参与 mouse enter/leave 穿透控制，避免麦克风按钮和页面级长按快捷键因窗口 click-through 看起来无响应。

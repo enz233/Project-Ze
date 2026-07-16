@@ -1,7 +1,7 @@
 import { JsonConfigStore } from './json-config-store';
 
-export type ASRProvider = 'openai-compatible' | 'qwen-asr-realtime';
-export type ASRProviderPreset = 'openai' | 'aliyun-bailian' | 'qwen-asr' | 'custom-openai-compatible';
+export type ASRProvider = 'openai-compatible' | 'qwen-asr-realtime' | 'funasr-local-runtime';
+export type ASRProviderPreset = 'openai' | 'aliyun-bailian' | 'qwen-asr' | 'funasr-local' | 'custom-openai-compatible';
 export type ASRStreamingMode = 'realtime' | 'chunked-fallback';
 
 export interface ASRCacheConfig {
@@ -79,6 +79,18 @@ export const ASR_PROVIDER_PRESETS: Record<ASRProviderPreset, ASRProviderPresetDe
     language: 'zh',
     note: 'Qwen-ASR 实时语音识别使用专用 WebSocket 协议；请填写 Workspace ID、API Key 和模型，运行时不会请求 OpenAI /audio/transcriptions。',
   },
+  'funasr-local': {
+    id: 'funasr-local',
+    label: 'FunASR 本地识别',
+    provider: 'funasr-local-runtime',
+    baseUrl: 'ws://127.0.0.1:10096',
+    model: '',
+    realtimePath: '',
+    transcriptionPath: '',
+    streamingMode: 'realtime',
+    language: 'zh',
+    note: 'FunASR 本地识别连接用户已启动的本机 runtime WebSocket 服务；Project-Ze 不会自动安装 FunASR、下载模型或启动 Docker/Python 进程。',
+  },
   'custom-openai-compatible': {
     id: 'custom-openai-compatible',
     label: '自定义 OpenAI-compatible',
@@ -96,7 +108,9 @@ export const ASR_PROVIDER_PRESETS: Record<ASRProviderPreset, ASRProviderPresetDe
 const DEFAULT_ASR_PROVIDER_PRESET: ASRProviderPreset = 'openai';
 
 function isASRProvider(value: unknown): value is ASRProvider {
-  return value === 'openai-compatible' || value === 'qwen-asr-realtime';
+  return value === 'openai-compatible'
+    || value === 'qwen-asr-realtime'
+    || value === 'funasr-local-runtime';
 }
 
 function isASRStreamingMode(value: unknown): value is ASRStreamingMode {
@@ -136,6 +150,7 @@ export function inferASRProviderPreset(config: ASRConfig): ASRProviderPreset {
   if (matchesPresetManagedFields(config, 'openai')) return 'openai';
   if (matchesPresetManagedFields(config, 'aliyun-bailian')) return 'aliyun-bailian';
   if (config.provider === 'qwen-asr-realtime') return 'qwen-asr';
+  if (config.provider === 'funasr-local-runtime') return 'funasr-local';
   return 'custom-openai-compatible';
 }
 function hasDefaultCache(cache: ASRCacheConfig): boolean {
@@ -168,7 +183,9 @@ function applyNormalModeAdvancedDefaults(config: ASRConfig): ASRConfig {
     baseUrl: config.baseUrl || preset.baseUrl || DEFAULT_ASR_CONFIG.baseUrl,
     realtimePath: preset.realtimePath,
     transcriptionPath: preset.transcriptionPath,
-    streamingMode: providerPreset === 'qwen-asr' ? preset.streamingMode : DEFAULT_ASR_CONFIG.streamingMode,
+    streamingMode: providerPreset === 'qwen-asr' || providerPreset === 'funasr-local'
+      ? preset.streamingMode
+      : DEFAULT_ASR_CONFIG.streamingMode,
     cache: { ...DEFAULT_ASR_CONFIG.cache },
   };
 }
@@ -229,6 +246,7 @@ export function applyASRProviderPreset(config: ASRConfig, preset: ASRProviderPre
     transcriptionPath: definition.transcriptionPath,
     streamingMode: definition.streamingMode,
     language: definition.language,
+    apiKey: definition.provider === 'funasr-local-runtime' ? '' : config.apiKey,
   };
 }
 

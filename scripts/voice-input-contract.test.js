@@ -56,6 +56,14 @@ function testAsrProviderPresets() {
   assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].streamingMode, 'realtime');
   assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].model, '');
 
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].label, 'FunASR 本地识别');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].provider, 'funasr-local-runtime');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].baseUrl, 'ws://127.0.0.1:10096');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].streamingMode, 'realtime');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].language, 'zh');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['funasr-local'].model, '');
+  assert.match(ASR_PROVIDER_PRESETS['funasr-local'].note, /不会自动安装 FunASR/);
+
   assert.strictEqual(ASR_PROVIDER_PRESETS['custom-openai-compatible'].provider, 'openai-compatible');
   assert.strictEqual(ASR_PROVIDER_PRESETS['custom-openai-compatible'].baseUrl, '');
 
@@ -84,6 +92,18 @@ function testAsrProviderPresets() {
 
   const engine = createASREngine(applied);
   assert.strictEqual(engine.provider, 'openai-compatible');
+
+  const funasrApplied = applyASRProviderPreset(config, 'funasr-local');
+  assert.strictEqual(funasrApplied.providerPreset, 'funasr-local');
+  assert.strictEqual(funasrApplied.provider, 'funasr-local-runtime');
+  assert.strictEqual(funasrApplied.baseUrl, 'ws://127.0.0.1:10096');
+  assert.strictEqual(funasrApplied.model, '');
+  assert.strictEqual(funasrApplied.apiKey, '');
+  assert.strictEqual(funasrApplied.streamingMode, 'realtime');
+
+  const funasrEngine = createASREngine(funasrApplied);
+  assert.strictEqual(funasrEngine.provider, 'funasr-local-runtime');
+  assert.strictEqual(funasrEngine.supportsStreaming(funasrApplied), true);
 }
 
 function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
@@ -244,6 +264,21 @@ function testAsrAdvancedSettingsNormalization() {
   assert.strictEqual(legacyOpenAiRealtimeOnly.providerPreset, 'openai');
   assert.strictEqual(legacyOpenAiRealtimeOnly.streamingMode, 'chunked-fallback');
   assert.deepStrictEqual(legacyOpenAiRealtimeOnly.cache, DEFAULT_ASR_CONFIG.cache);
+
+  const funasrNormal = normalizeASRConfigForLoad({
+    enabled: true,
+    advancedSettingsEnabled: false,
+    providerPreset: 'funasr-local',
+    provider: 'funasr-local-runtime',
+    baseUrl: 'ws://127.0.0.1:10096',
+    apiKey: '',
+    model: '',
+    streamingMode: 'realtime',
+  });
+  assert.strictEqual(funasrNormal.providerPreset, 'funasr-local');
+  assert.strictEqual(funasrNormal.provider, 'funasr-local-runtime');
+  assert.strictEqual(funasrNormal.streamingMode, 'realtime');
+  assert.strictEqual(funasrNormal.baseUrl, 'ws://127.0.0.1:10096');
 }
 
 function testAsrPresetKeyIsPersistedInsteadOfDefinitionId() {
@@ -315,14 +350,56 @@ function testJsonConfigStoreUpdateNormalizesMergedValue() {
   }
 }
 
+function testASRConnectionTestIPCContract() {
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'preload.ts'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.ts'), 'utf8');
+  assert.match(preload, /testASRConnection: \(config: any\): Promise<any> =>/);
+  assert.match(preload, /ipcRenderer\.invoke\('test-asr-connection', config\)/);
+  assert.match(main, /ipcMain\.handle\('test-asr-connection'/);
+  assert.match(main, /testFunASRLocalConnection/);
+}
+
+function testSettingsFunASRLocalProviderContract() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf8');
+  assert.match(html, /<option value="funasr-local">FunASR 本地识别<\/option>/);
+  assert.match(html, /'funasr-local': \{/);
+  assert.match(html, /provider: 'funasr-local-runtime'/);
+  assert.match(html, /baseUrl: 'ws:\/\/127\.0\.0\.1:10096'/);
+  assert.match(html, /Project-Ze 第一版只负责连接该服务/);
+  assert.match(html, /不会自动安装 FunASR、下载模型或启动 Docker\/Python 进程/);
+  assert.match(html, /远程 FunASR 地址是高级用法/);
+  assert.match(html, /function isFunASRConfig\(config\)/);
+  assert.match(html, /FunASR Base URL 必须以 ws:\/\/ 或 wss:\/\/ 开头/);
+  assert.match(html, /id="asrConnectionTestBtn"/);
+  assert.match(html, /setASRValidationMessage\('当前 ASR provider 暂不支持独立连接测试，请使用“测试语音识别 10 秒”。'\)/);
+  assert.match(html, /window\.companion\.testASRConnection\(config\)/);
+}
+
+function testSettingsFunASRRecognitionTestUsesPCM() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf8');
+  assert.match(html, /function isLocalRealtimePCMRecognitionConfig\(config\)/);
+  assert.match(html, /isQwenASRRecognitionConfig\(config\) \|\| isFunASRConfig\(config\)/);
+  assert.match(html, /document\.getElementById\('asrApiKey'\)\.value = preset\.provider === 'funasr-local-runtime' \? '' : \(config\.apiKey \?\? ''\)/);
+  assert.match(html, /apiKey: preset\.provider === 'funasr-local-runtime' \? '' : document\.getElementById\('asrApiKey'\)\.value/);
+  assert.match(html, /model: preset\.provider === 'funasr-local-runtime' \? '' : document\.getElementById\('asrModel'\)\.value\.trim\(\)/);
+  assert.match(html, /if \(typeof MediaRecorder === 'undefined' && !isLocalRealtimePCMRecognitionConfig\(config\)\)/);
+  assert.match(html, /audio\/pcm;rate=16000/);
+  assert.match(html, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
+}
+
 function testRendererQwenMainVoiceUsesPCM() {
   const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
   assert.match(renderer, /function isQwenASRVoiceConfig\(config:\s*any\):\s*boolean\s*\{/);
   assert.match(renderer, /function createQwenPCMVoiceRecorder\(stream:\s*MediaStream,\s*sessionId:\s*string\):[\s\S]*?\{/);
-  assert.match(renderer, /if \(isQwenASRVoiceConfig\(config\)\)/);
+  assert.match(renderer, /if \(isLocalRealtimePCMVoiceConfig\(config\)\)/);
   assert.match(renderer, /mimeType: 'audio\/pcm;rate=16000'/);
   assert.match(renderer, /语音 PCM 分片发送失败/);
   assert.match(renderer, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
+  assert.match(renderer, /var startupUsesLocalRealtimePCM = false/);
+  assert.match(renderer, /startupUsesLocalRealtimePCM = localRealtimePCMVoiceInput/);
+  assert.match(renderer, /if \(startupUsesLocalRealtimePCM\) \{/);
+  assert.doesNotMatch(renderer, /startupIsQwen/);
+  assert.match(renderer, /var message = e && \(e as any\)\.message \? '语音输入启动失败：' \+ \(e as any\)\.message : '语音输入启动失败'/);
   assert.match(renderer, /startupStream\.getTracks\(\)\.forEach/);
   assert.match(renderer, /window\.companion\.voiceInput\.cancel\(startupSessionId\)/);
   assert.match(renderer, /voiceLastSessionId === startupSessionId/);
@@ -342,10 +419,40 @@ function testRendererVoiceInputKeepsChatAreaInteractive() {
   assert.match(renderer, /if \(!chatInputWrapEl\.classList\.contains\('hidden'\)\) return/);
 }
 
+function testRendererFunASRMainVoiceUsesPCM() {
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
+  assert.match(renderer, /function isLocalRealtimePCMVoiceConfig\(config: any\): boolean/);
+  assert.match(renderer, /isQwenASRVoiceConfig\(config\) \|\| config\.provider === 'funasr-local-runtime'/);
+  assert.match(renderer, /var localRealtimePCMVoiceInput = isLocalRealtimePCMVoiceConfig\(config\)/);
+  assert.match(renderer, /if \(isLocalRealtimePCMVoiceConfig\(config\)\)/);
+  assert.match(renderer, /mimeType: 'audio\/pcm;rate=16000'/);
+  assert.match(renderer, /MediaRecorder\.isTypeSupported\('audio\/webm;codecs=opus'\)/);
+}
+
+function testRendererRecoverableASRErrorIsNonTerminal() {
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.ts'), 'utf8');
+  assert.match(
+    renderer,
+    /if \(payload\.type === 'error'\) \{[\s\S]*?if \(payload\.recoverable === true\) \{[\s\S]*?phase: 'voice-warning'[\s\S]*?return;[\s\S]*?phase: 'voice-error'[\s\S]*?voiceLastSessionId = null;[\s\S]*?\}/,
+    'renderer recoverable transcript errors must warn and return before clearing voiceLastSessionId'
+  );
+}
+
+function testSettingsRecoverableASRErrorIsNonTerminal() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf8');
+  assert.match(
+    html,
+    /else if \(payload\.type === 'error'\) \{[\s\S]*?if \(payload\.recoverable === true\) \{[\s\S]*?正在继续识别[\s\S]*?return;[\s\S]*?setASRRecognitionProgress\(100, '识别失败'\);[\s\S]*?asrRecognitionSessionId = null;[\s\S]*?\}/,
+    'settings recoverable transcript errors must return before failing the recognition test and clearing asrRecognitionSessionId'
+  );
+}
+
 function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   const { ASR_PROVIDER_PRESETS } = load('core/asr-config.js');
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf-8');
-  for (const [id, preset] of Object.entries(ASR_PROVIDER_PRESETS)) {
+  const settingsPresetIds = Object.keys(ASR_PROVIDER_PRESETS);
+  for (const id of settingsPresetIds) {
+    const preset = ASR_PROVIDER_PRESETS[id];
     assert.ok(html.includes(`<option value="${id}"`), `settings.html missing ASR preset option ${id}`);
     assert.ok(html.includes(`'${id}': {`), `settings.html missing ASR preset object ${id}`);
     for (const [field, value] of Object.entries({
@@ -546,6 +653,532 @@ function testQwenAsrRealtimeHelpers() {
       recoverable: false,
     }
   );
+}
+
+function testFunASRLocalEngineHelpers() {
+  const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+  const {
+    createFunASRLocalUrl,
+    createFunASRStartEvent,
+    createFunASREndEvent,
+    normalizeFunASREvent,
+    FunASRLocalEngine,
+  } = load('core/asr-funasr-local.js');
+
+  const config = {
+    ...DEFAULT_ASR_CONFIG,
+    provider: 'funasr-local-runtime',
+    baseUrl: 'ws://127.0.0.1:10096',
+    language: 'zh',
+  };
+
+  assert.strictEqual(createFunASRLocalUrl(config), 'ws://127.0.0.1:10096/');
+  assert.throws(
+    () => createFunASRLocalUrl({ ...config, baseUrl: 'http://127.0.0.1:10096' }),
+    /FunASR Base URL 必须以 ws:\/\/ 或 wss:\/\/ 开头/
+  );
+
+  assert.deepStrictEqual(createFunASRStartEvent(config), {
+    mode: '2pass',
+    chunk_size: [5, 10, 5],
+    chunk_interval: 10,
+    wav_name: 'project-ze',
+    is_speaking: true,
+    hotwords: '',
+    itn: true,
+  });
+  assert.deepStrictEqual(createFunASREndEvent(), { is_speaking: false });
+
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ text: '你好', mode: 'online' }, 's1'),
+    { type: 'partial', text: '你好', sessionId: 's1' }
+  );
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ text: '你好世界', mode: '2pass-offline' }, 's1'),
+    { type: 'final', text: '你好世界', sessionId: 's1' }
+  );
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ is_final: true, text: '结束' }, 's1'),
+    { type: 'final', text: '结束', sessionId: 's1' }
+  );
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ text: '带消息文本', message: 'server info', mode: '2pass-offline' }, 's1'),
+    { type: 'final', text: '带消息文本', sessionId: 's1' }
+  );
+  assert.deepStrictEqual(
+    normalizeFunASREvent({ error: 'bad audio' }, 's1'),
+    { type: 'error', message: 'bad audio', sessionId: 's1', recoverable: false }
+  );
+  assert.strictEqual(normalizeFunASREvent({ text: '' }, 's1'), null);
+
+  const engine = new FunASRLocalEngine();
+  assert.strictEqual(engine.provider, 'funasr-local-runtime');
+  assert.strictEqual(engine.supportsStreaming(config), true);
+}
+
+async function collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, options = {}) {
+  const funasrModulePath = path.join(__dirname, '..', 'dist', 'core', 'asr-funasr-local.js');
+  const wsModulePath = require.resolve('ws');
+  const originalWsCache = require.cache[wsModulePath];
+  const originalDateNow = Date.now;
+  delete require.cache[funasrModulePath];
+  require.cache[wsModulePath] = {
+    id: wsModulePath,
+    filename: wsModulePath,
+    loaded: true,
+    exports: FakeFunASRWebSocket,
+  };
+
+  if (options.dateNow) {
+    Date.now = options.dateNow;
+  }
+
+  try {
+    const { FunASRLocalEngine } = require(funasrModulePath);
+    const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+    const chunks = options.chunks || (async function* defaultChunks() {
+      yield { sessionId: 's1', sequence: 1, mimeType: 'audio/pcm;rate=16000', base64: 'AAAA', capturedAt: originalDateNow() };
+    });
+
+    const engine = new FunASRLocalEngine();
+    const events = [];
+    for await (const event of engine.stream({
+      sessionId: 's1',
+      config: {
+        ...DEFAULT_ASR_CONFIG,
+        provider: 'funasr-local-runtime',
+        providerPreset: 'funasr-local',
+        baseUrl: 'ws://127.0.0.1:10096',
+        streamingMode: 'realtime',
+      },
+      chunks: chunks(),
+      signal: options.signal,
+    })) {
+      events.push(event);
+    }
+    return events;
+  } finally {
+    Date.now = originalDateNow;
+    delete require.cache[funasrModulePath];
+    if (originalWsCache) {
+      require.cache[wsModulePath] = originalWsCache;
+    } else {
+      delete require.cache[wsModulePath];
+    }
+  }
+}
+
+async function testFunASRLocalStreamClosesOnOpenTimeout() {
+  const sockets = [];
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.sent = [];
+      this.closed = false;
+      sockets.push(this);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      this.sent.push(payload);
+    }
+
+    close() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    terminate() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  let now = 1_000;
+  const events = await collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, {
+    dateNow: () => {
+      now += 10_000;
+      return now;
+    },
+    chunks: async function* noChunks() {},
+  });
+  assert.deepStrictEqual(events, [{
+    type: 'error',
+    message: 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。',
+    sessionId: 's1',
+    recoverable: false,
+  }]);
+  assert.strictEqual(sockets.length, 1);
+  assert.strictEqual(sockets[0].closed, true);
+}
+
+async function testFunASRLocalStreamAbortBeforeOpenClosesSocket() {
+  const sockets = [];
+  const controller = new AbortController();
+  controller.abort();
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.sent = [];
+      this.closed = false;
+      sockets.push(this);
+      setTimeout(() => this.emit('open'), 10);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      this.sent.push(payload);
+    }
+
+    close() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const events = await collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, {
+    signal: controller.signal,
+    chunks: async function* noChunks() {},
+  });
+  assert.deepStrictEqual(events, []);
+  assert.strictEqual(sockets.length, 1);
+  assert.strictEqual(sockets[0].closed, true);
+  assert.deepStrictEqual(sockets[0].sent, []);
+}
+
+async function testFunASRLocalStreamAbortAfterOpenClosesSocketWithoutEnd() {
+  const sockets = [];
+  const controller = new AbortController();
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.sent = [];
+      this.closed = false;
+      sockets.push(this);
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      this.sent.push(payload);
+    }
+
+    close() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const events = await collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, {
+    signal: controller.signal,
+    chunks: async function* abortingChunks() {
+      yield { sessionId: 's1', sequence: 1, mimeType: 'audio/pcm;rate=16000', base64: 'AAAA', capturedAt: Date.now() };
+      controller.abort();
+      yield { sessionId: 's1', sequence: 2, mimeType: 'audio/pcm;rate=16000', base64: 'BBBB', capturedAt: Date.now() };
+    },
+  });
+  assert.deepStrictEqual(events, []);
+  assert.strictEqual(sockets.length, 1);
+  assert.strictEqual(sockets[0].closed, true);
+  assert.strictEqual(sockets[0].sent.length, 2);
+  assert.deepStrictEqual(JSON.parse(sockets[0].sent[0]), {
+    mode: '2pass',
+    chunk_size: [5, 10, 5],
+    chunk_interval: 10,
+    wav_name: 'project-ze',
+    is_speaking: true,
+    hotwords: '',
+    itn: true,
+  });
+  assert.ok(Buffer.isBuffer(sockets[0].sent[1]));
+}
+
+async function testFunASRLocalStreamYieldsStartSendFailurePromptly() {
+  const sockets = [];
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.sent = [];
+      this.closed = false;
+      sockets.push(this);
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      if (typeof payload === 'string') throw new Error('start send failed');
+      this.sent.push(payload);
+    }
+
+    close() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const eventsPromise = collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, {
+    chunks: async function* liveMicrophoneChunks() {
+      await new Promise(() => undefined);
+    },
+  });
+  const events = await Promise.race([
+    eventsPromise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for start send failure')), 250)),
+  ]);
+  assert.deepStrictEqual(events, [{ type: 'error', message: 'start send failed', sessionId: 's1', recoverable: false }]);
+  assert.strictEqual(sockets.length, 1);
+  assert.strictEqual(sockets[0].closed, true);
+}
+
+async function testFunASRLocalStreamYieldsChunkSendFailureAsError() {
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.sent = [];
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      if (Buffer.isBuffer(payload)) throw new Error('chunk send failed');
+      this.sent.push(payload);
+    }
+
+    close() {
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const events = await collectFunASREventsWithFakeSocket(FakeFunASRWebSocket);
+  assert.deepStrictEqual(events, [{ type: 'error', message: 'chunk send failed', sessionId: 's1', recoverable: false }]);
+}
+
+async function testFunASRLocalStreamDoesNotDuplicatePreOpenFailure() {
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      setTimeout(() => {
+        this.emit('error', new Error('connection refused'));
+        this.emit('close');
+      }, 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send() {}
+
+    close() {
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const events = await collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, { chunks: async function* noChunks() {} });
+  assert.deepStrictEqual(events, [{ type: 'error', message: 'connection refused', sessionId: 's1', recoverable: false }]);
+}
+
+async function testFunASRLocalStreamContinuesAfterRecoverableInvalidPayload() {
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.sent = [];
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      this.sent.push(payload);
+      if (typeof payload === 'string' && JSON.parse(payload).is_speaking === false) {
+        setTimeout(() => {
+          this.emit('message', Buffer.from('{bad json'));
+          this.emit('message', Buffer.from(JSON.stringify({ text: '最终文本', mode: '2pass-offline' })));
+        }, 25);
+      }
+    }
+
+    close() {
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const events = await collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, { chunks: async function* noChunks() {} });
+  assert.deepStrictEqual(events, [
+    { type: 'error', message: 'Invalid FunASR event payload', sessionId: 's1', recoverable: true },
+    { type: 'final', text: '最终文本', sessionId: 's1' },
+  ]);
+}
+
+async function testFunASRLocalStreamIgnoresLateErrorAfterFinal() {
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      if (typeof payload === 'string' && JSON.parse(payload).is_speaking === false) {
+        setTimeout(() => {
+          this.emit('message', Buffer.from(JSON.stringify({ text: '成功文本', mode: '2pass-offline' })));
+          this.emit('error', new Error('late socket failure'));
+        }, 25);
+      }
+    }
+
+    close() {
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const events = await collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, { chunks: async function* noChunks() {} });
+  assert.deepStrictEqual(events, [
+    { type: 'final', text: '成功文本', sessionId: 's1' },
+  ]);
+}
+
+async function testFunASRLocalConnectionErrorClosesSocket() {
+  const funasrModulePath = path.join(__dirname, '..', 'dist', 'core', 'asr-funasr-local.js');
+  const wsModulePath = require.resolve('ws');
+  const originalWsCache = require.cache[wsModulePath];
+  const sockets = [];
+  delete require.cache[funasrModulePath];
+
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.closed = false;
+      sockets.push(this);
+      setTimeout(() => this.emit('error', new Error('connection refused')), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    close() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    terminate() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  require.cache[wsModulePath] = {
+    id: wsModulePath,
+    filename: wsModulePath,
+    loaded: true,
+    exports: FakeFunASRWebSocket,
+  };
+
+  try {
+    const { testFunASRLocalConnection } = require(funasrModulePath);
+    const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+    const result = await testFunASRLocalConnection({
+      ...DEFAULT_ASR_CONFIG,
+      provider: 'funasr-local-runtime',
+      baseUrl: 'ws://127.0.0.1:10096',
+    });
+    assert.deepStrictEqual(result, { success: false, message: 'connection refused' });
+    assert.strictEqual(sockets.length, 1);
+    assert.strictEqual(sockets[0].closed, true);
+  } finally {
+    delete require.cache[funasrModulePath];
+    if (originalWsCache) {
+      require.cache[wsModulePath] = originalWsCache;
+    } else {
+      delete require.cache[wsModulePath];
+    }
+  }
 }
 
 async function collectQwenEventsWithFakeSocket(FakeQwenWebSocket) {
@@ -934,6 +1567,63 @@ function testVoiceAudioCachePaths() {
   );
 }
 
+async function testVoiceInputManagerKeepsFinalAfterRecoverableASRError() {
+  const Module = require('module');
+  const managerModulePath = path.join(__dirname, '..', 'dist', 'core', 'voice-input-manager.js');
+  const originalLoad = Module._load;
+  const sent = [];
+  delete require.cache[managerModulePath];
+
+  Module._load = function(request, parent, isMain) {
+    if (request === 'electron') return {};
+    if (request === './asr-engine' && parent && parent.filename === managerModulePath) {
+      return {
+        createASREngine: () => ({
+          provider: 'funasr-local-runtime',
+          supportsStreaming: () => true,
+          stream: async function* ({ sessionId }) {
+            yield { type: 'error', message: 'Invalid FunASR event payload', sessionId, recoverable: true };
+            yield { type: 'final', text: '最终文本', sessionId };
+          },
+        }),
+      };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    const { VoiceInputManager } = require(managerModulePath);
+    const manager = new VoiceInputManager(
+      { webContents: { send: (channel, payload) => sent.push({ channel, payload }) } },
+      { get: () => ({ enabled: true, provider: 'funasr-local-runtime' }) },
+      {
+        createSession: async () => undefined,
+        appendChunk: async () => undefined,
+        finalize: async () => ({ relativeDir: 'voice-input/s1' }),
+        discard: async () => undefined,
+      }
+    );
+
+    const session = await manager.startSession({ source: 'settings-test', mimeType: 'audio/pcm;rate=16000' });
+    await manager.appendAudioChunk(session.sessionId, { mimeType: 'audio/pcm;rate=16000', base64: 'AAAA', capturedAt: Date.now() });
+    await manager.stopSession(session.sessionId);
+
+    assert.strictEqual(manager.getStatus().phase, 'voice-idle');
+    assert.strictEqual(manager.getStatus().lastFinal, '最终文本');
+    assert.strictEqual(manager.getStatus().lastError, null);
+    assert.ok(sent.some((event) => event.channel === 'voice-input-transcript'
+      && event.payload.type === 'error'
+      && event.payload.recoverable === true));
+    assert.ok(sent.some((event) => event.channel === 'voice-input-transcript'
+      && event.payload.type === 'final'
+      && event.payload.text === '最终文本'
+      && event.payload.audioRef === 'voice-input/s1'));
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[managerModulePath];
+  }
+}
+
 function testVoiceInputManagerExports() {
   const managerModule = load('core/voice-input-manager.js');
   assert.strictEqual(typeof managerModule.createVoiceSessionId, 'function');
@@ -962,11 +1652,27 @@ async function run() {
   testAsrPresetKeyIsPersistedInsteadOfDefinitionId();
   testAsrNormalizerDeepMergesCacheAndValidatesTypes();
   testJsonConfigStoreUpdateNormalizesMergedValue();
+  testASRConnectionTestIPCContract();
+  testSettingsFunASRLocalProviderContract();
+  testSettingsFunASRRecognitionTestUsesPCM();
   testSettingsAsrPresetContractMatchesCoreDefinitions();
   testRendererQwenMainVoiceUsesPCM();
   testRendererVoiceInputKeepsChatAreaInteractive();
+  testRendererFunASRMainVoiceUsesPCM();
+  testRendererRecoverableASRErrorIsNonTerminal();
+  testSettingsRecoverableASRErrorIsNonTerminal();
   testAsrEngineFactoryAndParser();
   testQwenAsrRealtimeHelpers();
+  testFunASRLocalEngineHelpers();
+  await testFunASRLocalStreamClosesOnOpenTimeout();
+  await testFunASRLocalStreamAbortBeforeOpenClosesSocket();
+  await testFunASRLocalStreamAbortAfterOpenClosesSocketWithoutEnd();
+  await testFunASRLocalStreamYieldsStartSendFailurePromptly();
+  await testFunASRLocalStreamYieldsChunkSendFailureAsError();
+  await testFunASRLocalStreamDoesNotDuplicatePreOpenFailure();
+  await testFunASRLocalStreamContinuesAfterRecoverableInvalidPayload();
+  await testFunASRLocalStreamIgnoresLateErrorAfterFinal();
+  await testFunASRLocalConnectionErrorClosesSocket();
   await testQwenRealtimeStreamWaitsForDelayedFinal();
   await testQwenRealtimeStreamReportsMissingTranscription();
   await testQwenRealtimeStreamPromotesPartialTextOnSessionFinished();
@@ -977,6 +1683,7 @@ async function run() {
   await testChunkedFallbackSmartConcatenatesChunks();
   await testChunkedFallbackYieldsErrorOnTranscribeFailure();
   testVoiceAudioCachePaths();
+  await testVoiceInputManagerKeepsFinalAfterRecoverableASRError();
   testVoiceInputManagerExports();
   testVoiceIpcChannelNames();
   console.log('voice-input-contract tests passed');

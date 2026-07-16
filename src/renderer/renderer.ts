@@ -516,6 +516,10 @@
     return config && config.provider === 'qwen-asr-realtime';
   }
 
+  function isLocalRealtimePCMVoiceConfig(config: any): boolean {
+    return isQwenASRVoiceConfig(config) || config.provider === 'funasr-local-runtime';
+  }
+
   function resampleVoiceFloat32ToTargetRate(samples: Float32Array, sourceRate: number, targetRate: number): Float32Array {
     if (!samples || sourceRate === targetRate) return samples || new Float32Array(0);
     var ratio = sourceRate / targetRate;
@@ -613,7 +617,7 @@
     if (voiceRecording) return;
     var startupStream: MediaStream | null = null;
     var startupSessionId: string | null = null;
-    var startupIsQwen = false;
+    var startupUsesLocalRealtimePCM = false;
     try {
       // @ts-ignore
       var config = await window.companion.loadASRConfig();
@@ -633,9 +637,9 @@
       voiceHoldToTalkShortcut = config.holdToTalkShortcut || 'Ctrl+Shift+Space';
       var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       startupStream = stream;
-      var qwenVoiceInput = isQwenASRVoiceConfig(config);
-      startupIsQwen = qwenVoiceInput;
-      var mimeType = qwenVoiceInput
+      var localRealtimePCMVoiceInput = isLocalRealtimePCMVoiceConfig(config);
+      startupUsesLocalRealtimePCM = localRealtimePCMVoiceInput;
+      var mimeType = localRealtimePCMVoiceInput
         ? 'audio/pcm;rate=16000'
         : (MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm');
       // @ts-ignore
@@ -648,7 +652,7 @@
       voicePartialBase = chatInputEl.value;
       voiceChunkStartedAt = Date.now();
 
-      if (isQwenASRVoiceConfig(config)) {
+      if (isLocalRealtimePCMVoiceConfig(config)) {
         voiceRecorder = createQwenPCMVoiceRecorder(stream, session.sessionId) as any;
         var qwenRecorder = voiceRecorder as any;
         qwenRecorder.onstop = function () {
@@ -691,7 +695,7 @@
       setVoiceRecording(true);
       updateChatStatus({ phase: 'voice-recording', message: '正在录音，请说话…' });
     } catch (e) {
-      if (startupIsQwen) {
+      if (startupUsesLocalRealtimePCM) {
         if (startupStream) {
           startupStream.getTracks().forEach(function (track) { track.stop(); });
         }
@@ -712,7 +716,7 @@
         voiceRecorder = null;
       }
       setVoiceRecording(false);
-      var message = startupIsQwen && e && (e as any).message ? '语音输入启动失败：' + (e as any).message : '语音输入启动失败';
+      var message = e && (e as any).message ? '语音输入启动失败：' + (e as any).message : '语音输入启动失败';
       updateChatStatus({ phase: 'voice-error', message: message });
       console.error('[VoiceInput] start failed', e);
     }
@@ -923,6 +927,10 @@
         voiceLastSessionId = null;
       }
       if (payload.type === 'error') {
+        if (payload.recoverable === true) {
+          updateChatStatus({ phase: 'voice-warning', message: payload.message || '语音识别暂时异常，正在继续识别' });
+          return;
+        }
         updateChatStatus({ phase: 'voice-error', message: payload.message || '语音识别失败' });
         voiceLastSessionId = null;
       }

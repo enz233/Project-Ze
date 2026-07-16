@@ -133,6 +133,7 @@
     .toast.show { opacity: 1; transform: translateY(0); }
     .toast.success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
     .toast.error { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+    .toast.warning { background: #fff8e1; color: #8a5a00; border: 1px solid #ffe082; }
   </style>
 </head>
 <body>
@@ -552,9 +553,13 @@
           <option value="openai">OpenAI</option>
           <option value="aliyun-bailian">阿里百炼 / DashScope</option>
           <option value="qwen-asr">Qwen-ASR 实时识别</option>
+          <option value="funasr-local">FunASR 本地识别</option>
           <option value="custom-openai-compatible">自定义 OpenAI-compatible</option>
         </select>
         <div class="hint" id="asrProviderPresetNote">OpenAI 官方语音识别接口，使用当前 OpenAI-compatible ASR 引擎。</div>
+        <div class="hint" id="funasrLocalHint" style="display: none; margin-top: 8px;">
+          FunASR 本地识别不会调用云端 API，但需要你先在本机启动 FunASR runtime WebSocket 服务。默认连接地址：ws://127.0.0.1:10096。Project-Ze 第一版只负责连接该服务，不会自动安装 FunASR、下载模型或启动 Docker/Python 进程。请先按 FunASR 文档启动 runtime 服务，然后点击“测试 ASR 连接”或“测试语音识别 10 秒”。远程 FunASR 地址是高级用法，可能接收麦克风音频。
+        </div>
       </div>
 
       <div class="field">
@@ -591,6 +596,7 @@
           <select id="asrProvider" disabled aria-readonly="true">
             <option value="openai-compatible">OpenAI-compatible</option>
             <option value="qwen-asr-realtime">Qwen-ASR Realtime</option>
+            <option value="funasr-local-runtime">FunASR Local Runtime</option>
           </select>
           <div class="hint">实际引擎由供应商预设决定；Qwen-ASR 使用专用 WebSocket ASR 引擎，其他兼容预设使用 OpenAI-compatible ASR 引擎。</div>
         </div>
@@ -664,6 +670,7 @@
 
       <div class="btn-row">
         <button class="btn btn-secondary" id="asrMicTestBtn">测试麦克风音量</button>
+        <button class="btn btn-secondary" id="asrConnectionTestBtn">测试 ASR 连接</button>
         <button class="btn btn-primary" id="asrRecognitionTestBtn">测试语音识别 10 秒</button>
       </div>
 
@@ -873,6 +880,17 @@
         language: 'zh',
         note: 'Qwen-ASR 实时语音识别使用专用 WebSocket 协议。请填写 Workspace ID、API Key 和模型；运行时不会请求 OpenAI /audio/transcriptions。',
       },
+      'funasr-local': {
+        label: 'FunASR 本地识别',
+        provider: 'funasr-local-runtime',
+        baseUrl: 'ws://127.0.0.1:10096',
+        model: '',
+        realtimePath: '',
+        transcriptionPath: '',
+        streamingMode: 'realtime',
+        language: 'zh',
+        note: 'FunASR 本地识别不会调用云端 API，但需要你先在本机启动 FunASR runtime WebSocket 服务。Project-Ze 第一版只负责连接该服务，不会自动安装 FunASR、下载模型或启动 Docker/Python 进程。远程 FunASR 地址是高级用法，可能接收麦克风音频。',
+      },
       'custom-openai-compatible': {
         label: '自定义 OpenAI-compatible',
         provider: 'openai-compatible',
@@ -918,6 +936,8 @@
       var preset = getASRPresetDefinition(presetId);
       document.getElementById('asrProviderPresetNote').textContent = preset.note;
       document.getElementById('asrProvider').value = preset.provider;
+      const funasrHint = document.getElementById('funasrLocalHint');
+      if (funasrHint) funasrHint.style.display = preset.provider === 'funasr-local-runtime' ? 'block' : 'none';
     }
 
     function applySelectedASRPreset() {
@@ -947,8 +967,8 @@
       const preset = getASRPresetDefinition(config.providerPreset || 'openai');
       document.getElementById('asrBaseUrl').value = config.baseUrl ?? preset.baseUrl;
       document.getElementById('asrWorkspaceId').value = config.workspaceId ?? '';
-      document.getElementById('asrApiKey').value = config.apiKey ?? '';
-      document.getElementById('asrModel').value = config.model ?? preset.model;
+      document.getElementById('asrApiKey').value = preset.provider === 'funasr-local-runtime' ? '' : (config.apiKey ?? '');
+      document.getElementById('asrModel').value = preset.provider === 'funasr-local-runtime' ? '' : (config.model ?? preset.model);
       document.getElementById('asrRealtimePath').value = config.realtimePath ?? preset.realtimePath;
       document.getElementById('asrTranscriptionPath').value = config.transcriptionPath ?? preset.transcriptionPath;
       document.getElementById('asrStreamingMode').value = config.streamingMode ?? preset.streamingMode;
@@ -1198,6 +1218,26 @@
       return config && config.provider === 'qwen-asr-realtime';
     }
 
+    function isFunASRConfig(config) {
+      return config && config.provider === 'funasr-local-runtime';
+    }
+
+    function isLocalRealtimePCMRecognitionConfig(config) {
+      return isQwenASRRecognitionConfig(config) || isFunASRConfig(config);
+    }
+
+    function validateFunASRBaseUrl(config) {
+      if (!isFunASRConfig(config)) return '';
+      if (!config.baseUrl) return 'FunASR Base URL 不能为空';
+      if (!config.baseUrl.startsWith('ws://') && !config.baseUrl.startsWith('wss://')) {
+        return 'FunASR Base URL 必须以 ws:// 或 wss:// 开头';
+      }
+      if (!config.baseUrl.includes('127.0.0.1') && !config.baseUrl.includes('localhost')) {
+        return '远程 FunASR 地址是高级用法，可能接收麦克风音频；请确认服务授权和网络安全。';
+      }
+      return '';
+    }
+
     function resampleFloat32ToTargetRate(samples, sourceRate, targetRate) {
       if (!samples || sourceRate === targetRate) return samples || new Float32Array(0);
       const ratio = sourceRate / targetRate;
@@ -1346,7 +1386,7 @@
       resultEl.value = text;
     }
 
-    function setASRValidationMessage(message) {
+    function setASRValidationMessage(message, type) {
       var el = document.getElementById('asrValidationMessage');
       if (el) {
         if (!message) {
@@ -1355,10 +1395,11 @@
         } else {
           el.style.display = 'block';
           el.textContent = message;
+          el.style.color = type === 'warning' ? '#8a5a00' : '#c62828';
         }
       }
       if (message) {
-        setASRMicStatus(message, true);
+        setASRMicStatus(message, type === 'warning' ? false : true);
       }
     }
 
@@ -1366,8 +1407,8 @@
       const missing = [];
       if (!config.baseUrl) missing.push('Base URL');
       if (config.provider === 'qwen-asr-realtime' && !config.workspaceId) missing.push('Workspace ID');
-      if (!config.model) missing.push('模型');
-      if (!config.apiKey) missing.push('API Key');
+      if (config.provider !== 'funasr-local-runtime' && !config.apiKey) missing.push('API Key');
+      if (config.provider !== 'funasr-local-runtime' && !config.model) missing.push('模型');
       return missing;
     }
 
@@ -1391,6 +1432,13 @@
         setASRValidationMessage(mismatchMessage);
         showToast(mismatchMessage, 'error');
         return false;
+      }
+      const funasrUrlWarning = validateFunASRBaseUrl(config);
+      if (funasrUrlWarning) {
+        const isRemoteWarning = funasrUrlWarning.indexOf('远程 FunASR 地址') >= 0;
+        setASRValidationMessage(funasrUrlWarning, isRemoteWarning ? 'warning' : 'error');
+        showToast(funasrUrlWarning, isRemoteWarning ? 'warning' : 'error');
+        if (!isRemoteWarning) return false;
       }
       const missing = getMissingASREnabledFields(config);
       if (missing.length > 0) {
@@ -1453,8 +1501,8 @@
         provider: preset.provider,
         baseUrl: document.getElementById('asrBaseUrl').value.trim(),
         workspaceId: document.getElementById('asrWorkspaceId').value.trim(),
-        apiKey: document.getElementById('asrApiKey').value,
-        model: document.getElementById('asrModel').value.trim(),
+        apiKey: preset.provider === 'funasr-local-runtime' ? '' : document.getElementById('asrApiKey').value,
+        model: preset.provider === 'funasr-local-runtime' ? '' : document.getElementById('asrModel').value.trim(),
         realtimePath: advanced.realtimePath,
         transcriptionPath: advanced.transcriptionPath,
         streamingMode: advanced.streamingMode,
@@ -1492,7 +1540,7 @@
         setASRMicStatus('当前环境不支持麦克风访问', true);
         return;
       }
-      if (typeof MediaRecorder === 'undefined') {
+      if (typeof MediaRecorder === 'undefined' && !isLocalRealtimePCMRecognitionConfig(config)) {
         setASRMicStatus('当前环境不支持录音测试', true);
         return;
       }
@@ -1510,7 +1558,7 @@
         testBtn.disabled = false;
         testBtn.textContent = '停止识别测试';
 
-        if (isQwenASRRecognitionConfig(config)) {
+        if (isLocalRealtimePCMRecognitionConfig(config)) {
           await startQwenPCMRecognitionTest(config, startToken, startupResources);
           return;
         }
@@ -1567,12 +1615,8 @@
           setASRRecognitionProgress(percent, percent < 100 ? '请说话… ' + percent + '%' : '正在识别…');
         }, 100);
 
-        if (isQwenASRRecognitionConfig(config)) {
-          setASRMicStatus('正在录音测试（PCM16 16kHz），请说话…', false);
-        } else {
-          recorder.start(750);
-          setASRMicStatus('正在录音测试，请说话…', false);
-        }
+        recorder.start(750);
+        setASRMicStatus('正在录音测试，请说话…', false);
         asrRecognitionStopTimer = setTimeout(function() {
           stopASRRecognitionTest(false);
         }, ASR_RECOGNITION_TEST_MS);
@@ -2002,6 +2046,38 @@
       await startASRMicMeter();
     });
 
+    document.getElementById('asrConnectionTestBtn').addEventListener('click', async function() {
+      const btn = this;
+      const config = collectASRConfig();
+      if (isFunASRConfig(config)) {
+        const funasrUrlWarning = validateFunASRBaseUrl(config);
+        if (funasrUrlWarning && funasrUrlWarning.indexOf('远程 FunASR 地址') < 0) {
+          setASRValidationMessage(funasrUrlWarning);
+          showToast(funasrUrlWarning, 'error');
+          return;
+        }
+      } else {
+        setASRValidationMessage('当前 ASR provider 暂不支持独立连接测试，请使用“测试语音识别 10 秒”。');
+        showToast('当前 ASR provider 暂不支持独立连接测试，请使用“测试语音识别 10 秒”。', 'error');
+        return;
+      }
+      if (!window.companion || !window.companion.testASRConnection) {
+        showToast('当前环境不支持 ASR 连接测试', 'error');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = '测试中...';
+      try {
+        const result = await window.companion.testASRConnection(config);
+        showToast(result.message || (result.success ? 'ASR 连接成功' : 'ASR 连接失败'), result.success ? 'success' : 'error');
+      } catch (error) {
+        showToast(error && error.message ? error.message : 'ASR 连接测试失败', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '测试 ASR 连接';
+      }
+    });
+
     document.getElementById('asrRecognitionTestBtn').addEventListener('click', async function() {
       if (asrRecognitionStopping) return;
       if (asrRecognitionRunning) {
@@ -2023,9 +2099,9 @@
         model: config.model,
         hasApiKey: !!config.apiKey
       });
-      if (config.provider !== 'openai-compatible' && config.provider !== 'qwen-asr-realtime') {
+      if (config.provider !== 'openai-compatible' && config.provider !== 'qwen-asr-realtime' && config.provider !== 'funasr-local-runtime') {
         debugASRSettings('save blocked: unsupported provider', { provider: config.provider });
-        showToast('语音输入当前仅支持 OpenAI-compatible 或 Qwen-ASR 实时识别供应商', 'error');
+        showToast('语音输入当前仅支持 OpenAI-compatible、Qwen-ASR 实时识别或 FunASR 本地识别供应商', 'error');
         return;
       }
       if (!Number.isFinite(config.cache.retentionMinutes) || config.cache.retentionMinutes <= 0) {
@@ -2048,6 +2124,13 @@
         setASRValidationMessage(mismatchMessage);
         showToast(mismatchMessage, 'error');
         return;
+      }
+      var funasrUrlWarning = validateFunASRBaseUrl(config);
+      if (funasrUrlWarning) {
+        var isRemoteWarning = funasrUrlWarning.indexOf('远程 FunASR 地址') >= 0;
+        setASRValidationMessage(funasrUrlWarning, isRemoteWarning ? 'warning' : 'error');
+        showToast(funasrUrlWarning, isRemoteWarning ? 'warning' : 'error');
+        if (!isRemoteWarning) return;
       }
       if (config.enabled) {
         var missingFields = getMissingASREnabledFields(config);
@@ -2226,6 +2309,10 @@
           setASRMicStatus('识别完成', false);
           asrRecognitionSessionId = null;
         } else if (payload.type === 'error') {
+          if (payload.recoverable === true) {
+            setASRMicStatus(formatASRRecognitionErrorMessage(payload.message || '语音识别暂时异常，正在继续识别'), false);
+            return;
+          }
           setASRMicStatus(formatASRRecognitionErrorMessage(payload.message || '语音识别失败'), true);
           setASRRecognitionProgress(100, '识别失败');
           asrRecognitionSessionId = null;
