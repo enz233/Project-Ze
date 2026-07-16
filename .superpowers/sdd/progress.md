@@ -18,3 +18,4 @@ Task 6: complete (commits b5c3773..7d12837, review clean; ASR source follow-up n
 Task 7: complete (commits 592a4f7..0440836, review clean)
 Task 8: complete (verification pass; report committed)
 FunASR Task 1: complete (commits c01ee66..b20ade7, review clean)
+FunASR Task 2: complete (commits ef5063e..b74464e, review clean)
