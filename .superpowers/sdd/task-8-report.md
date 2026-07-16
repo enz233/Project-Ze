@@ -41,8 +41,8 @@ None. Verification passed without code changes.
 
 ## Commits
 
-- `ebe0936` docs: record intent router final verification
-- Follow-up metadata correction commit contains this final report update; exact hash is reported in the final task response.
+- `8ed4000` docs: record intent router final verification
+- Additional metadata-only report correction may follow; final response reports the current HEAD commit.
 
 ## Current git status summary
 
