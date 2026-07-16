@@ -10,6 +10,10 @@ function readProjectFile(relativePath) {
   return fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8');
 }
 
+function assertIncludes(source, expected, message) {
+  assert(source.includes(expected), message);
+}
+
 function testCameraConfigDefaults() {
   const { DEFAULT_CAMERA_AWARENESS_CONFIG } = load('core/camera-awareness-config.js');
   assert.deepStrictEqual(DEFAULT_CAMERA_AWARENESS_CONFIG, {
@@ -161,6 +165,16 @@ async function testDetectOnceDoesNotTriggerBubble() {
   assert.strictEqual(bubbles.length, 0);
 }
 
+function testCameraBackgroundRunnerContract() {
+  const root = path.join(__dirname, '..');
+  const runnerSource = fs.readFileSync(path.join(root, 'src/core/camera-awareness-background-runner.ts'), 'utf8');
+  assertIncludes(runnerSource, 'export class CameraAwarenessBackgroundRunner', 'background runner class should be exported');
+  assertIncludes(runnerSource, 'sync()', 'background runner should expose sync()');
+  assertIncludes(runnerSource, 'requestFrame', 'background runner should request frames through injected callback');
+  assertIncludes(runnerSource, 'processFrame', 'background runner should process returned frames through injected callback');
+  assertIncludes(runnerSource, 'recordError', 'background runner should record capture errors without changing presence state');
+}
+
 function testCameraSettingsIntegrationHooks() {
   const mainTs = readProjectFile('src/main/main.ts');
   const preloadTs = readProjectFile('src/main/preload.ts');
@@ -208,6 +222,7 @@ async function run() {
   testCameraParserFallsBackOnInvalidJson();
   testTypeConstants();
   testCameraIpcChannelNames();
+  testCameraBackgroundRunnerContract();
   testCameraSettingsIntegrationHooks();
   await testCameraAwarenessManagerStateMachine();
   await testDetectOnceDoesNotTriggerBubble();
