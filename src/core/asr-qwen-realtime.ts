@@ -61,7 +61,14 @@ export function normalizeQwenASREvent(raw: unknown, sessionId: string): ASRTrans
 
   if (type === 'conversation.item.input_audio_transcription.completed') {
     const text = getStringField(data, ['transcript', 'text']);
-    return { type: 'final', text, sessionId };
+    return text.trim()
+      ? { type: 'final', text, sessionId }
+      : {
+        type: 'error',
+        message: 'Qwen-ASR 已结束但未返回识别文本：请确认麦克风有声音、录音格式被模型支持，或查看阿里云侧错误事件。',
+        sessionId,
+        recoverable: false,
+      };
   }
 
   if (type === 'session.finished') {

@@ -497,6 +497,15 @@ function testQwenAsrRealtimeHelpers() {
     { type: 'final', text: '最终文本', sessionId: 's1' }
   );
   assert.deepStrictEqual(
+    normalizeQwenASREvent({ type: 'conversation.item.input_audio_transcription.completed', transcript: '' }, 's1'),
+    {
+      type: 'error',
+      message: 'Qwen-ASR 已结束但未返回识别文本：请确认麦克风有声音、录音格式被模型支持，或查看阿里云侧错误事件。',
+      sessionId: 's1',
+      recoverable: false,
+    }
+  );
+  assert.deepStrictEqual(
     normalizeQwenASREvent({ type: 'session.finished' }, 's1'),
     {
       type: 'error',
