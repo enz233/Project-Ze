@@ -64,6 +64,15 @@ export function normalizeQwenASREvent(raw: unknown, sessionId: string): ASRTrans
     return { type: 'final', text, sessionId };
   }
 
+  if (type === 'session.finished') {
+    return {
+      type: 'error',
+      message: 'Qwen-ASR 已结束但未返回识别文本：请确认麦克风有声音、录音格式被模型支持，或查看阿里云侧错误事件。',
+      sessionId,
+      recoverable: false,
+    };
+  }
+
   if (type === 'error') {
     const message = getStringField(data, ['message', 'error']) || 'Qwen-ASR provider error';
     return { type: 'error', message, sessionId, recoverable: false };
@@ -153,15 +162,30 @@ export class QwenASRRealtimeEngine implements ASREngine {
       }
     }
 
+    let terminalReceived = false;
     if (!closed) {
       socket.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
       socket.send(JSON.stringify({ type: 'session.finish' }));
-      yield* drainEventsUntilTerminal(pending, () => closed || Boolean(input.signal?.aborted));
+      for await (const event of drainEventsUntilTerminal(pending, () => closed || Boolean(input.signal?.aborted))) {
+        terminalReceived = terminalReceived || isTerminalEvent(event);
+        yield event;
+      }
       if (!closed) socket.close();
     }
 
     while (pending.length > 0) {
-      yield pending.shift()!;
+      const event = pending.shift()!;
+      terminalReceived = terminalReceived || isTerminalEvent(event);
+      yield event;
+    }
+
+    if (!terminalReceived && !input.signal?.aborted) {
+      yield {
+        type: 'error',
+        message: 'Qwen-ASR 已结束但未返回识别文本：请确认麦克风有声音、录音格式被模型支持，或查看阿里云侧错误事件。',
+        sessionId: input.sessionId,
+        recoverable: false,
+      };
     }
   }
 }
