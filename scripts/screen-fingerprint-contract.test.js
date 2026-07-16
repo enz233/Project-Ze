@@ -3,6 +3,9 @@ const {
   SCREEN_FINGERPRINT_CHANGE_THRESHOLD,
   createScreenFingerprintFromBitmap,
   compareScreenFingerprints,
+  describeScreenFingerprintDiff,
+  shouldCancelForScreenFingerprintChange,
+  summarizeScreenFingerprint,
 } = require('../dist/core/screen-fingerprint');
 
 function rgba(width, height, fill) {
@@ -47,5 +50,57 @@ assert(compareScreenFingerprints(black, split) >= SCREEN_FINGERPRINT_CHANGE_THRE
 assert.strictEqual(createScreenFingerprintFromBitmap(Buffer.alloc(3), 16, 9), null, 'invalid bitmap length should return null');
 assert.strictEqual(compareScreenFingerprints(black, null), null, 'missing fingerprint should return null diff');
 assert.strictEqual(compareScreenFingerprints({ width: 1, height: 1, values: [0] }, black), null, 'mismatched dimensions should return null diff');
+
+const blackSummary = summarizeScreenFingerprint(black);
+assert.strictEqual(blackSummary.width, 16);
+assert.strictEqual(blackSummary.height, 9);
+assert.strictEqual(blackSummary.values, 16 * 9);
+assert.strictEqual(blackSummary.min, 0);
+assert.strictEqual(blackSummary.max, 0);
+assert.strictEqual(blackSummary.mean, 0);
+assert.strictEqual(blackSummary.sample.length, 8);
+assert.strictEqual(typeof blackSummary.hash, 'string');
+assert.strictEqual(blackSummary.hash.length, 8);
+
+const splitDiffSummary = describeScreenFingerprintDiff(black, split);
+assert(splitDiffSummary.average >= SCREEN_FINGERPRINT_CHANGE_THRESHOLD, 'diff summary average should match threshold behavior');
+assert(splitDiffSummary.max >= 0.99, 'diff summary should include max cell diff');
+assert(splitDiffSummary.cellsAbove020 > 0, 'diff summary should count changed cells');
+assert.strictEqual(describeScreenFingerprintDiff(black, null), null, 'missing fingerprint should return null diff summary');
+
+assert.strictEqual(SCREEN_FINGERPRINT_CHANGE_THRESHOLD, 0.15, 'primary average threshold should be 0.15');
+assert.strictEqual(shouldCancelForScreenFingerprintChange({
+  average: 0.0243,
+  max: 0.1725,
+  p95: 0.1242,
+  cellsAbove005: 20,
+  cellsAbove010: 11,
+  cellsAbove020: 0,
+}), true, 'same-page browser scroll sample should cancel via p95/cell coverage rule');
+assert.strictEqual(shouldCancelForScreenFingerprintChange({
+  average: 0.2205,
+  max: 0.7935,
+  p95: 0.5843,
+  cellsAbove005: 119,
+  cellsAbove010: 94,
+  cellsAbove020: 71,
+}), true, 'tab switch sample should still cancel via average threshold');
+assert.strictEqual(shouldCancelForScreenFingerprintChange({
+  average: 0.01,
+  max: 0.08,
+  p95: 0.05,
+  cellsAbove005: 4,
+  cellsAbove010: 0,
+  cellsAbove020: 0,
+}), false, 'small noise should not cancel');
+assert.strictEqual(shouldCancelForScreenFingerprintChange({
+  average: 0.01,
+  max: 0.9,
+  p95: 0.04,
+  cellsAbove005: 1,
+  cellsAbove010: 1,
+  cellsAbove020: 1,
+}), false, 'single-cell spike should not cancel');
+assert.strictEqual(shouldCancelForScreenFingerprintChange(null), false, 'missing diff summary should not cancel');
 
 console.log('screen-fingerprint-contract tests passed');

@@ -9,13 +9,14 @@ function load(modulePath) {
 function testAsrConfigDefaults() {
   const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
   assert.strictEqual(DEFAULT_ASR_CONFIG.enabled, false);
+  assert.strictEqual(DEFAULT_ASR_CONFIG.advancedSettingsEnabled, false);
   assert.strictEqual(DEFAULT_ASR_CONFIG.provider, 'openai-compatible');
   assert.strictEqual(DEFAULT_ASR_CONFIG.baseUrl, 'https://api.openai.com/v1');
   assert.strictEqual(DEFAULT_ASR_CONFIG.apiKey, '');
   assert.strictEqual(DEFAULT_ASR_CONFIG.model, 'gpt-4o-mini-transcribe');
   assert.strictEqual(DEFAULT_ASR_CONFIG.realtimePath, '/realtime');
   assert.strictEqual(DEFAULT_ASR_CONFIG.transcriptionPath, '/audio/transcriptions');
-  assert.strictEqual(DEFAULT_ASR_CONFIG.streamingMode, 'realtime');
+  assert.strictEqual(DEFAULT_ASR_CONFIG.streamingMode, 'chunked-fallback');
   assert.strictEqual(DEFAULT_ASR_CONFIG.language, 'zh');
   assert.strictEqual(DEFAULT_ASR_CONFIG.autoSendFinalTranscript, false);
   assert.strictEqual(DEFAULT_ASR_CONFIG.holdToTalkShortcut, 'Ctrl+Shift+Space');
@@ -35,6 +36,7 @@ function testAsrProviderPresets() {
   const { createASREngine } = load('core/asr-engine.js');
 
   assert.strictEqual(DEFAULT_ASR_CONFIG.providerPreset, 'openai');
+  assert.strictEqual(DEFAULT_ASR_CONFIG.workspaceId, '');
   assert.strictEqual(ASR_PROVIDER_PRESETS.openai.provider, 'openai-compatible');
   assert.strictEqual(ASR_PROVIDER_PRESETS.openai.baseUrl, 'https://api.openai.com/v1');
 
@@ -46,6 +48,13 @@ function testAsrProviderPresets() {
   );
   assert.strictEqual(ASR_PROVIDER_PRESETS['aliyun-bailian'].model, '');
   assert.match(ASR_PROVIDER_PRESETS['aliyun-bailian'].note, /OpenAI-compatible/);
+
+  assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].label, 'Qwen-ASR 实时识别');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].provider, 'qwen-asr-realtime');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].baseUrl, 'wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].realtimePath, '/api-ws/v1/realtime');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].streamingMode, 'realtime');
+  assert.strictEqual(ASR_PROVIDER_PRESETS['qwen-asr'].model, '');
 
   assert.strictEqual(ASR_PROVIDER_PRESETS['custom-openai-compatible'].provider, 'openai-compatible');
   assert.strictEqual(ASR_PROVIDER_PRESETS['custom-openai-compatible'].baseUrl, '');
@@ -86,7 +95,6 @@ function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
   } = load('core/asr-config.js');
 
   const customLegacy = normalizeASRConfigForLoad({
-    ...DEFAULT_ASR_CONFIG,
     providerPreset: undefined,
     baseUrl: 'https://example.test/v1',
     model: 'custom-transcribe',
@@ -103,15 +111,17 @@ function testAsrPresetBackwardCompatibilityAndInvalidFallback() {
 
   const mismatchedManagedPreset = normalizeASRConfigForLoad({
     ...DEFAULT_ASR_CONFIG,
+    advancedSettingsEnabled: true,
     providerPreset: 'aliyun-bailian',
     baseUrl: 'https://example.test/v1',
     model: 'custom-transcribe',
     streamingMode: 'chunked-fallback',
   });
-  assert.strictEqual(mismatchedManagedPreset.providerPreset, 'custom-openai-compatible');
+  assert.strictEqual(mismatchedManagedPreset.providerPreset, 'aliyun-bailian');
 
   const validEmptyModelPreset = normalizeASRConfigForLoad({
     ...DEFAULT_ASR_CONFIG,
+    advancedSettingsEnabled: true,
     providerPreset: 'aliyun-bailian',
     baseUrl: ASR_PROVIDER_PRESETS['aliyun-bailian'].baseUrl,
     model: '',
@@ -163,6 +173,77 @@ function testAsrNormalizerDeepMergesCacheAndValidatesTypes() {
     },
   });
   assert.deepStrictEqual(invalidCache.cache, DEFAULT_ASR_CONFIG.cache);
+
+  const advancedEnabled = normalizeASRConfigForLoad({ advancedSettingsEnabled: true });
+  assert.strictEqual(advancedEnabled.advancedSettingsEnabled, true);
+
+  const invalidAdvancedFlag = normalizeASRConfigForLoad({ advancedSettingsEnabled: 'true' });
+  assert.strictEqual(invalidAdvancedFlag.advancedSettingsEnabled, false);
+}
+
+function testAsrAdvancedSettingsNormalization() {
+  const { DEFAULT_ASR_CONFIG, normalizeASRConfigForLoad } = load('core/asr-config.js');
+
+  const explicitFalse = normalizeASRConfigForLoad({
+    enabled: true,
+    advancedSettingsEnabled: false,
+    providerPreset: 'custom-openai-compatible',
+    provider: 'openai-compatible',
+    baseUrl: 'https://example.test/v1',
+    apiKey: 'keep-key',
+    model: 'keep-model',
+    realtimePath: '/custom/realtime',
+    transcriptionPath: '/custom/transcriptions',
+    streamingMode: 'realtime',
+    language: 'en',
+    autoSendFinalTranscript: true,
+    holdToTalkShortcut: 'Alt+Space',
+    cache: {
+      enabled: false,
+      retentionMinutes: 5,
+      maxSessionBytes: 12345,
+    },
+  });
+  assert.strictEqual(explicitFalse.enabled, true);
+  assert.strictEqual(explicitFalse.advancedSettingsEnabled, false);
+  assert.strictEqual(explicitFalse.apiKey, 'keep-key');
+  assert.strictEqual(explicitFalse.model, 'keep-model');
+  assert.strictEqual(explicitFalse.language, 'en');
+  assert.strictEqual(explicitFalse.autoSendFinalTranscript, true);
+  assert.strictEqual(explicitFalse.holdToTalkShortcut, 'Alt+Space');
+  assert.strictEqual(explicitFalse.providerPreset, 'custom-openai-compatible');
+  assert.strictEqual(explicitFalse.provider, 'openai-compatible');
+  assert.strictEqual(explicitFalse.baseUrl, 'https://example.test/v1');
+  assert.strictEqual(explicitFalse.realtimePath, '/realtime');
+  assert.strictEqual(explicitFalse.transcriptionPath, '/audio/transcriptions');
+  assert.strictEqual(explicitFalse.streamingMode, 'chunked-fallback');
+  assert.deepStrictEqual(explicitFalse.cache, DEFAULT_ASR_CONFIG.cache);
+
+  const legacyCustomEndpoint = normalizeASRConfigForLoad({
+    enabled: true,
+    baseUrl: 'https://example.test/v1',
+    apiKey: 'legacy-key',
+    model: 'legacy-model',
+    streamingMode: 'realtime',
+  });
+  assert.strictEqual(legacyCustomEndpoint.advancedSettingsEnabled, true);
+  assert.strictEqual(legacyCustomEndpoint.providerPreset, 'custom-openai-compatible');
+  assert.strictEqual(legacyCustomEndpoint.baseUrl, 'https://example.test/v1');
+  assert.strictEqual(legacyCustomEndpoint.model, 'legacy-model');
+  assert.strictEqual(legacyCustomEndpoint.streamingMode, 'realtime');
+
+  const legacyOpenAiRealtimeOnly = normalizeASRConfigForLoad({
+    provider: 'openai-compatible',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini-transcribe',
+    realtimePath: '/realtime',
+    transcriptionPath: '/audio/transcriptions',
+    streamingMode: 'realtime',
+  });
+  assert.strictEqual(legacyOpenAiRealtimeOnly.advancedSettingsEnabled, false);
+  assert.strictEqual(legacyOpenAiRealtimeOnly.providerPreset, 'openai');
+  assert.strictEqual(legacyOpenAiRealtimeOnly.streamingMode, 'chunked-fallback');
+  assert.deepStrictEqual(legacyOpenAiRealtimeOnly.cache, DEFAULT_ASR_CONFIG.cache);
 }
 
 function testAsrPresetKeyIsPersistedInsteadOfDefinitionId() {
@@ -255,7 +336,51 @@ function testSettingsAsrPresetContractMatchesCoreDefinitions() {
       );
     }
   }
+  for (const id of [
+    'asrMicStatus',
+    'asrMicLevelBar',
+    'asrMicLevelText',
+    'asrMicTestBtn',
+    'asrRecognitionProgressBar',
+    'asrRecognitionProgressText',
+    'asrRecognitionTestBtn',
+    'asrRecognitionResult',
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `settings.html missing ASR test control #${id}`);
+  }
+  for (const id of [
+    'asrAdvancedSettingsEnabled',
+    'asrAdvancedSettingsSection',
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `settings.html missing ASR advanced setting #${id}`);
+  }
+  assert.match(html, /显示高级 ASR 设置/);
+  assert.match(html, /供应商预设[\s\S]*?<select id="asrProviderPreset">/);
+  assert.match(html, /<option value="qwen-asr">Qwen-ASR 实时识别<\/option>/);
+  assert.match(html, /Base URL（启用后必填）[\s\S]*?<input type="text" id="asrBaseUrl"/);
+  assert.match(html, /id="asrWorkspaceId"/);
+  assert.match(html, /wss:\/\/\{WorkspaceId\}\.cn-beijing\.maas\.aliyuncs\.com/);
+  assert.match(html, /function getDefaultASRAdvancedFields\(\)/);
+  assert.match(html, /function toggleASRAdvancedSettings\(\)/);
+  assert.match(html, /advancedSettingsEnabled: isASRAdvancedSettingsEnabled\(\)/);
+  assert.match(html, /providerPreset: providerPreset/);
+  assert.match(html, /baseUrl: document\.getElementById\('asrBaseUrl'\)\.value\.trim\(\)/);
+  assert.match(html, /streamingMode: 'chunked-fallback'/);
+  assert.match(html, /saveASRConfig\(config\)[\s\S]*?voiceInput\.start/);
+  assert.match(html, /async function saveASRConfigForRecognitionTest\(config\)/);
+  assert.match(html, /try \{[\s\S]*?await saveASRConfigForRecognitionTest\(config\);[\s\S]*?window\.companion\.voiceInput\.start/);
+  assert.match(html, /catch \(error\) \{[\s\S]*?formatASRRecognitionErrorMessage\(error && error\.message \? error\.message : String\(error\)\)[\s\S]*?setASRMicStatus\('语音识别测试启动失败：' \+ message, true\)/);
+  assert.match(html, /function formatASRRecognitionErrorMessage\(message\)/);
+  assert.match(html, /实时识别连接失败/);
+  assert.match(html, /chunked-fallback 后重试/);
+  assert.match(html, /测试麦克风音量/);
+  assert.match(html, /测试语音识别 10 秒/);
+  assert.match(html, /可能产生 API 调用/);
   assert.match(html, /<select id="asrProvider"[^>]*disabled/);
+  assert.match(html, /<option value="qwen-asr-realtime">Qwen-ASR Realtime<\/option>/);
+  assert.match(html, /Qwen-ASR 使用专用 WebSocket ASR 引擎/);
+  assert.doesNotMatch(html, /所有预设都复用 OpenAI-compatible ASR 引擎/);
+  assert.match(html, /config\.provider !== 'openai-compatible' && config\.provider !== 'qwen-asr-realtime'/);
   assert.match(html, /asrProviderPreset'\)\.addEventListener\('change', function\(\) \{[\s\S]*?applySelectedASRPreset\(\);/);
   assert.match(html, /config\.model \?\? preset\.model/);
   assert.doesNotMatch(html, /config\.model \|\| 'gpt-4o-mini-transcribe'/);
@@ -328,6 +453,49 @@ async function testChunkedFallbackYieldsErrorOnTranscribeFailure() {
   }
 }
 
+function testQwenAsrRealtimeHelpers() {
+  const {
+    createQwenASRRealtimeUrl,
+    createQwenASRHeaders,
+    createQwenManualSessionUpdateEvent,
+    normalizeQwenASREvent,
+  } = load('core/asr-qwen-realtime.js');
+  const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+  const config = {
+    ...DEFAULT_ASR_CONFIG,
+    provider: 'qwen-asr-realtime',
+    providerPreset: 'qwen-asr',
+    baseUrl: 'wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com',
+    workspaceId: 'ws-123',
+    apiKey: 'test-key',
+    model: 'qwen-asr-realtime',
+    realtimePath: '/api-ws/v1/realtime',
+  };
+
+  assert.strictEqual(
+    createQwenASRRealtimeUrl(config),
+    'wss://ws-123.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime?model=qwen-asr-realtime'
+  );
+  assert.deepStrictEqual(createQwenASRHeaders(config), {
+    Authorization: 'Bearer test-key',
+    'X-DashScope-WorkSpace': 'ws-123',
+    'user-agent': 'Project-Ze',
+  });
+  assert.deepStrictEqual(createQwenManualSessionUpdateEvent(), {
+    type: 'session.update',
+    session: { turn_detection: null },
+  });
+  assert.deepStrictEqual(
+    normalizeQwenASREvent({ type: 'conversation.item.input_audio_transcription.text', text: '实时文本' }, 's1'),
+    { type: 'partial', text: '实时文本', sessionId: 's1' }
+  );
+  assert.deepStrictEqual(
+    normalizeQwenASREvent({ type: 'conversation.item.input_audio_transcription.completed', transcript: '最终文本' }, 's1'),
+    { type: 'final', text: '最终文本', sessionId: 's1' }
+  );
+  assert.strictEqual(normalizeQwenASREvent({ type: 'session.finished' }, 's1'), null);
+}
+
 function testAsrEngineFactoryAndParser() {
   const { createASREngine } = load('core/asr-engine.js');
   const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
@@ -335,7 +503,10 @@ function testAsrEngineFactoryAndParser() {
 
   const engine = createASREngine(DEFAULT_ASR_CONFIG);
   assert.strictEqual(engine.provider, 'openai-compatible');
-  assert.strictEqual(engine.supportsStreaming(DEFAULT_ASR_CONFIG), true);
+  assert.strictEqual(engine.supportsStreaming({ ...DEFAULT_ASR_CONFIG, streamingMode: 'realtime' }), true);
+  const qwenEngine = createASREngine({ ...DEFAULT_ASR_CONFIG, provider: 'qwen-asr-realtime' });
+  assert.strictEqual(qwenEngine.provider, 'qwen-asr-realtime');
+  assert.strictEqual(qwenEngine.supportsStreaming({ ...DEFAULT_ASR_CONFIG, provider: 'qwen-asr-realtime' }), true);
   assert.throws(
     () => createASREngine({ ...DEFAULT_ASR_CONFIG, provider: 'custom' }),
     /Unsupported ASR provider/
@@ -425,7 +596,7 @@ async function testRealtimeStreamWaitsForPostCommitFinal() {
     const events = [];
     for await (const event of engine.stream({
       sessionId: 's1',
-      config: { ...DEFAULT_ASR_CONFIG, apiKey: 'test-key', baseUrl: 'https://example.test/v1' },
+      config: { ...DEFAULT_ASR_CONFIG, streamingMode: 'realtime', apiKey: 'test-key', baseUrl: 'https://example.test/v1' },
       chunks: chunks(),
     })) {
       events.push(event);
@@ -474,11 +645,13 @@ async function run() {
   testAsrConfigDefaults();
   testAsrProviderPresets();
   testAsrPresetBackwardCompatibilityAndInvalidFallback();
+  testAsrAdvancedSettingsNormalization();
   testAsrPresetKeyIsPersistedInsteadOfDefinitionId();
   testAsrNormalizerDeepMergesCacheAndValidatesTypes();
   testJsonConfigStoreUpdateNormalizesMergedValue();
   testSettingsAsrPresetContractMatchesCoreDefinitions();
   testAsrEngineFactoryAndParser();
+  testQwenAsrRealtimeHelpers();
   await testRealtimeTerminalEventHelper();
   await testRealtimeStreamWaitsForPostCommitFinal();
   await testChunkedFallbackSmartConcatenatesChunks();

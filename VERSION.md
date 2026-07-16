@@ -3,9 +3,17 @@
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
 ## Unreleased
+- ASR Qwen-ASR 实时识别：新增专用 `qwen-asr-realtime` WebSocket 引擎，使用 Workspace ID 专属域名和握手 `Authorization` 请求头，不再通过 OpenAI-compatible `/audio/transcriptions` 路径调用 Qwen-ASR。
+- ASR 设置简化修正：普通模式保留供应商预设和 Base URL，仍默认隐藏实际引擎、Realtime/Transcription Path、流式模式和缓存等高级字段。
+- 屏幕目标指示视觉时长修复：point 差分活跃期间阻止 idle/blink/sleepy 等普通精灵直接覆盖当前 point pose，确保约 7 秒后才由 point 会话恢复普通视觉；新增 point visual guard 契约测试
+- 屏幕目标指示定位修复：普通屏幕分析继续使用 Vision `detail: low`，point 目标定位改用 `detail: high`，提升按钮、链接和文字入口的可见性，避免定位请求退化为“看不清楚”
+- Intent Router：新增多模态任务入口统一化边界，支持规则优先的意图分类、LLM fallback 校验接口、屏幕/摄像头/移动/配置写入权限闸门、最近 intent 决策 Debug 快照和薄执行分发层
+- Intent Router 最小聊天路由接入：普通文字聊天入口在正常 LLM 对话前尝试路由明确屏幕总结/目标指示意图，并通过薄 `IntentExecutor` 分发到现有 `ScreenAnalyzer` / `ScreenTargetPointer`；对话入口不自动打开摄像头，ASR source 拆分留待后续 caller 更新
+- 屏幕目标指示坐标映射修复：截图缩略图高度改为按显示器宽高比从 1280 宽推导，避免 1707x1067 等非 16:9 屏幕被固定拉伸到 1280x720 后造成 Vision point Y 轴映射偏移
 - 屏幕目标指示视觉：使用 `src/assets/sprites/point/` 八方向 point 差分，按目标相对方向选择姿态，并在约 7 秒后只恢复普通视觉、不移动回原位
-- 屏幕目标指示稳定性：新增 Vision 定位前后一次基于 `ScreenCaptureFrame.fingerprint` 的轻量截图 fingerprint diff，diff threshold 为 `0.20`，屏幕明显变化时在移动前取消旧坐标；不引入 wheel IPC、全局输入 hook 或持续截图监控
-- Move 自动移动修复：起点尊重当前窗口真实位置，移动期间锁定窗口尺寸并只对最终目标做 workArea clamp，避免贴近边缘时起点偏移或窗口尺寸膨胀导致视觉 Y 轴持续下沉
+- 屏幕目标指示稳定性：Vision 定位前后基于 `ScreenCaptureFrame.fingerprint` 做一次轻量截图 diff；平均 diff 阈值从 `0.20` 调整为 `0.15`，并新增 `p95 >= 0.12 && cellsAbove010 >= 10` 的局部变化规则，用于捕捉浏览器同页滚动；不引入 wheel IPC、全局输入 hook 或持续截图监控
+- 屏幕目标指示诊断：`PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时将 Vision 定位截图与移动前 fingerprint 截图保存到 Electron `userData/screen-pointer-debug/`，日志输出 PNG 路径和元信息，便于核对拒绝/取消状态未触发时 A/B 实图是否变化；新增 `start-debug.bat` 可一键以该 debug 开关启动，截图可能包含隐私内容，默认启动脚本不受影响
+- Move 自动移动修复：起点尊重当前窗口真实位置，移动期间锁定窗口尺寸并只对最终目标做 workArea clamp，默认坐标 anchor 调整为中心点，避免贴近边缘时起点偏移或窗口尺寸膨胀导致视觉 Y 轴持续下沉
 - Move 模块优化：接入 src/assets/sprites/move/ 专用差分，自动移动改为可指定轴顺序的 X/Y 单轴分段移动，并新增 teleportTo 直接切换接口
 - ASR 设置新增供应商预设：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible；阿里百炼当前作为 OpenAI-compatible 预设接入，不新增专用 ASR 引擎。
 - Renderer 动画守卫修复：为 blink、sleepy、lonely、bubble/subtitle timeout 链加入 handle 清理与 generation 检查，避免 stale callback 覆盖新状态或 guard flag 卡住

@@ -127,6 +127,9 @@ contextBridge.exposeInMainWorld('companion', {
     },
     submitBackgroundFrame: (payload: any): Promise<any> => ipcRenderer.invoke('camera-awareness:submit-background-frame', payload),
   },
+  intentRouter: {
+    getDebugSnapshot: (): Promise<any> => ipcRenderer.invoke('intent-router:get-debug-snapshot'),
+  },
   voiceInput: {
     start: (options: any): Promise<any> => ipcRenderer.invoke('voice-input-start', options),
     appendAudioChunk: (payload: any): Promise<void> => ipcRenderer.invoke('voice-input-audio-chunk', payload),

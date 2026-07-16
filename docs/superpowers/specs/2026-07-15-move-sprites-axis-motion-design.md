@@ -116,7 +116,7 @@ export interface MoveToRequest {
 
 ### 当前接口快照
 
-Move 模块当前保持轻量接口：
+Move 模块当前保持轻量接口（未显式传 `anchor` 时默认按窗口中心点解释坐标）：
 
 - `moveTo(request): Promise<MoveResult>`：按 X/Y 单轴分段移动。
 - `teleportTo(request): MoveResult`：直接切换到目标位置。
@@ -137,7 +137,7 @@ teleportTo(request: MoveToRequest): MoveResult
 
 1. 如当前正在自动移动，先取消当前 move。
 2. 校验目标坐标为有限数字。
-3. 按 `anchor` 换算目标左上角。
+3. 按 `anchor` 换算目标左上角；未显式传入时默认 `center`，即请求坐标表示窗口中心点。
 4. 按 `visibilityMode` clamp 到屏幕可用区域。
 5. 直接调用 `BrowserWindow.setPosition(target.x, target.y)`。
 6. 发送 `{ active: false }`，避免旧移动视觉残留。

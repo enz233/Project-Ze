@@ -10,6 +10,9 @@ import { TimeAwareness } from './time-awareness';
 import { ScreenAnalyzer } from './screen-analyzer';
 import { ScreenTargetPointer } from './screen-target-pointer';
 import { TTSManager } from './tts-manager';
+import { IntentRouter } from './intent-router';
+import { IntentExecutor } from './intent-executor';
+import { IntentExecutionResult, IntentRequest, IntentRoutedDecision } from './intent-types';
 
 export class ChatManager {
   private aiService: AIService;
@@ -23,6 +26,8 @@ export class ChatManager {
   private ttsManager: TTSManager | null = null;
   private screenTargetPointer: ScreenTargetPointer | null = null;
   private cameraPromptAnalyzer: ((prompt: string) => Promise<string>) | null = null;
+  private intentRouter?: IntentRouter;
+  private intentExecutor?: IntentExecutor;
   private isProcessing = false;
   private lastUserInteraction: number = Date.now();
   private sendChatStatus(phase: 'idle' | 'thinking' | 'screen' | 'camera' | 'speaking' | 'busy' | 'error', message: string = ''): void {
@@ -125,6 +130,10 @@ export class ChatManager {
         this.memory.addMessage('user', userMessage);
         this.memory.addMessage('assistant', cameraResult);
         this.memory.recordInteraction('camera-analysis', cameraPrompt || 'greeting', this.stateManager.getCurrentState());
+        return;
+      }
+
+      if (await this.tryHandleIntent(userMessage, 'text_chat')) {
         return;
       }
 
@@ -392,6 +401,57 @@ export class ChatManager {
   /** 设置摄像头提示词分析器，供 * 命令使用。 */
   setCameraPromptAnalyzer(analyzer: (prompt: string) => Promise<string>): void {
     this.cameraPromptAnalyzer = analyzer;
+  }
+
+  setIntentRouter(intentRouter: IntentRouter, intentExecutor: IntentExecutor): void {
+    this.intentRouter = intentRouter;
+    this.intentExecutor = intentExecutor;
+  }
+
+  private async tryHandleIntent(text: string, source: 'text_chat' | 'voice_asr'): Promise<boolean> {
+    if (!this.intentRouter || !this.intentExecutor) return false;
+    const request: IntentRequest = { source, text, userInitiated: true };
+    const routed = await this.intentRouter.route(request);
+    if (routed.decision.intent === 'normal_chat' || routed.decision.intent === 'unknown') return false;
+
+    const result = await this.intentExecutor.execute(routed);
+    this.intentRouter.recordExecution(result);
+
+    const assistantMessage = this.getIntentAssistantMessage(routed, result);
+    const shouldSuppressAssistantMessage =
+      routed.decision.intent === 'screen_target_pointer' &&
+      routed.permission.status === 'allowed' &&
+      result.status === 'handled';
+    if (assistantMessage && !shouldSuppressAssistantMessage) {
+      this.sendBubble(assistantMessage);
+    }
+
+    this.memory.addMessage('user', text);
+    if (assistantMessage) {
+      this.memory.addMessage('assistant', assistantMessage);
+    }
+    this.memory.recordInteraction(this.getInteractionTypeForIntent(routed.decision.intent), text, this.stateManager.getCurrentState());
+
+    return true;
+  }
+
+  private getIntentAssistantMessage(routed: IntentRoutedDecision, result: IntentExecutionResult): string {
+    if (result.message) return result.message;
+    if (result.error) return `Intent failed: ${result.error}`;
+    if (routed.permission.status === 'denied' || routed.permission.status === 'needs_confirmation') {
+      return `Intent ${routed.permission.status}: ${routed.permission.reason}`;
+    }
+    if (result.status === 'failed') return 'Intent failed safely without fallback to chat.';
+    if (result.status === 'skipped') return 'Intent skipped safely without fallback to chat.';
+    return '';
+  }
+
+  private getInteractionTypeForIntent(intent: string): string {
+    switch (intent) {
+      case 'screen_summary': return 'screen-analysis';
+      case 'screen_target_pointer': return 'screen-target-pointer';
+      default: return `intent-${intent.replace(/_/g, '-')}`;
+    }
   }
 
   /** 获取记忆模块（供 ObserverManager 使用） */

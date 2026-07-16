@@ -4,16 +4,51 @@ export interface ScreenFingerprint {
   values: number[];
 }
 
+export interface ScreenFingerprintSummary {
+  width: number;
+  height: number;
+  values: number;
+  min: number;
+  max: number;
+  mean: number;
+  sample: number[];
+  hash: string;
+}
+
+export interface ScreenFingerprintDiffSummary {
+  average: number;
+  max: number;
+  p95: number;
+  cellsAbove005: number;
+  cellsAbove010: number;
+  cellsAbove020: number;
+}
+
 export const SCREEN_FINGERPRINT_WIDTH = 16;
 export const SCREEN_FINGERPRINT_HEIGHT = 9;
 export const SCREEN_FINGERPRINT_CHANNELS = 4;
-export const SCREEN_FINGERPRINT_CHANGE_THRESHOLD = 0.20;
+export const SCREEN_FINGERPRINT_CHANGE_THRESHOLD = 0.15;
+export const SCREEN_FINGERPRINT_LOCAL_P95_THRESHOLD = 0.12;
+export const SCREEN_FINGERPRINT_LOCAL_CELLS_ABOVE_010_THRESHOLD = 10;
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   if (value < 0) return 0;
   if (value > 1) return 1;
   return value;
+}
+
+function round4(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
+function fingerprintHash(values: number[]): string {
+  let hash = 2166136261;
+  for (const value of values) {
+    hash ^= Math.round(clamp01(value) * 255);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 export function createScreenFingerprintFromBitmap(
@@ -42,21 +77,82 @@ export function createScreenFingerprintFromBitmap(
   return { width, height, values };
 }
 
-export function compareScreenFingerprints(
+export function summarizeScreenFingerprint(fingerprint?: ScreenFingerprint | null): ScreenFingerprintSummary | null {
+  if (!fingerprint || fingerprint.values.length === 0) return null;
+
+  let min = 1;
+  let max = 0;
+  let total = 0;
+  for (const raw of fingerprint.values) {
+    const value = clamp01(raw);
+    if (value < min) min = value;
+    if (value > max) max = value;
+    total += value;
+  }
+
+  return {
+    width: fingerprint.width,
+    height: fingerprint.height,
+    values: fingerprint.values.length,
+    min: round4(min),
+    max: round4(max),
+    mean: round4(total / fingerprint.values.length),
+    sample: fingerprint.values.slice(0, 8).map(value => round4(clamp01(value))),
+    hash: fingerprintHash(fingerprint.values),
+  };
+}
+
+export function describeScreenFingerprintDiff(
   a?: ScreenFingerprint | null,
   b?: ScreenFingerprint | null
-): number | null {
+): ScreenFingerprintDiffSummary | null {
   if (!a || !b) return null;
   if (a.width !== b.width || a.height !== b.height) return null;
   if (a.values.length !== b.values.length) return null;
   if (a.values.length === 0) return null;
 
+  const diffs: number[] = [];
   let total = 0;
+  let max = 0;
+  let cellsAbove005 = 0;
+  let cellsAbove010 = 0;
+  let cellsAbove020 = 0;
+
   for (let i = 0; i < a.values.length; i++) {
-    const left = clamp01(a.values[i]);
-    const right = clamp01(b.values[i]);
-    total += Math.abs(left - right);
+    const diff = Math.abs(clamp01(a.values[i]) - clamp01(b.values[i]));
+    diffs.push(diff);
+    total += diff;
+    if (diff > max) max = diff;
+    if (diff >= 0.05) cellsAbove005++;
+    if (diff >= 0.10) cellsAbove010++;
+    if (diff >= 0.20) cellsAbove020++;
   }
 
-  return total / a.values.length;
+  const sorted = diffs.slice().sort((left, right) => left - right);
+  const p95Index = Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1);
+
+  return {
+    average: round4(total / a.values.length),
+    max: round4(max),
+    p95: round4(sorted[p95Index] ?? 0),
+    cellsAbove005,
+    cellsAbove010,
+    cellsAbove020,
+  };
+}
+
+export function shouldCancelForScreenFingerprintChange(summary?: ScreenFingerprintDiffSummary | null): boolean {
+  if (!summary) return false;
+  return summary.average >= SCREEN_FINGERPRINT_CHANGE_THRESHOLD
+    || (
+      summary.p95 >= SCREEN_FINGERPRINT_LOCAL_P95_THRESHOLD
+      && summary.cellsAbove010 >= SCREEN_FINGERPRINT_LOCAL_CELLS_ABOVE_010_THRESHOLD
+    );
+}
+
+export function compareScreenFingerprints(
+  a?: ScreenFingerprint | null,
+  b?: ScreenFingerprint | null
+): number | null {
+  return describeScreenFingerprintDiff(a, b)?.average ?? null;
 }

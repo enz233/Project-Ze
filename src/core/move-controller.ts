@@ -243,7 +243,7 @@ export class MoveController {
     let targetX = request.x;
     let targetY = request.y;
 
-    if ((request.anchor || 'top-left') === 'center') {
+    if ((request.anchor || 'center') === 'center') {
       targetX = request.x - bounds.width / 2;
       targetY = request.y - bounds.height / 2;
     }

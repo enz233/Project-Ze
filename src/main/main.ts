@@ -27,6 +27,9 @@ import { CameraAwarenessBackgroundRunner } from '../core/camera-awareness-backgr
 import { CameraAwarenessManager } from '../core/camera-awareness-manager';
 import { CAMERA_AWARENESS_IPC, CameraAwarenessSnapshot, CameraFrameInput } from '../core/camera-awareness-types';
 import { VisionImageAnalyzer } from '../core/vision-image-analyzer';
+import { IntentRouter } from '../core/intent-router';
+import { IntentClassifier } from '../core/intent-classifier';
+import { IntentExecutor } from '../core/intent-executor';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -68,6 +71,8 @@ const pendingCameraBackgroundFrameRequests = new Map<string, {
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
 }>();
+let intentRouter: IntentRouter;
+let intentExecutor: IntentExecutor;
 
 // 拖拽状态（主进程端）
 let isDragging = false;
@@ -173,6 +178,10 @@ function createWindow(): void {
     },
   });
   cameraAwarenessBackgroundRunner.sync();
+  intentRouter = new IntentRouter({
+    classifier: new IntentClassifier(),
+    cameraEnabled: () => Boolean(cameraAwarenessManager?.getConfig()?.enabled),
+  });
   chatManager = new ChatManager(mainWindow, aiConfigManager, aiService, stateManager, timeAwareness, screenAnalyzer);
   chatManager.setCameraPromptAnalyzer((prompt) => requestCameraPromptAnalysis(prompt));
   appearanceConfig = new AppearanceConfigManager();
@@ -196,6 +205,39 @@ function createWindow(): void {
     windowActivityService,
   });
   chatManager.setScreenTargetPointer(screenTargetPointer);
+  intentExecutor = new IntentExecutor({
+    screenSummary: async (routed) => {
+      const prompt = routed.request.text || '请总结当前屏幕';
+      const result = await screenAnalyzer.analyze(prompt);
+      return { status: 'handled', message: typeof result === 'string' ? result : JSON.stringify(result) };
+    },
+    screenTargetPointer: async (routed) => {
+      const target = routed.decision.target || routed.request.text || '';
+      const pointerMessage = routed.request.text || target;
+      const result = await screenTargetPointer.handle(pointerMessage);
+      return {
+        status: result.handled ? 'handled' : 'skipped',
+        message: result.handled ? 'target pointer handled' : 'target pointer did not find a target',
+      };
+    },
+    cameraCheckOnce: async () => ({
+      status: 'skipped',
+      message: '摄像头一次性检测需要设置页提供当前帧；第一版对话入口只完成权限路由，不自动打开摄像头。',
+    }),
+    voiceInputHelp: async () => ({
+      status: 'handled',
+      message: '请检查语音输入是否启用、API Key/Base URL/模型是否已配置，并查看 Debug 日志中的 voice-input 状态。',
+    }),
+    proactiveExplain: async () => ({
+      status: 'handled',
+      message: '可以在 Debug 面板查看最近主动回应和 Intent Router 决策。',
+    }),
+    proactiveControl: async () => ({
+      status: 'skipped',
+      message: '主动提醒开关需要二次确认后写入配置，本轮不静默修改。',
+    }),
+  });
+  chatManager.setIntentRouter(intentRouter, intentExecutor);
 
   // 连接情绪系统到 TransitionEngine
   transitionEngine.setEmotionUpdater(chatManager.getEmotionUpdater());
@@ -524,6 +566,10 @@ function setupIPC(): void {
     return { ok: true };
   });
 
+  ipcMain.handle('intent-router:get-debug-snapshot', async () => {
+    return intentRouter?.getDebugSnapshot() ?? { recent: [] };
+  });
+
   // TTS 语音
   ipcMain.handle('load-tts-config', () => {
     return ttsConfigManager?.get();
@@ -555,8 +601,8 @@ function setupIPC(): void {
     return updatedConfig;
   });
 
-  ipcMain.handle('voice-input-start', async (_event, options: any) => {
-    return voiceInputManager.startSession(options);
+  ipcMain.handle('voice-input-start', async (event, options: any) => {
+    return voiceInputManager.startSession(options, event.sender);
   });
 
   ipcMain.handle('voice-input-audio-chunk', async (_event, payload: any) => {

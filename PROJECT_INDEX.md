@@ -1,6 +1,6 @@
 # Project-Ze / Quiet Companion 项目索引
 
-> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.3.0
+> 本文档供 AI 助手快速了解项目结构，避免每次读全部代码。最后更新：v0.3.1 + Unreleased 文档同步
 
 ## 项目概述
 
@@ -20,6 +20,9 @@ src/
 │   ├── ai-memory.ts        # AI 记忆（对话历史+摘要+轻量生活习惯）
 │   ├── chat-manager.ts     # 对话管理（消息构建、流式调用）
 │   ├── proactive-reaction-system.ts # 情境化主动回应候选判断
+│   ├── screen-fingerprint.ts # 屏幕变化轻量 fingerprint 工具（Unreleased）
+│   ├── camera-awareness-*.ts # 摄像头感知 core/config/manager/types
+│   ├── vision-image-analyzer.ts # 摄像头单帧 Vision 结构化解析
 │   ├── logger.ts           # 日志系统（写入 userData/logs/）
 │   └── types.ts            # 类型定义（StateId 等）
 ├── main/               # Electron 主进程
@@ -59,16 +62,28 @@ src/
 - `move-controller.ts`：主进程自动移动控制器，提供 `moveTo` / `cancel` / `isMoving`，负责坐标 anchor、屏幕 clamp、平滑移动和 renderer 移动视觉事件。
 - `bubble-manager.ts`：气泡发送、状态门禁、主动气泡短间隔控制。
 - `bubble-orchestrator.ts`：主进程气泡编排边界，接收带来源/优先级的气泡请求，并把实际投递委托给 `BubbleManager`。
-- `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；截图帧 `ScreenCaptureFrame` 包含坐标映射元信息与 `ScreenCaptureFrame.fingerprint` 低分辨率亮度 fingerprint，用于 Vision 定位前后的一次轻量屏幕变化判定。
-- `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、八方向 point 指向姿态选择、指向锚点换算、移动调用、屏幕变化取消和指向气泡；移动前会对 Vision 前后两帧 `ScreenCaptureFrame.fingerprint` 做一次保守 diff，diff 阈值为 `0.20`，明显变化时取消旧坐标。
+- `screen-analyzer.ts`：唯一屏幕截图与 Vision 分析服务；当前稳定职责是截图、坐标映射元信息与 Vision 分析。普通屏幕分析继续使用低细节 Vision 图像，point 目标定位使用 `screen-vision-request.ts` 指定高细节图像以保留 UI 文字/坐标识别能力；`ScreenCaptureFrame.fingerprint`、`screen-capture-frame.ts` 按显示器比例推导缩略图尺寸，以及 `PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时将 point 前后实际 PNG 截图保存到 Electron `userData/screen-pointer-debug/` 属于 Unreleased 稳定性/诊断增强。
+- `screen-target-pointer.ts`：屏幕目标指示编排器，仅处理 `.` 显式屏幕分析中的“指出/在哪/帮我找”等请求，负责 Vision 定位结果校验、截图坐标映射、移动调用和指向气泡；八方向 point 指向姿态、指向后恢复、fingerprint diff 屏幕变化取消属于 Unreleased 增强。
+- `intent-types.ts`：多模态意图入口的稳定类型边界，定义输入来源、intent、能力需求、权限结果、执行结果和 Debug 记录。
+- `intent-classifier.ts`：规则优先的意图分类器，覆盖普通聊天、屏幕总结、目标指示、摄像头一次性检测、语音/设置/主动回应帮助，并为 LLM fallback 提供结构化校验边界。
+- `intent-router.ts`：Intent Router 主入口，应用屏幕/摄像头/移动/配置写入等隐私权限策略，并维护最近 intent 决策快照。
+- `intent-executor.ts`：薄分发层，根据已授权 intent 调用现有 ChatManager、ScreenAnalyzer、ScreenTargetPointer、CameraAwarenessManager 或诊断 helper。
 - `emotion-system.ts` / `emotion-updater.ts`：情绪状态与更新。
 - `tts-manager.ts` / `tts-engine.ts` / `tts-*.ts`：TTS 编排、统一引擎接口与各供应商合成实现；`TTSManager` 负责播放/字幕/停止/`playbackId`，供应商文件只负责语音合成。
 - `json-config-store.ts`：通用 JSON 配置持久化助手，负责 Electron `userData/config` 下运行态配置的目录创建、默认值合并、读写和错误日志。
 - `chat-history-store.ts`：聊天历史持久化边界，负责 `chat-history.json` 的读写、最近消息读取和摘要计数；`ai-memory.ts` 仍作为记忆 facade 负责摘要、关系、习惯和 prompt 组装。
-- `asr-config.ts`：ASR 运行态配置，使用 `JsonConfigStore<T>` 保存到 Electron `userData/config/asr.json`；`providerPreset` 表示设置页模板，`provider` 表示实际 ASR 引擎类型。
-- `asr-engine.ts` / `asr-openai-compatible.ts`：ASR 引擎接口与 OpenAI-compatible provider，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设当前都复用该引擎。
+- `asr-config.ts`：ASR 运行态配置，使用 `JsonConfigStore<T>` 保存到 Electron `userData/config/asr.json`；`advancedSettingsEnabled` 控制设置页是否显示 path/streaming/cache 等高级字段；普通模式保留供应商预设和 Base URL，并默认使用 `chunked-fallback`；`providerPreset` 属于 Unreleased 供应商预设增强，`provider` 表示实际 ASR 引擎类型。
+- `asr-engine.ts` / `asr-openai-compatible.ts` / `asr-qwen-realtime.ts`：ASR 引擎接口与 provider 实现，主流程只依赖 `ASREngine.stream(...)`；OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设复用 OpenAI-compatible 引擎，Qwen-ASR 实时识别使用专用 WebSocket 引擎和 `Authorization` 握手请求头。
 - `voice-input-manager.ts`：语音输入 session 编排，连接音频 chunk、ASR engine、音频缓存和 transcript/status IPC。
 - `voice-audio-cache.ts`：短期语音缓存边界，保存 runtime-only 音频 chunk 并返回 `audioRef`。
+- `camera-awareness-types.ts`：摄像头感知配置、帧输入、检测结果、状态快照与 IPC 常量类型；不代表独立事件总线。
+- `camera-awareness-config.ts`：摄像头感知运行态默认配置与 Electron `userData/config/camera-awareness.json` 持久化。
+- `vision-image-analyzer.ts`：复用现有 Vision 配置，对设置页提供的低分辨率单帧做 presence / affect / reason 结构化解析，并限制身份、敏感属性和环境描述。
+- `camera-awareness-manager.ts`：摄像头感知状态机，提供 `detectOnce`、`processBackgroundFrame`、`getSnapshot`；仅在稳定 `absent -> present` 时尝试通过 `BubbleOrchestrator` 发出低优先级回来回应。
+- `screen-capture-frame.ts`（Unreleased）：纯 TypeScript 截图帧尺寸工具，默认以 1280 宽按当前显示器比例推导缩略图高度；例如 1707x1067 会使用约 1280x800，确保 Vision point 坐标与 `mapPointToScreen()` 的 X/Y 比例来自同一画面比例。
+- `screen-fingerprint.ts`（Unreleased）：纯 TypeScript 低分辨率截图 fingerprint 工具，提供 16x9 亮度摘要、平均 diff `0.15` 阈值、`p95 >= 0.12 && cellsAbove010 >= 10` 局部变化规则，以及 diff/summary helper。
+- `screen-pointer-debug.ts`（Unreleased）：纯 TypeScript point 截图诊断 helper，负责 debug 开关判断、文件名安全化和截图文件名生成；实际 PNG 仅在 `PROJECT_ZE_SCREEN_POINTER_DEBUG=1` 时由 `ScreenAnalyzer` 写入 Electron `userData/screen-pointer-debug/`，截图可能包含隐私内容，用完需手动清理。
+- `screen-vision-request.ts`（Unreleased）：纯 TypeScript Vision 请求用途 helper；普通屏幕分析保持 `detail: low`，point 目标定位使用 `detail: high`，避免定位按钮/文字入口时因低细节图像看不清。
 
 ## 8 个状态
 
@@ -88,6 +103,7 @@ src/
 ### 渲染进程 renderer.ts
 - **IIFE 模式**：不是模块，用 `(function(){...})()` 包裹
 - **精灵图路径**：`setSprite(name)` 自动根据名字前缀匹配子目录；`point-*` 会映射到 `src/assets/sprites/point/<direction>.png`，例如 `point-right_down` -> `point/right_down.png`
+- **point 指向守卫**：`point-visual` 活跃期间，renderer 会阻止 idle/blink/sleepy 等普通状态精灵覆盖当前 point pose，只允许新的 `point-*` 或 dragged fallback 更新；7 秒恢复由 `ScreenTargetPointer` 会话计时统一触发。
 - **updateVisual**：通过 `lastVisualState` 防重复，`isDragVisualActive` 防拖拽覆盖
 - **眨眼系统**：idle/curious/sleepy 各有不同频率，用 setTimeout 链
 - **拖拽**：左键触发，mousedown 立即显示 dragged，鼠标移动时更新方向差分
@@ -98,9 +114,10 @@ src/
 - **IPC 注册**：`setupIPC()` 在 `app.whenReady` 前调用一次
 - **拖拽**：主进程用 `screen.getCursorScreenPoint()` 轮询鼠标位置
 - **AI 模块**：AIConfigManager → AIService → ChatManager
-- **设置窗口**：单例模式，F11 打开；“其他”页包含临时 Move 测试（Debug）区块，可输入坐标调用 `moveTo` / `teleportTo` 验证移动效果
+- **设置窗口**：单例模式，F11 打开；“其他”页包含临时 Move 测试（Debug）区块，可输入坐标调用 `moveTo` / `teleportTo` 验证移动效果；“摄像头感知”页提供启用开关、立即检测一次、可选低频检测、debug preview 和本地实时预览，帧采集由设置页 renderer 在用户授权后完成。
+- **语音输入设置**：默认显示启用、供应商预设、Base URL、API Key、模型、语言、自动发送和测试区；“显示高级 ASR 设置”打开后才显示实际引擎、Realtime/Transcription Path、流式模式和缓存参数。
 - **调试窗口**：F3 打开，显示日志、关系数值、互动统计、常用应用和生活习惯提示词
-- **主动回应**：当前主动回应主路径：`ObserverManager → ContextCollector → ProactiveReactionSystem → MicroBehaviorManager → BubbleOrchestrator → BubbleManager.tryShowProactiveBubble`。基于轻量上下文快照、应用切换、工作/休息转换、长专注和直接互动生成轻柔回应；规则来自 `src/config/proactive-reactions.json` 与 `src/config/micro-behaviors.json`，Debug 面板显示最近决策/拦截原因/预算状态。`BubbleOrchestrator` 只负责主进程气泡请求的轻量编排；`BubbleManager` 继续负责状态门禁、冷却和 `show-bubble` IPC 投递。
+- **主动回应**：当前主动回应主路径：`ObserverManager → ContextCollector → ProactiveReactionSystem → MicroBehaviorManager → BubbleOrchestrator → BubbleManager.tryShowProactiveBubble`。基于轻量上下文快照、应用切换、工作/休息转换、长专注和直接互动生成轻柔回应；规则来自 `src/config/proactive-reactions.json` 与 `src/config/micro-behaviors.json`，Debug 面板显示最近决策/拦截原因/预算状态。`BubbleOrchestrator` 只负责主进程气泡请求的轻量编排；`BubbleManager` 继续负责状态门禁、冷却和 `show-bubble` IPC 投递。Camera Awareness 第一版仅在后台稳定 `absent -> present` 时尝试 `camera_awareness` 来源气泡，不是常驻视频分析或主动回应系统的一等输入。
 
 ### AI 系统
 - **配置**：`ai-config.json` 持久化到 `app.getPath('userData')/config/`
@@ -110,7 +127,8 @@ src/
 - **情感前缀**：根据状态给 AI 消息加情感上下文，切换后 4 秒保持上一个状态
 - **情境化主动回应**：本地规则先判断是否应该回应，AI 仅用于高价值场景短句改写，不用于决定是否打扰；阈值、分类、模板和 AI 改写 reason 已配置化
 - **TTS 架构**：`TTSManager` 保持唯一编排入口，读取配置并调用 `createTTSEngine(config)` 获取供应商引擎；供应商引擎实现 `TTSEngine.synthesize(text)` 并返回 base64 音频，Electron 播放、字幕、停止和 `playbackId` 完成确认仍只在 `TTSManager`、preload 和 renderer 链路中处理
-- **屏幕目标指示**：`.` 屏幕分析入口中命中明确“指出/在哪/帮我找”等关键词时，`ChatManager` 委托 `ScreenTargetPointer` 调用 Vision 结构化定位；置信度足够时通过 `MoveController` 把桌宠移动到目标旁边，并发送 `point-visual` 八方向指向差分。point 差分约 7 秒后只恢复普通视觉，不移动回原位；指向 session 会保留前台窗口变化检测，并在 Vision 定位前后做一次基于 `ScreenCaptureFrame.fingerprint` 的低分辨率截图 fingerprint diff，阈值为 `0.20`，若屏幕明显变化则取消旧坐标；普通聊天自然语言自动触发、wheel IPC、全局输入 hook 和持续截图监控暂缓，避免隐私、误触发和复杂度问题。
+- **屏幕目标指示**：`.` 屏幕分析入口中命中明确“指出/在哪/帮我找”等关键词时，`ChatManager` 委托 `ScreenTargetPointer` 调用 Vision 结构化定位；置信度足够时通过 `MoveController` 把桌宠移动到目标旁边并给出指向气泡。八方向 `point-visual`、约 7 秒后只恢复普通视觉、Vision 前后 `ScreenCaptureFrame.fingerprint` diff 取消旧坐标属于 Unreleased 增强；wheel IPC、全局输入 hook 和持续截图监控暂缓，避免隐私、误触发和复杂度问题。
+- **Intent Router（Unreleased）**：普通聊天和 ASR 文本可在明确请求时路由到屏幕总结或目标指示；LLM fallback 只建议结构化意图，最终是否允许截图、摄像头、移动或写配置由本地权限策略决定。
 
 ## IPC 通道一览
 
@@ -123,8 +141,8 @@ src/
 | user-click | - | 点击 |
 | user-message | text | 发送消息给 AI |
 | window-move-by | {deltaX, deltaY} | 移动窗口 |
-| move-to | MoveToRequest | 调试/后续模块用：按 X/Y 单轴分段平滑移动桌宠到目标坐标；目标、分段落点和每帧位置都会按 workArea clamp |
-| teleport-to | MoveToRequest | 调试/后续模块用：直接切换桌宠到目标坐标，仍执行 clamp，不播放 move 动画 |
+| move-to | MoveToRequest | 调试/后续模块用：平滑移动桌宠到目标坐标，执行 workArea clamp；X/Y 单轴分段属于 Unreleased Move 优化 |
+| teleport-to | MoveToRequest | 调试/后续模块用：直接切换桌宠到目标坐标，仍执行 clamp；当前作为设置页 Move 测试能力记录，后续 Move 优化会继续稳定其视觉边界 |
 | mouse-enter/leave | - | 鼠标进出 |
 | lonely-action | boolean | lonely 动画状态 |
 | state-finished | - | 动画状态结束 |
@@ -147,9 +165,23 @@ src/
 | voice-input-transcript | partial/final/error event | 语音识别结果 |
 | point-visual | {active, pose?, reason?} | 屏幕目标指示期间的八方向 point-* 指向差分，pose 可为 point-right / point-right_down / point-down / point-left_down / point-left / point-left_up / point-up / point-right_up，资源缺失时 renderer 回退到 dragged 方向差分 |
 
+### Camera Awareness 设置页 API
+
+`window.companion.cameraAwareness` 由 preload 暴露给设置页，当前包含：
+
+| 方法 | 说明 |
+|------|------|
+| getConfig | 读取摄像头感知运行态配置 |
+| updateConfig | 保存启用、后台低频检测、离开判定、回来回应、debug preview 等配置 |
+| detectOnce | 对设置页提供的单帧做一次检测，不触发气泡 |
+| processBackgroundFrame | 处理设置页低频 timer 提供的后台帧，进入状态机并可能触发回来回应 |
+| getSnapshot | 读取最近检测、稳定状态和状态机快照 |
+
+摄像头感知默认关闭；第一版不保存图片/视频，不做身份识别、年龄/性别/种族等敏感属性判断，不做精细情绪或诊断。当前低频检测由设置页 renderer timer 驱动，不是系统级常驻后台视频服务。
+
 ### ASR provider presets
 
-语音输入设置页提供 OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 三个供应商预设。预设只负责填充 Base URL、路径、模型和流式模式等配置；运行时仍按 `provider` 字段选择实际引擎。本轮阿里百炼预设的 `provider` 仍为 `openai-compatible`，不包含专用百炼 ASR 协议实现。
+语音输入设置页的供应商预设属于 Unreleased 增强：OpenAI、阿里百炼 / DashScope、自定义 OpenAI-compatible 预设负责填充 Base URL、路径、模型和流式模式等配置；Qwen-ASR 实时识别预设使用专用 `qwen-asr-realtime` 引擎，通过 WebSocket 握手 `Authorization: Bearer <apiKey>` 调用 `wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime?model=<model>`，不再请求 OpenAI `/audio/transcriptions`。
 
 ## 常见修改场景
 
@@ -180,6 +212,8 @@ src/
 
 | 版本 | 日期 | 主要内容 |
 |------|------|---------|
+| Unreleased | - | Intent Router 最小聊天路由接入、八方向 point visual、screen fingerprint 稳定性与诊断、Move 专用差分/单轴分段/teleportTo、ASR provider presets、renderer 动画守卫修复 |
+| v0.3.1 | 2026-07-15 | Camera Awareness 第一版、设置页摄像头入口与实时预览、cameraAwareness IPC、Move clamp/测试入口、ScreenTargetPointer 初版 |
 | v0.3.0 | 2026-07-15 | 语音输入 ASR：麦克风按钮、长按快捷键、流式识别、ASR 配置、音频缓存接口 |
 | v0.1.0 | 2026-05-23 | 初始版本，7 状态系统 |
 | v0.1.1 | 2026-05-24 | curious 眨眼，修复重复触发 |

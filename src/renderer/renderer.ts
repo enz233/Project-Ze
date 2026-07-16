@@ -94,6 +94,7 @@
 
   var voiceRecorder: MediaRecorder | null = null;
   var voiceSessionId: string | null = null;
+  var voiceLastSessionId: string | null = null;
   var voiceChunkStartedAt = 0;
   var voiceChunkSequence = 0;
   var voiceRecording = false;
@@ -568,6 +569,7 @@
       // @ts-ignore
       var session = await window.companion.voiceInput.start({ source: source, mimeType: mimeType });
       voiceSessionId = session.sessionId;
+      voiceLastSessionId = session.sessionId;
       voiceChunkSequence = 0;
       voicePendingChunkUploads = [];
       voicePartialBase = chatInputEl.value;
@@ -602,7 +604,7 @@
       voiceChunkStartedAt = Date.now();
       voiceRecorder.start(750);
       setVoiceRecording(true);
-      updateChatStatus({ phase: 'voice-recording', message: '正在听你说话…' });
+      updateChatStatus({ phase: 'voice-recording', message: '正在录音，请说话…' });
     } catch (e) {
       setVoiceRecording(false);
       updateChatStatus({ phase: 'voice-error', message: '语音输入启动失败' });
@@ -615,6 +617,7 @@
     var sessionId = voiceSessionId;
     var recorder = voiceRecorder;
     setVoiceRecording(false);
+    updateChatStatus({ phase: 'voice-finalizing', message: '正在识别…' });
     if (recorder && recorder.state !== 'inactive') {
       await new Promise<void>(function (resolve) {
         var activeRecorder = recorder as MediaRecorder;
@@ -821,12 +824,17 @@
     // 主进程发来的语音输入状态
     // @ts-ignore
     window.companion.voiceInput.onStatus(function (payload: any) {
+      var activeOrLastSessionId = voiceSessionId || voiceLastSessionId;
+      if (payload && activeOrLastSessionId && payload.sessionId !== activeOrLastSessionId) return;
       updateChatStatus(payload);
     });
 
     // 主进程发来的语音识别结果
     // @ts-ignore
     window.companion.voiceInput.onTranscript(function (payload: any) {
+      var activeOrLastSessionId = voiceSessionId || voiceLastSessionId;
+      if (payload && activeOrLastSessionId && payload.sessionId !== activeOrLastSessionId) return;
+      if (!activeOrLastSessionId) return;
       if (payload.type === 'partial') {
         debugVoiceInput('transcript partial', { textLength: String(payload.text || '').length });
         keepChatInputOpen();
@@ -842,9 +850,11 @@
         if (voiceAutoSend && finalText.trim()) {
           sendChatInput();
         }
+        voiceLastSessionId = null;
       }
       if (payload.type === 'error') {
         updateChatStatus({ phase: 'voice-error', message: payload.message || '语音识别失败' });
+        voiceLastSessionId = null;
       }
     });
 
@@ -1072,6 +1082,7 @@
   function setSprite(name: string, fallback?: string, force?: boolean): void {
     if (!SPRITE_DIR) return;
     if (isMoveVisualActive && !force) return;
+    if (isPointVisualActive && !force && name.indexOf('point-') !== 0 && name.indexOf('dragged_') !== 0) return;
     // 根据名字前缀确定子目录
     var folder = 'basic/misc';
     if (name.indexOf('idle') === 0) folder = 'basic/idle';
