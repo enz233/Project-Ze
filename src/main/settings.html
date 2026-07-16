@@ -590,8 +590,9 @@
           <label>实际引擎</label>
           <select id="asrProvider" disabled aria-readonly="true">
             <option value="openai-compatible">OpenAI-compatible</option>
+            <option value="qwen-asr-realtime">Qwen-ASR Realtime</option>
           </select>
-          <div class="hint">实际引擎由供应商预设决定；本轮所有预设都复用 OpenAI-compatible ASR 引擎。</div>
+          <div class="hint">实际引擎由供应商预设决定；Qwen-ASR 使用专用 WebSocket ASR 引擎，其他兼容预设使用 OpenAI-compatible ASR 引擎。</div>
         </div>
 
         <div class="btn-row">

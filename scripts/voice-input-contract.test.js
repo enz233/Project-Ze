@@ -377,6 +377,9 @@ function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   assert.match(html, /测试语音识别 10 秒/);
   assert.match(html, /可能产生 API 调用/);
   assert.match(html, /<select id="asrProvider"[^>]*disabled/);
+  assert.match(html, /<option value="qwen-asr-realtime">Qwen-ASR Realtime<\/option>/);
+  assert.match(html, /Qwen-ASR 使用专用 WebSocket ASR 引擎/);
+  assert.doesNotMatch(html, /所有预设都复用 OpenAI-compatible ASR 引擎/);
   assert.match(html, /config\.provider !== 'openai-compatible' && config\.provider !== 'qwen-asr-realtime'/);
   assert.match(html, /asrProviderPreset'\)\.addEventListener\('change', function\(\) \{[\s\S]*?applySelectedASRPreset\(\);/);
   assert.match(html, /config\.model \?\? preset\.model/);
