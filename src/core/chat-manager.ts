@@ -12,7 +12,7 @@ import { ScreenTargetPointer } from './screen-target-pointer';
 import { TTSManager } from './tts-manager';
 import { IntentRouter } from './intent-router';
 import { IntentExecutor } from './intent-executor';
-import { IntentRequest } from './intent-types';
+import { IntentExecutionResult, IntentRequest, IntentRoutedDecision } from './intent-types';
 
 export class ChatManager {
   private aiService: AIService;
@@ -391,12 +391,41 @@ export class ChatManager {
     const request: IntentRequest = { source, text, userInitiated: true };
     const routed = await this.intentRouter.route(request);
     if (routed.decision.intent === 'normal_chat' || routed.decision.intent === 'unknown') return false;
+
     const result = await this.intentExecutor.execute(routed);
-    if (result.status === 'handled' && result.message && routed.decision.intent !== 'screen_target_pointer') {
-      this.sendBubble(result.message);
-    }
     this.intentRouter.recordExecution(result);
-    return result.status === 'handled';
+
+    const assistantMessage = this.getIntentAssistantMessage(routed, result);
+    if (assistantMessage && routed.decision.intent !== 'screen_target_pointer') {
+      this.sendBubble(assistantMessage);
+    }
+
+    this.memory.addMessage('user', text);
+    if (assistantMessage) {
+      this.memory.addMessage('assistant', assistantMessage);
+    }
+    this.memory.recordInteraction(this.getInteractionTypeForIntent(routed.decision.intent), text, this.stateManager.getCurrentState());
+
+    return true;
+  }
+
+  private getIntentAssistantMessage(routed: IntentRoutedDecision, result: IntentExecutionResult): string {
+    if (result.message) return result.message;
+    if (result.error) return `Intent failed: ${result.error}`;
+    if (routed.permission.status === 'denied' || routed.permission.status === 'needs_confirmation') {
+      return `Intent ${routed.permission.status}: ${routed.permission.reason}`;
+    }
+    if (result.status === 'failed') return 'Intent failed safely without fallback to chat.';
+    if (result.status === 'skipped') return 'Intent skipped safely without fallback to chat.';
+    return '';
+  }
+
+  private getInteractionTypeForIntent(intent: string): string {
+    switch (intent) {
+      case 'screen_summary': return 'screen-analysis';
+      case 'screen_target_pointer': return 'screen-target-pointer';
+      default: return `intent-${intent.replace(/_/g, '-')}`;
+    }
   }
 
   /** 获取记忆模块（供 ObserverManager 使用） */

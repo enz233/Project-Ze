@@ -353,13 +353,20 @@
           return;
         }
         intentRouterDebug.innerHTML = recent.slice().reverse().map(function(item) {
+          var requiredCapabilities = Array.isArray(item.requiredCapabilities) ? item.requiredCapabilities.join(', ') : '';
+          var deniedCapabilities = Array.isArray(item.deniedCapabilities) ? item.deniedCapabilities.join(', ') : '';
           return [
             '<div class="debug-row">',
             '<strong>' + escapeHtml(item.intent || 'unknown') + '</strong>',
             '<span> ' + escapeHtml(item.source || '') + '</span>',
             '<span> ' + Math.round((item.confidence || 0) * 100) + '%</span>',
             '<div>' + escapeHtml(item.reason || '') + '</div>',
+            '<div>required: ' + escapeHtml(requiredCapabilities || '-') + '</div>',
             '<div>permission: ' + escapeHtml(item.permissionStatus || '') + ' — ' + escapeHtml(item.permissionReason || '') + '</div>',
+            '<div>denied: ' + escapeHtml(deniedCapabilities || '-') + '</div>',
+            '<div>executor: ' + escapeHtml(item.executorStatus || '-') + '</div>',
+            '<div>message: ' + escapeHtml(item.executorMessage || '-') + '</div>',
+            '<div>error: ' + escapeHtml(item.executorError || '-') + '</div>',
             '</div>'
           ].join('');
         }).join('');
