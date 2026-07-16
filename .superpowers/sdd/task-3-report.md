@@ -45,3 +45,25 @@ commit:
 
 concerns:
 - Existing uncommitted `.superpowers/sdd/task-2-report.md` remains untouched and excluded from this fix.
+
+---
+
+## Task 3 remaining Important fix report — 2026-07-16
+
+status: DONE
+
+changes:
+- Added contract coverage proving a FunASR start-event send failure is yielded promptly even when the microphone chunk iterable never yields.
+- Drained already-queued fatal start-send errors immediately after the socket opens, before awaiting audio chunks.
+- Confirmed start-send failure closes the fake socket and yields a non-recoverable ASR error.
+
+red/green:
+- RED: `npm run build && node scripts/voice-input-contract.test.js` failed with `Timed out waiting for start send failure`.
+- GREEN: `npm run build && node scripts/voice-input-contract.test.js` passed with `voice-input-contract tests passed`.
+
+commit:
+- bc5c506e9d0ba36e9a7909fa57ef803aabecdbb0
+
+concerns:
+- Existing npm warning remains: `Unknown project config "electron_mirror"`; build and tests pass.
+- Existing uncommitted `.superpowers/sdd/task-2-report.md` remains untouched and excluded from this fix.

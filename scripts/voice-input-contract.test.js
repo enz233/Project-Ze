@@ -838,7 +838,54 @@ async function testFunASRLocalStreamAbortAfterOpenClosesSocketWithoutEnd() {
   assert.ok(Buffer.isBuffer(sockets[0].sent[1]));
 }
 
-async function testFunASRLocalStreamYieldsSendFailureAsError() {
+async function testFunASRLocalStreamYieldsStartSendFailurePromptly() {
+  const sockets = [];
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.sent = [];
+      this.closed = false;
+      sockets.push(this);
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      if (typeof payload === 'string') throw new Error('start send failed');
+      this.sent.push(payload);
+    }
+
+    close() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  const eventsPromise = collectFunASREventsWithFakeSocket(FakeFunASRWebSocket, {
+    chunks: async function* liveMicrophoneChunks() {
+      await new Promise(() => undefined);
+    },
+  });
+  const events = await Promise.race([
+    eventsPromise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for start send failure')), 250)),
+  ]);
+  assert.deepStrictEqual(events, [{ type: 'error', message: 'start send failed', sessionId: 's1', recoverable: false }]);
+  assert.strictEqual(sockets.length, 1);
+  assert.strictEqual(sockets[0].closed, true);
+}
+
+async function testFunASRLocalStreamYieldsChunkSendFailureAsError() {
   class FakeFunASRWebSocket {
     constructor(url) {
       this.url = url;
@@ -1274,7 +1321,8 @@ async function run() {
   await testFunASRLocalStreamClosesOnOpenTimeout();
   await testFunASRLocalStreamAbortBeforeOpenClosesSocket();
   await testFunASRLocalStreamAbortAfterOpenClosesSocketWithoutEnd();
-  await testFunASRLocalStreamYieldsSendFailureAsError();
+  await testFunASRLocalStreamYieldsStartSendFailurePromptly();
+  await testFunASRLocalStreamYieldsChunkSendFailureAsError();
   await testFunASRLocalStreamDoesNotDuplicatePreOpenFailure();
   await testFunASRLocalStreamContinuesAfterRecoverableInvalidPayload();
   await testQwenRealtimeStreamWaitsForDelayedFinal();

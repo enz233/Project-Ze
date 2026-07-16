@@ -219,15 +219,23 @@ export class FunASRLocalEngine implements ASREngine {
 
     let terminalReceived = false;
     try {
-      for await (const chunk of input.chunks) {
-        if (input.signal?.aborted || closed) break;
-        if (!queueSend(socket, pending, Buffer.from(chunk.base64, 'base64'), input.sessionId)) break;
-        while (pending.length > 0) {
-          const event = pending.shift()!;
-          terminalReceived = terminalReceived || isTerminalEvent(event);
-          yield event;
+      while (pending.length > 0) {
+        const event = pending.shift()!;
+        terminalReceived = terminalReceived || isTerminalEvent(event);
+        yield event;
+      }
+
+      if (!terminalReceived) {
+        for await (const chunk of input.chunks) {
+          if (input.signal?.aborted || closed) break;
+          if (!queueSend(socket, pending, Buffer.from(chunk.base64, 'base64'), input.sessionId)) break;
+          while (pending.length > 0) {
+            const event = pending.shift()!;
+            terminalReceived = terminalReceived || isTerminalEvent(event);
+            yield event;
+          }
+          if (terminalReceived) break;
         }
-        if (terminalReceived) break;
       }
 
       if (!closed && !input.signal?.aborted && !terminalReceived) {
