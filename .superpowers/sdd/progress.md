@@ -23,3 +23,4 @@ FunASR Task 3: complete (commits 413bb78..f686014, review clean after stream har
 FunASR Task 4: complete (commits e65a46c..88c2b3a, review clean)
 FunASR Task 5: complete (commits aef2cff..e17a8e6, review clean)
 FunASR Task 6: complete (commits 6b97932..0cfecaf, review clean)
+FunASR Task 7: complete (commits 37a1a76..8675261, review clean after PCM cleanup fix)
