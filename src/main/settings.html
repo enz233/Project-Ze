@@ -1324,7 +1324,6 @@
         setASRMicStatus('当前环境不支持语音输入测试', true);
         return;
       }
-      await saveASRConfigForRecognitionTest(config);
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setASRMicStatus('当前环境不支持麦克风访问', true);
         return;
@@ -1338,6 +1337,7 @@
       asrRecognitionStartToken = startToken;
       const startupResources = { stream: null, recorder: null };
       try {
+        await saveASRConfigForRecognitionTest(config);
         asrRecognitionRunning = true;
         asrRecognitionUploads = [];
         setASRRecognitionResult('');

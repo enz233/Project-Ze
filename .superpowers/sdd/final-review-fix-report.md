@@ -55,3 +55,12 @@ Pending before commit; final commit hash recorded by git after this report is st
 ## Concerns
 - `npm` still emits existing warnings about unknown `electron_mirror` / `electron-mirror` config; tests/build pass.
 - Existing untracked `.superpowers/sdd/progress.md` and `.superpowers/sdd/task-*.md` files were present at task start and were left uncommitted.
+
+## 2026-07-16 ASR settings recognition-test save failure handling
+
+- Fix: moved `await saveASRConfigForRecognitionTest(config)` into the recognition-test startup `try` block after capability checks and before `window.companion.voiceInput.start`, so save failures use the existing formatted startup failure status and do not request microphone access or create recorder/session resources.
+- Contract test: tightened `scripts/voice-input-contract.test.js` to require save and `voiceInput.start` inside the same `try`, with the catch formatting and reporting failures via `setASRMicStatus`.
+- Commands:
+  - `npm test` — passed (`tsc`, voice-input contract, screen fingerprint/capture/pointer/vision contract tests). npm emitted existing `electron_mirror` / `electron-mirror` config warnings.
+  - `npm run build` — passed (`tsc`). npm emitted existing `electron_mirror` config warning.
+- Concerns: none for the requested fix; unrelated pre-existing modified files remain at `.superpowers/sdd/progress.md` and `.superpowers/sdd/task-4-report.md`.

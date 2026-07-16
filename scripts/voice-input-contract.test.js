@@ -287,7 +287,8 @@ function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   assert.match(html, /streamingMode: 'chunked-fallback'/);
   assert.match(html, /saveASRConfig\(config\)[\s\S]*?voiceInput\.start/);
   assert.match(html, /async function saveASRConfigForRecognitionTest\(config\)/);
-  assert.match(html, /await saveASRConfigForRecognitionTest\(config\);[\s\S]*?window\.companion\.voiceInput\.start/);
+  assert.match(html, /try \{[\s\S]*?await saveASRConfigForRecognitionTest\(config\);[\s\S]*?window\.companion\.voiceInput\.start/);
+  assert.match(html, /catch \(error\) \{[\s\S]*?formatASRRecognitionErrorMessage\(error && error\.message \? error\.message : String\(error\)\)[\s\S]*?setASRMicStatus\('语音识别测试启动失败：' \+ message, true\)/);
   assert.match(html, /function formatASRRecognitionErrorMessage\(message\)/);
   assert.match(html, /实时识别连接失败/);
   assert.match(html, /chunked-fallback 后重试/);
