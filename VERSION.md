@@ -3,6 +3,7 @@
 > 旧名 Quiet Companion；当前对外项目名为 Project-Ze。
 
 ## Unreleased
+- Intent Router：新增多模态任务入口统一化边界，支持规则优先的意图分类、LLM fallback 校验接口、屏幕/摄像头/移动/配置写入权限闸门、最近 intent 决策 Debug 快照和薄执行分发层
 - Intent Router 最小聊天路由接入：普通文字聊天入口在正常 LLM 对话前尝试路由明确屏幕总结/目标指示意图，并通过薄 `IntentExecutor` 分发到现有 `ScreenAnalyzer` / `ScreenTargetPointer`；对话入口不自动打开摄像头，ASR source 拆分留待后续 caller 更新
 - 屏幕目标指示坐标映射修复：截图缩略图高度改为按显示器宽高比从 1280 宽推导，避免 1707x1067 等非 16:9 屏幕被固定拉伸到 1280x720 后造成 Vision point Y 轴映射偏移
 - 屏幕目标指示视觉：使用 `src/assets/sprites/point/` 八方向 point 差分，按目标相对方向选择姿态，并在约 7 秒后只恢复普通视觉、不移动回原位
