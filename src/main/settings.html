@@ -953,8 +953,6 @@
       document.getElementById('asrTranscriptionPath').value = preset.transcriptionPath;
       document.getElementById('asrStreamingMode').value = preset.streamingMode;
       document.getElementById('asrLanguage').value = preset.language;
-      const funasrHint = document.getElementById('funasrLocalHint');
-      if (funasrHint) funasrHint.style.display = preset.provider === 'funasr-local-runtime' ? 'block' : 'none';
       updateASRPresetNote();
     }
 
@@ -1617,12 +1615,8 @@
           setASRRecognitionProgress(percent, percent < 100 ? '请说话… ' + percent + '%' : '正在识别…');
         }, 100);
 
-        if (isQwenASRRecognitionConfig(config)) {
-          setASRMicStatus('正在录音测试（PCM16 16kHz），请说话…', false);
-        } else {
-          recorder.start(750);
-          setASRMicStatus('正在录音测试，请说话…', false);
-        }
+        recorder.start(750);
+        setASRMicStatus('正在录音测试，请说话…', false);
         asrRecognitionStopTimer = setTimeout(function() {
           stopASRRecognitionTest(false);
         }, ASR_RECOGNITION_TEST_MS);

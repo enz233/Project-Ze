@@ -393,7 +393,8 @@ function testRendererQwenMainVoiceUsesPCM() {
   assert.match(renderer, /var startupUsesLocalRealtimePCM = false/);
   assert.match(renderer, /startupUsesLocalRealtimePCM = localRealtimePCMVoiceInput/);
   assert.match(renderer, /if \(startupUsesLocalRealtimePCM\) \{/);
-  assert.doesNotMatch(renderer, /catch \(e\) \{\s*if \(startupIsQwen\) \{/);
+  assert.doesNotMatch(renderer, /startupIsQwen/);
+  assert.match(renderer, /var message = e && \(e as any\)\.message \? '语音输入启动失败：' \+ \(e as any\)\.message : '语音输入启动失败'/);
   assert.match(renderer, /startupStream\.getTracks\(\)\.forEach/);
   assert.match(renderer, /window\.companion\.voiceInput\.cancel\(startupSessionId\)/);
   assert.match(renderer, /voiceLastSessionId === startupSessionId/);
@@ -414,8 +415,7 @@ function testRendererFunASRMainVoiceUsesPCM() {
 function testSettingsAsrPresetContractMatchesCoreDefinitions() {
   const { ASR_PROVIDER_PRESETS } = load('core/asr-config.js');
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'settings.html'), 'utf-8');
-  const settingsPresetIds = Object.keys(ASR_PROVIDER_PRESETS)
-    .filter((id) => id !== 'funasr-local');
+  const settingsPresetIds = Object.keys(ASR_PROVIDER_PRESETS);
   for (const id of settingsPresetIds) {
     const preset = ASR_PROVIDER_PRESETS[id];
     assert.ok(html.includes(`<option value="${id}"`), `settings.html missing ASR preset option ${id}`);
@@ -1038,6 +1038,72 @@ async function testFunASRLocalStreamContinuesAfterRecoverableInvalidPayload() {
   ]);
 }
 
+async function testFunASRLocalConnectionErrorClosesSocket() {
+  const funasrModulePath = path.join(__dirname, '..', 'dist', 'core', 'asr-funasr-local.js');
+  const wsModulePath = require.resolve('ws');
+  const originalWsCache = require.cache[wsModulePath];
+  const sockets = [];
+  delete require.cache[funasrModulePath];
+
+  class FakeFunASRWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.closed = false;
+      sockets.push(this);
+      setTimeout(() => this.emit('error', new Error('connection refused')), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    close() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    terminate() {
+      this.closed = true;
+      this.readyState = 3;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  require.cache[wsModulePath] = {
+    id: wsModulePath,
+    filename: wsModulePath,
+    loaded: true,
+    exports: FakeFunASRWebSocket,
+  };
+
+  try {
+    const { testFunASRLocalConnection } = require(funasrModulePath);
+    const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+    const result = await testFunASRLocalConnection({
+      ...DEFAULT_ASR_CONFIG,
+      provider: 'funasr-local-runtime',
+      baseUrl: 'ws://127.0.0.1:10096',
+    });
+    assert.deepStrictEqual(result, { success: false, message: 'connection refused' });
+    assert.strictEqual(sockets.length, 1);
+    assert.strictEqual(sockets[0].closed, true);
+  } finally {
+    delete require.cache[funasrModulePath];
+    if (originalWsCache) {
+      require.cache[wsModulePath] = originalWsCache;
+    } else {
+      delete require.cache[wsModulePath];
+    }
+  }
+}
+
 async function collectQwenEventsWithFakeSocket(FakeQwenWebSocket) {
   const qwenModulePath = path.join(__dirname, '..', 'dist', 'core', 'asr-qwen-realtime.js');
   const wsModulePath = require.resolve('ws');
@@ -1332,6 +1398,63 @@ function testVoiceAudioCachePaths() {
   );
 }
 
+async function testVoiceInputManagerKeepsFinalAfterRecoverableASRError() {
+  const Module = require('module');
+  const managerModulePath = path.join(__dirname, '..', 'dist', 'core', 'voice-input-manager.js');
+  const originalLoad = Module._load;
+  const sent = [];
+  delete require.cache[managerModulePath];
+
+  Module._load = function(request, parent, isMain) {
+    if (request === 'electron') return {};
+    if (request === './asr-engine' && parent && parent.filename === managerModulePath) {
+      return {
+        createASREngine: () => ({
+          provider: 'funasr-local-runtime',
+          supportsStreaming: () => true,
+          stream: async function* ({ sessionId }) {
+            yield { type: 'error', message: 'Invalid FunASR event payload', sessionId, recoverable: true };
+            yield { type: 'final', text: '最终文本', sessionId };
+          },
+        }),
+      };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    const { VoiceInputManager } = require(managerModulePath);
+    const manager = new VoiceInputManager(
+      { webContents: { send: (channel, payload) => sent.push({ channel, payload }) } },
+      { get: () => ({ enabled: true, provider: 'funasr-local-runtime' }) },
+      {
+        createSession: async () => undefined,
+        appendChunk: async () => undefined,
+        finalize: async () => ({ relativeDir: 'voice-input/s1' }),
+        discard: async () => undefined,
+      }
+    );
+
+    const session = await manager.startSession({ source: 'settings-test', mimeType: 'audio/pcm;rate=16000' });
+    await manager.appendAudioChunk(session.sessionId, { mimeType: 'audio/pcm;rate=16000', base64: 'AAAA', capturedAt: Date.now() });
+    await manager.stopSession(session.sessionId);
+
+    assert.strictEqual(manager.getStatus().phase, 'voice-idle');
+    assert.strictEqual(manager.getStatus().lastFinal, '最终文本');
+    assert.strictEqual(manager.getStatus().lastError, null);
+    assert.ok(sent.some((event) => event.channel === 'voice-input-transcript'
+      && event.payload.type === 'error'
+      && event.payload.recoverable === true));
+    assert.ok(sent.some((event) => event.channel === 'voice-input-transcript'
+      && event.payload.type === 'final'
+      && event.payload.text === '最终文本'
+      && event.payload.audioRef === 'voice-input/s1'));
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[managerModulePath];
+  }
+}
+
 function testVoiceInputManagerExports() {
   const managerModule = load('core/voice-input-manager.js');
   assert.strictEqual(typeof managerModule.createVoiceSessionId, 'function');
@@ -1376,6 +1499,7 @@ async function run() {
   await testFunASRLocalStreamYieldsChunkSendFailureAsError();
   await testFunASRLocalStreamDoesNotDuplicatePreOpenFailure();
   await testFunASRLocalStreamContinuesAfterRecoverableInvalidPayload();
+  await testFunASRLocalConnectionErrorClosesSocket();
   await testQwenRealtimeStreamWaitsForDelayedFinal();
   await testQwenRealtimeStreamReportsMissingTranscription();
   await testQwenRealtimeStreamReportsCloseWithoutTranscription();
@@ -1384,6 +1508,7 @@ async function run() {
   await testChunkedFallbackSmartConcatenatesChunks();
   await testChunkedFallbackYieldsErrorOnTranscribeFailure();
   testVoiceAudioCachePaths();
+  await testVoiceInputManagerKeepsFinalAfterRecoverableASRError();
   testVoiceInputManagerExports();
   testVoiceIpcChannelNames();
   console.log('voice-input-contract tests passed');

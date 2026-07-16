@@ -153,7 +153,7 @@ export async function testFunASRLocalConnection(config: ASRConfig): Promise<{ su
       socket.close();
       resolve({
         success: false,
-        message: 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。',
+        message: FUNASR_CONNECTION_FAILURE_MESSAGE,
       });
     }, 3_000);
 
@@ -169,9 +169,10 @@ export async function testFunASRLocalConnection(config: ASRConfig): Promise<{ su
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      closeSocket(socket);
       resolve({
         success: false,
-        message: error.message || 'FunASR 本地服务连接失败：请确认 FunASR runtime 已启动，端口与 Base URL 一致，并且 WebSocket 服务可访问。',
+        message: error.message || FUNASR_CONNECTION_FAILURE_MESSAGE,
       });
     });
   });
@@ -309,9 +310,3 @@ export class FunASRLocalEngine implements ASREngine {
     }
   }
 }
-
-export const __funasrTestInternals = {
-  drainFunASREvents,
-  isTerminalEvent,
-  WebSocket,
-};

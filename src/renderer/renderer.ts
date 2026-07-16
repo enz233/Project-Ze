@@ -592,7 +592,6 @@
     if (voiceRecording) return;
     var startupStream: MediaStream | null = null;
     var startupSessionId: string | null = null;
-    var startupIsQwen = false;
     var startupUsesLocalRealtimePCM = false;
     try {
       // @ts-ignore
@@ -615,7 +614,6 @@
       startupStream = stream;
       var localRealtimePCMVoiceInput = isLocalRealtimePCMVoiceConfig(config);
       startupUsesLocalRealtimePCM = localRealtimePCMVoiceInput;
-      startupIsQwen = isQwenASRVoiceConfig(config);
       var mimeType = localRealtimePCMVoiceInput
         ? 'audio/pcm;rate=16000'
         : (MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm');
@@ -693,7 +691,7 @@
         voiceRecorder = null;
       }
       setVoiceRecording(false);
-      var message = startupIsQwen && e && (e as any).message ? '语音输入启动失败：' + (e as any).message : '语音输入启动失败';
+      var message = e && (e as any).message ? '语音输入启动失败：' + (e as any).message : '语音输入启动失败';
       updateChatStatus({ phase: 'voice-error', message: message });
       console.error('[VoiceInput] start failed', e);
     }
