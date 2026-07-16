@@ -496,6 +496,93 @@ function testQwenAsrRealtimeHelpers() {
   assert.strictEqual(normalizeQwenASREvent({ type: 'session.finished' }, 's1'), null);
 }
 
+async function testQwenRealtimeStreamWaitsForDelayedFinal() {
+  const qwenModulePath = path.join(__dirname, '..', 'dist', 'core', 'asr-qwen-realtime.js');
+  const wsModulePath = require.resolve('ws');
+  const originalWsCache = require.cache[wsModulePath];
+  delete require.cache[qwenModulePath];
+
+  class FakeQwenWebSocket {
+    constructor(url, options) {
+      this.url = url;
+      this.options = options;
+      this.listeners = { open: [], message: [], close: [], error: [] };
+      this.sent = [];
+      this.closed = false;
+      setTimeout(() => this.emit('open'), 0);
+    }
+
+    on(type, listener) {
+      this.listeners[type].push(listener);
+    }
+
+    send(payload) {
+      const parsed = JSON.parse(payload);
+      this.sent.push(parsed);
+      if (parsed.type === 'session.finish') {
+        setTimeout(() => {
+          this.emit('message', Buffer.from(JSON.stringify({
+            type: 'conversation.item.input_audio_transcription.completed',
+            transcript: '延迟最终文本',
+          })));
+        }, 1200);
+      }
+    }
+
+    close() {
+      this.closed = true;
+      this.emit('close');
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners[type]) listener(event);
+    }
+  }
+
+  require.cache[wsModulePath] = {
+    id: wsModulePath,
+    filename: wsModulePath,
+    loaded: true,
+    exports: FakeQwenWebSocket,
+  };
+
+  try {
+    const { QwenASRRealtimeEngine } = require(qwenModulePath);
+    const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
+    async function* chunks() {
+      yield { sessionId: 's1', sequence: 1, mimeType: 'audio/webm', base64: 'AAAA', capturedAt: Date.now() };
+    }
+
+    const engine = new QwenASRRealtimeEngine();
+    const events = [];
+    for await (const event of engine.stream({
+      sessionId: 's1',
+      config: {
+        ...DEFAULT_ASR_CONFIG,
+        provider: 'qwen-asr-realtime',
+        providerPreset: 'qwen-asr',
+        baseUrl: 'wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com',
+        workspaceId: 'ws-123',
+        apiKey: 'test-key',
+        model: 'qwen-asr-realtime',
+        realtimePath: '/api-ws/v1/realtime',
+      },
+      chunks: chunks(),
+    })) {
+      events.push(event);
+    }
+
+    assert.deepStrictEqual(events, [{ type: 'final', text: '延迟最终文本', sessionId: 's1' }]);
+  } finally {
+    delete require.cache[qwenModulePath];
+    if (originalWsCache) {
+      require.cache[wsModulePath] = originalWsCache;
+    } else {
+      delete require.cache[wsModulePath];
+    }
+  }
+}
+
 function testAsrEngineFactoryAndParser() {
   const { createASREngine } = load('core/asr-engine.js');
   const { DEFAULT_ASR_CONFIG } = load('core/asr-config.js');
@@ -652,6 +739,7 @@ async function run() {
   testSettingsAsrPresetContractMatchesCoreDefinitions();
   testAsrEngineFactoryAndParser();
   testQwenAsrRealtimeHelpers();
+  await testQwenRealtimeStreamWaitsForDelayedFinal();
   await testRealtimeTerminalEventHelper();
   await testRealtimeStreamWaitsForPostCommitFinal();
   await testChunkedFallbackSmartConcatenatesChunks();

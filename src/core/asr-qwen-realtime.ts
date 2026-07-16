@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import { ASRConfig } from './asr-config';
 import { ASREngine, ASRStreamInput, ASRTranscriptEvent } from './asr-engine';
 
-const QWEN_FINAL_EVENT_GRACE_MS = 1000;
+const QWEN_FINAL_EVENT_GRACE_MS = 15_000;
 const QWEN_POLL_INTERVAL_MS = 20;
 
 function sleep(ms: number): Promise<void> {
